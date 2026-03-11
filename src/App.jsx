@@ -892,6 +892,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [uploadStatus, setUploadStatus] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [forecastMonth, setForecastMonth] = useState(null); // e.g. "February 2026"
+  const [forecastMonthInput, setForecastMonthInput] = useState(''); // manual override field
   const [uploadResults, setUploadResults] = useState([]);
   const [showUploadResults, setShowUploadResults] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);
@@ -943,7 +944,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       for (const row of rows) {
         const val = JSON.parse(row.value);
         if (row.key === 'lastUpdated' && val) setLastUpdated(new Date(val));
-        if (row.key === 'forecastMonth' && val) setForecastMonth(val);
+        if (row.key === 'forecastMonth' && val) { setForecastMonth(val); setForecastMonthInput(val); }
         if (row.key === 'visibleCols' && val) setVisibleCols({ ...DEFAULT_COLS, ...val });
       }
     } catch (err) {
@@ -1102,7 +1103,10 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         }
       }
       const detectedForecastMonth = latestMonth >= 0 ? `${MONTH_NAMES[latestMonth]} ${latestYear}` : null;
-      if (detectedForecastMonth) setForecastMonth(detectedForecastMonth);
+      // Only fill in the input if the user hasn't already typed something
+      if (detectedForecastMonth && !forecastMonthInput.trim()) {
+        setForecastMonthInput(detectedForecastMonth);
+      }
 
       setUploadStatus(`Parsed ${sheets.length} properties. Review matches below.`);
     } catch (err) {
@@ -1131,7 +1135,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const now = new Date();
       setLastUpdated(now);
       saveSetting('lastUpdated', now.toISOString());
-      if (forecastMonth) saveSetting('forecastMonth', forecastMonth);
+      const monthLabel = forecastMonthInput.trim() || forecastMonth;
+      if (monthLabel) {
+        setForecastMonth(monthLabel);
+        saveSetting('forecastMonth', monthLabel);
+      }
       setUploadStatus(`✓ Updated NOI for ${matched.length} properties.`);
       setTimeout(() => setUploadStatus(''), 4000);
     }).catch(err => {
@@ -1363,6 +1371,19 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* File Upload */}
+          {pinUnlocked && (
+            <input
+              type="text"
+              placeholder="Forecast month (e.g. February 2026)"
+              value={forecastMonthInput}
+              onChange={e => setForecastMonthInput(e.target.value)}
+              style={{
+                padding: '4px 10px', borderRadius: 2, border: '1px solid #3a5a7866',
+                background: 'rgba(13,33,55,0.8)', color: '#c8d8e8',
+                fontFamily: 'inherit', fontSize: '0.72rem', width: '220px',
+              }}
+            />
+          )}
           {pinUnlocked ? (
             <label style={{
               padding: '5px 14px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
