@@ -930,9 +930,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [dfIO, setDfIO] = useState(true);
   const [dfAmortInput, setDfAmortInput] = useState('30');
   const [dfAmort, setDfAmort] = useState('30');
-  const [dfMode, setDfMode] = useState('dscr'); // 'dscr' or 'dy'
-  const [dfDY, setDfDY] = useState('8.00');
-  const [dfDYInput, setDfDYInput] = useState('8.00');
+  const [dfMode, setDfMode] = useState('dy'); // 'dscr' or 'dy'
+  const [dfDY, setDfDY] = useState('4.90');
+  const [dfDYInput, setDfDYInput] = useState('4.90');
 
   const ALL_COLS = [
     { key: 'testType',    label: 'Type' },
