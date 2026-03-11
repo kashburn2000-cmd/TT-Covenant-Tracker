@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 
 // ─── Chatham 1-Month Term SOFR Forward Curve (as of 03 Mar 2026) ───────────
 const SOFR_CURVE = [
@@ -124,6 +124,9 @@ const SOFR_CURVE = [
   { date: "2036-02-11", sofr: 0.041982 },
   { date: "2036-03-10", sofr: 0.042068 },
 ];
+
+// Mutable active SOFR curve — hardcoded fallback, overridable from Supabase
+let ACTIVE_SOFR_CURVE = SOFR_CURVE;
 
 const DY_THRESHOLDS = [0.08, 0.085, 0.09, 0.095, 0.10];
 
@@ -333,14 +336,14 @@ function CalculatorTab({ thresholds }) {
   const [noi, setNoi]               = useState(1500000);
   const [spread, setSpread]         = useState(2.50);
   const [amort, setAmort]           = useState(30);
-  const [pickedDate, setPickedDate] = useState(SOFR_CURVE[0].date);
+  const [pickedDate, setPickedDate] = useState(ACTIVE_SOFR_CURVE[0].date);
   const [locked, setLocked]         = useState("loan");
   const [targetDY,   setTargetDY]   = useState("");
   const [targetDSCR, setTargetDSCR] = useState("");
 
   const sofrRate = useMemo(() => {
     const d = new Date(pickedDate).getTime();
-    const points = SOFR_CURVE.map(p => ({ t: new Date(p.date).getTime(), sofr: p.sofr }));
+    const points = ACTIVE_SOFR_CURVE.map(p => ({ t: new Date(p.date).getTime(), sofr: p.sofr }));
     if (d <= points[0].t) return points[0].sofr;
     if (d >= points[points.length - 1].t) return points[points.length - 1].sofr;
     for (let i = 0; i < points.length - 1; i++) {
@@ -353,8 +356,8 @@ function CalculatorTab({ thresholds }) {
   }, [pickedDate]);
 
   const allInRate = sofrRate + spread / 100;
-  const minDate   = SOFR_CURVE[0].date;
-  const maxDate   = SOFR_CURVE[SOFR_CURVE.length - 1].date;
+  const minDate   = ACTIVE_SOFR_CURVE[0].date;
+  const maxDate   = ACTIVE_SOFR_CURVE[ACTIVE_SOFR_CURVE.length - 1].date;
 
   const solvedFromDY = useMemo(() => {
     const dy = parseFloat(targetDY) / 100;
@@ -740,12 +743,12 @@ function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate) {
 }
 
 function CovenantTab({ thresholds }) {
-  const SOFR_MIN = SOFR_CURVE[0].date;
-  const SOFR_MAX = SOFR_CURVE[SOFR_CURVE.length - 1].date;
+  const SOFR_MIN = ACTIVE_SOFR_CURVE[0].date;
+  const SOFR_MAX = ACTIVE_SOFR_CURVE[ACTIVE_SOFR_CURVE.length - 1].date;
 
   function getSofr(date) {
     const d = new Date(date).getTime();
-    const pts = SOFR_CURVE.map(p => ({ t: new Date(p.date).getTime(), sofr: p.sofr }));
+    const pts = ACTIVE_SOFR_CURVE.map(p => ({ t: new Date(p.date).getTime(), sofr: p.sofr }));
     if (d <= pts[0].t) return pts[0].sofr;
     if (d >= pts[pts.length - 1].t) return pts[pts.length - 1].sofr;
     for (let i = 0; i < pts.length - 1; i++) {
@@ -832,14 +835,49 @@ function CovenantTab({ thresholds }) {
     { key: 'noiVariance', label: 'NOI Variance' },
     { key: 'paydown',     label: 'Paydown' },
   ];
-  const [visibleCols, setVisibleCols] = useState(
-    Object.fromEntries(ALL_COLS.map(c => [c.key, true]))
-  );
-  const toggleCol = key => setVisibleCols(v => ({ ...v, [key]: !v[key] }));
+  const DEFAULT_COLS = Object.fromEntries(ALL_COLS.map(c => [c.key, true]));
+  const [visibleCols, setVisibleCols] = useState(DEFAULT_COLS);
+
+  // Persist a settings key to Supabase
+  async function saveSetting(key, value) {
+    try {
+      await fetch(`${SB_URL}/rest/v1/settings?key=eq.${key}`, {
+        method: 'DELETE', headers: SB_HEADERS,
+      });
+      await fetch(`${SB_URL}/rest/v1/settings`, {
+        method: 'POST', headers: SB_HEADERS,
+        body: JSON.stringify({ key, value: JSON.stringify(value) }),
+      });
+    } catch (err) {
+      console.warn('Could not save setting:', err);
+    }
+  }
+
+  // Load settings (lastUpdated + visibleCols) from Supabase
+  async function loadSettings() {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/settings`, { headers: SB_HEADERS });
+      if (!res.ok) return;
+      const rows = await res.json();
+      for (const row of rows) {
+        const val = JSON.parse(row.value);
+        if (row.key === 'lastUpdated' && val) setLastUpdated(new Date(val));
+        if (row.key === 'visibleCols' && val) setVisibleCols({ ...DEFAULT_COLS, ...val });
+      }
+    } catch (err) {
+      console.warn('Could not load settings:', err);
+    }
+  }
+
+  const toggleCol = key => {
+    const next = { ...visibleCols, [key]: !visibleCols[key] };
+    setVisibleCols(next);
+    saveSetting('visibleCols', next);
+  };
   const col = key => visibleCols[key];
 
-  // ── Load properties from Supabase on mount ────────────────────────────────
-  useEffect(() => { loadProperties(); }, []);
+  // ── Load properties and settings from Supabase on mount ─────────────────
+  const [_init] = useState(() => { setTimeout(() => { loadProperties(); loadSettings(); }, 0); return true; });
 
   async function loadProperties() {
     setDbLoading(true);
@@ -989,7 +1027,9 @@ function CovenantTab({ thresholds }) {
         return match ? { ...p, noi: match.newNOI } : p;
       }));
       setShowUploadResults(false);
-      setLastUpdated(new Date());
+      const now = new Date();
+      setLastUpdated(now);
+      saveSetting('lastUpdated', now.toISOString());
       setUploadStatus(`✓ Updated NOI for ${matched.length} properties.`);
       setTimeout(() => setUploadStatus(''), 4000);
     }).catch(err => {
@@ -1521,11 +1561,90 @@ function CovenantTab({ thresholds }) {
 
 // ── Root App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [activeTab, setActiveTab] = useState("calculator");
+  const [activeTab, setActiveTab] = useState("covenant");
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
   const [tHigh, setTHigh] = useState("1.25");
   const [tMid,  setTMid]  = useState("1.10");
   const [tLow,  setTLow]  = useState("1.00");
+  const [sofrUpdated, setSofrUpdated] = useState(null);
+
+  const SB_URL = 'https://ngflppgqohmkkfiljqma.supabase.co';
+  const SB_KEY = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
+  const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+
+  // Load SOFR curve from Supabase on mount (overrides hardcoded if present)
+  useState(() => { setTimeout(loadSofrCurve, 0); });
+
+  async function loadSofrCurve() {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/sofr_curve?order=date.asc`, { headers: SB_HEADERS });
+      if (!res.ok) return;
+      const rows = await res.json();
+      if (rows.length > 0) {
+        ACTIVE_SOFR_CURVE = rows.map(r => ({ date: r.date, sofr: parseFloat(r.sofr) }));
+      }
+      // Load sofr updated timestamp from settings
+      const sRes = await fetch(`${SB_URL}/rest/v1/settings?key=eq.sofrUpdated`, { headers: SB_HEADERS });
+      if (sRes.ok) {
+        const sRows = await sRes.json();
+        if (sRows.length > 0) setSofrUpdated(new Date(JSON.parse(sRows[0].value)));
+      }
+    } catch (err) {
+      console.warn('Could not load SOFR curve:', err);
+    }
+  }
+
+  async function handleSofrUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      // Parse CSV or XLSX
+      const text = await file.text();
+      let points = [];
+      if (file.name.endsWith('.csv') || file.name.endsWith('.txt')) {
+        // Expect rows like: 2026-03-09,0.036649 or date,sofr header
+        const lines = text.trim().split('\n');
+        for (const line of lines) {
+          const [d, s] = line.split(',').map(x => x.trim());
+          const sofrVal = parseFloat(s);
+          if (d && d.match(/\d{4}-\d{2}-\d{2}/) && !isNaN(sofrVal)) {
+            points.push({ date: d, sofr: sofrVal });
+          }
+        }
+      }
+      if (points.length < 2) {
+        alert('Could not parse file. Please upload a CSV with two columns: date (YYYY-MM-DD) and SOFR rate (decimal, e.g. 0.0366)');
+        return;
+      }
+      points.sort((a, b) => a.date.localeCompare(b.date));
+
+      // Save to Supabase — clear old and insert new
+      await fetch(`${SB_URL}/rest/v1/sofr_curve`, { method: 'DELETE', headers: { ...SB_HEADERS, 'Prefer': '' } });
+      // Delete all rows
+      await fetch(`${SB_URL}/rest/v1/sofr_curve?id=gte.0`, { method: 'DELETE', headers: SB_HEADERS });
+      const insRes = await fetch(`${SB_URL}/rest/v1/sofr_curve`, {
+        method: 'POST', headers: SB_HEADERS,
+        body: JSON.stringify(points),
+      });
+      if (!insRes.ok) throw new Error('Insert failed');
+
+      // Update active curve immediately
+      ACTIVE_SOFR_CURVE = points;
+      const now = new Date();
+      setSofrUpdated(now);
+
+      // Save timestamp to settings
+      await fetch(`${SB_URL}/rest/v1/settings?key=eq.sofrUpdated`, { method: 'DELETE', headers: SB_HEADERS });
+      await fetch(`${SB_URL}/rest/v1/settings`, {
+        method: 'POST', headers: SB_HEADERS,
+        body: JSON.stringify({ key: 'sofrUpdated', value: JSON.stringify(now.toISOString()) }),
+      });
+      alert(`✓ SOFR curve updated — ${points.length} data points loaded`);
+    } catch (err) {
+      alert('Error uploading SOFR curve: ' + err.message);
+    }
+    e.target.value = '';
+  }
 
   function applyThresholds() {
     const h = parseFloat(tHigh), m = parseFloat(tMid), l = parseFloat(tLow);
@@ -1585,13 +1704,21 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
           <TTLogo />
           <div style={{ fontSize: "0.68rem", letterSpacing: "0.18em", color: TT_ORANGE, textTransform: "uppercase" }}>
-            Debt Yield ↔ DSCR Calculator
+            Covenant Dashboard
           </div>
         </div>
-        {/* Right side subtitle */}
+        {/* Right side — SOFR curve status + upload */}
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: "0.7rem", color: "#4a6a88" }}>Chatham 1-Mo Term SOFR Forward Curve</div>
-          <div style={{ fontSize: "0.7rem", color: "#4a6a88" }}>as of 03 Mar 2026</div>
+          <div style={{ fontSize: "0.7rem", color: sofrUpdated ? "#00d4b4" : "#4a6a88" }}>
+            {sofrUpdated
+              ? `Updated ${sofrUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+              : "as of 03 Mar 2026 (hardcoded)"}
+          </div>
+          <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', outline: '1px solid #60a5fa33' }}>
+            ↑ Update Curve
+            <input type="file" accept=".csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
+          </label>
         </div>
       </div>
 
