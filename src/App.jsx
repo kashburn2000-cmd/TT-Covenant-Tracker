@@ -1731,7 +1731,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                       const dfPaydown = Math.max(0, r.loanAmount - maxDFLoan);
                       return (
                         <td style={{ padding: '0.65rem 0.75rem' }}>
-                          {dfNOI <= 0
+                          {r.paydown >= r.loanAmount * 0.999
+                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
+                            : dfNOI <= 0
                             ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
                             : dfPaydown >= r.loanAmount * 0.999
                               ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
@@ -2043,44 +2045,6 @@ export default function App() {
         {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
         {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
         {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-
-        {/* ── DSCR Color Thresholds ── */}
-        <div className="card" style={{ marginTop: "1.5rem", borderColor: "#1e3a5a", borderLeft: `3px solid ${TT_ORANGE}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap" }}>
-            <div style={{ fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", color: TT_ORANGE, whiteSpace: "nowrap", fontWeight: 600 }}>
-              DSCR Color Thresholds
-            </div>
-            {[
-              { label: "Strong ≥", color: "#00d4b4", val: tHigh, set: setTHigh, cls: "mx-high" },
-              { label: "Adequate ≥", color: "#ffd93d", val: tMid,  set: setTMid,  cls: "mx-mid"  },
-              { label: "Thin ≥",    color: "#ff6b6b", val: tLow,  set: setTLow,  cls: "mx-low"  },
-            ].map(({ label, color, val, set, cls }) => (
-              <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <div className={cls} style={{ width: 10, height: 10, borderRadius: 2, flexShrink: 0 }} />
-                <span style={{ fontSize: "0.72rem", color: "#7a9ab8", whiteSpace: "nowrap" }}>{label}</span>
-                <input
-                  type="number"
-                  value={val}
-                  step={0.05}
-                  min={0.5}
-                  max={3}
-                  onChange={e => set(e.target.value)}
-                  onBlur={applyThresholds}
-                  onKeyDown={e => e.key === "Enter" && applyThresholds()}
-                  style={{ width: 70, padding: "0.25rem 0.4rem", fontSize: "0.8rem", color }}
-                />
-              </div>
-            ))}
-            <button onClick={applyThresholds} style={{
-              padding: "4px 14px", borderRadius: "2px", border: "none", cursor: "pointer",
-              fontFamily: "inherit", fontSize: "0.72rem", fontWeight: 600,
-              background: `rgba(224,92,32,0.2)`, color: TT_ORANGE, outline: `1px solid ${TT_ORANGE}55`,
-            }}>Apply</button>
-            <span style={{ fontSize: "0.68rem", color: "#2a4a68" }}>
-              Active: ≥{thresholds.high.toFixed(2)} Strong · ≥{thresholds.mid.toFixed(2)} Adequate · ≥{thresholds.low.toFixed(2)} Thin
-            </span>
-          </div>
-        </div>
 
         {/* ── Footer ── */}
         <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid #1e3a5a`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
