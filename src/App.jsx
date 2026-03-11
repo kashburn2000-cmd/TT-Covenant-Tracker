@@ -2269,9 +2269,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                 const days = daysUntil(r.covenantDate);
                 const isUrgent = days !== null && days <= 30 && days >= 0;
                 const isPast = days !== null && days < 0;
-                const metColor = r.covenantType === 'dscr'
-                  ? (r.currentVal >= thresholds.high ? '#6a9e7f' : r.currentVal >= thresholds.low ? '#8a7a42' : '#c47474')
-                  : (r.satisfied ? '#6a9e7f' : '#c47474');
+                const metColor = r.satisfied ? '#6a9e7f' : '#c47474';
                 const dateColor = isUrgent ? '#8a7a42' : isPast ? '#c47474' : '#c8cdd6';
                 const delta = r.currentVal - r.covenantReq;
                 const isFundRow = r.isFund || r.property === '2022 Fund';
