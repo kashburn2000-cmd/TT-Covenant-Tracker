@@ -777,7 +777,7 @@ function CovenantTab({ thresholds }) {
   function toDb(p) {
     return {
       test_type: p.testType, property: p.property, lender: p.lender,
-      loan_amount: p.loanAmount, noi: p.noi, spread: p.spread, amort: p.amort,
+      loan_amount: p.loanAmount, noi: p.noi, noi_t1: p.noiT1 || null, spread: p.spread, amort: p.amort,
       covenant_type: p.covenantType, covenant_req: p.covenantReq,
       covenant_date: p.covenantDate, maturity_date: p.maturityDate || null,
       income_months: p.incomeMonths, expense_months: p.expenseMonths,
@@ -788,6 +788,7 @@ function CovenantTab({ thresholds }) {
     return {
       id: r.id, testType: r.test_type, property: r.property, lender: r.lender,
       loanAmount: parseFloat(r.loan_amount), noi: parseFloat(r.noi),
+      noiT1: r.noi_t1 != null ? parseFloat(r.noi_t1) : null,
       spread: parseFloat(r.spread), amort: parseInt(r.amort),
       covenantType: r.covenant_type, covenantReq: parseFloat(r.covenant_req),
       covenantDate: r.covenant_date, maturityDate: r.maturity_date || '',
@@ -823,6 +824,14 @@ function CovenantTab({ thresholds }) {
   const [uploadResults, setUploadResults] = useState([]);
   const [showUploadResults, setShowUploadResults] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);
+  const [showPaydown, setShowPaydown] = useState(false);
+  const [dfSpread, setDfSpread] = useState('2.25');
+  const [dfDSCR, setDfDSCR] = useState('1.05');
+  const [dfSpreadInput, setDfSpreadInput] = useState('2.25');
+  const [dfDSCRInput, setDfDSCRInput] = useState('1.05');
+  const [dfIO, setDfIO] = useState(true);
+  const [dfAmortInput, setDfAmortInput] = useState('30');
+  const [dfAmort, setDfAmort] = useState('30');
 
   const ALL_COLS = [
     { key: 'testType',    label: 'Type' },
@@ -834,6 +843,7 @@ function CovenantTab({ thresholds }) {
     { key: 'noi',         label: 'Annual NOI' },
     { key: 'noiVariance', label: 'NOI Variance' },
     { key: 'paydown',     label: 'Paydown' },
+    { key: 'debtFund',    label: 'Debt Fund Paydown' },
   ];
   const DEFAULT_COLS = Object.fromEntries(ALL_COLS.map(c => [c.key, true]));
   const [visibleCols, setVisibleCols] = useState(DEFAULT_COLS);
@@ -993,10 +1003,14 @@ function CovenantTab({ thresholds }) {
           continue;
         }
 
+        // Always compute T1 NOI (most recent single month annualized) for debt fund sizing
+        const computedT1 = computeNOI(bestSheet, 1, 1, prop.covenantDate);
+
         results.push({
           id: prop.id, property: prop.property, status: 'matched',
           matchedSheet: bestSheet.propertyTitle, score: bestScore,
           oldNOI: prop.noi, newNOI: computedNOI,
+          newNOIT1: computedT1,
           incomeMonths: prop.incomeMonths, expenseMonths: prop.expenseMonths,
         });
       }
@@ -1019,12 +1033,12 @@ function CovenantTab({ thresholds }) {
       await fetch(`${SB_URL}/rest/v1/properties?id=eq.${m.id}`, {
         method: 'PATCH',
         headers: SB_HEADERS,
-        body: JSON.stringify({ noi: m.newNOI, updated_at: new Date().toISOString() }),
+        body: JSON.stringify({ noi: m.newNOI, noi_t1: m.newNOIT1 ?? null, updated_at: new Date().toISOString() }),
       });
     })).then(() => {
       setProperties(ps => ps.map(p => {
         const match = matched.find(r => r.id === p.id);
-        return match ? { ...p, noi: match.newNOI } : p;
+        return match ? { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null } : p;
       }));
       setShowUploadResults(false);
       const now = new Date();
@@ -1137,17 +1151,30 @@ function CovenantTab({ thresholds }) {
       <div>
       {/* ── Summary Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-        {[
-          { label: 'Total Properties', value: summary.total, color: '#b8d0e8' },
-          { label: 'Passing', value: summary.passing, color: '#00d4b4' },
-          { label: 'Failing', value: summary.failing, color: '#ff6b6b' },
-          { label: 'Total Paydown Needed', value: formatCurrency(summary.totalPaydown), color: '#e05c20' },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="card" style={{ textAlign: 'center' }}>
-            <div style={labelStyle}>{label}</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color }}>{value}</div>
+          <div className="card" style={{ textAlign: 'center' }}>
+            <div style={labelStyle}>Total Properties</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#b8d0e8' }}>{summary.total}</div>
           </div>
-        ))}
+          <div className="card" style={{ textAlign: 'center' }}>
+            <div style={labelStyle}>Passing</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#00d4b4' }}>{summary.passing}</div>
+          </div>
+          <div className="card" style={{ textAlign: 'center' }}>
+            <div style={labelStyle}>Failing</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#ff6b6b' }}>{summary.failing}</div>
+          </div>
+          <div className="card" style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowPaydown(v => !v)}>
+            <div style={{ ...labelStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+              Potential Maximum Paydown
+              <span style={{ fontSize: '0.95rem', color: showPaydown ? '#e05c20' : '#3a5a78' }}>
+                {showPaydown ? '👁' : '👁'}
+              </span>
+            </div>
+            {showPaydown
+              ? <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#e05c20' }}>{formatCurrency(summary.totalPaydown)}</div>
+              : <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#2a4a68', letterSpacing: '0.2em' }}>••••••••</div>
+            }
+          </div>
       </div>
 
       {/* ── Last Updated Banner ── */}
@@ -1167,6 +1194,70 @@ function CovenantTab({ thresholds }) {
           <span style={{ fontSize: '0.72rem', color: '#ff9a7a' }}>upload a forecast file to refresh figures</span>
         </div>
       )}
+      {/* ── Debt Fund Settings Panel ── */}
+      <div className="card" style={{ marginBottom: '1rem', borderColor: '#1e3a5a', borderLeft: '3px solid #a78bfa', padding: '0.85rem 1.1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#a78bfa', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            Debt Fund Assumptions
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.7rem', color: '#5a7fa0', whiteSpace: 'nowrap' }}>Min DSCR</span>
+            <input
+              type="number" step="0.01" value={dfDSCRInput}
+              onChange={e => setDfDSCRInput(e.target.value)}
+              onBlur={() => { const v = parseFloat(dfDSCRInput); if (!isNaN(v) && v > 0) setDfDSCR(String(v)); }}
+              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#091929', border: '1px solid #1e3a5a', borderRadius: 3, color: '#f0f8ff', fontFamily: 'inherit', textAlign: 'center' }}
+            />
+            <span style={{ fontSize: '0.7rem', color: '#3a5a78' }}>x</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.7rem', color: '#5a7fa0', whiteSpace: 'nowrap' }}>Rate: SOFR +</span>
+            <input
+              type="number" step="0.01" value={dfSpreadInput}
+              onChange={e => setDfSpreadInput(e.target.value)}
+              onBlur={() => { const v = parseFloat(dfSpreadInput); if (!isNaN(v) && v >= 0) setDfSpread(String(v)); }}
+              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#091929', border: '1px solid #1e3a5a', borderRadius: 3, color: '#f0f8ff', fontFamily: 'inherit', textAlign: 'center' }}
+            />
+            <span style={{ fontSize: '0.7rem', color: '#3a5a78' }}>%</span>
+          </div>
+          {/* I/O Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.7rem', color: '#5a7fa0' }}>Amortization</span>
+            <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid #1e3a5a' }}>
+              {['I/O', 'Amort'].map(opt => {
+                const active = opt === 'I/O' ? dfIO : !dfIO;
+                return (
+                  <button key={opt} onClick={() => setDfIO(opt === 'I/O')} style={{
+                    padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: '0.7rem', fontWeight: 600,
+                    background: active ? 'rgba(167,139,250,0.25)' : '#091929',
+                    color: active ? '#a78bfa' : '#3a5a78',
+                  }}>{opt}</button>
+                );
+              })}
+            </div>
+            {!dfIO && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <input
+                  type="number" step="1" min="1" max="40" value={dfAmortInput}
+                  onChange={e => setDfAmortInput(e.target.value)}
+                  onBlur={() => { const v = parseInt(dfAmortInput); if (!isNaN(v) && v > 0) setDfAmort(String(v)); }}
+                  style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: '#091929', border: '1px solid #1e3a5a', borderRadius: 3, color: '#f0f8ff', fontFamily: 'inherit', textAlign: 'center' }}
+                />
+                <span style={{ fontSize: '0.7rem', color: '#3a5a78' }}>yr</span>
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: '0.68rem', color: '#3a5a78', marginLeft: 'auto' }}>
+            {(() => {
+              const sofr = getSofr(new Date().toISOString().slice(0,10));
+              const rate = sofr + parseFloat(dfSpread || 0) / 100;
+              return `All-in: ${(rate * 100).toFixed(2)}% ${dfIO ? 'I/O' : `${dfAmort}-yr amort`} · Min DSCR: ${parseFloat(dfDSCR).toFixed(2)}x`;
+            })()}
+          </div>
+        </div>
+      </div>
+
       {/* ── Toolbar ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1400,6 +1491,7 @@ function CovenantTab({ thresholds }) {
                 {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Annual NOI</th>}
                 {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Variance</th>}
                 {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Paydown</th>}
+                {col('debtFund')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#a78bfa', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown</th>}
                 <th style={{ padding: '0.65rem 0.4rem' }}></th>
               </tr>
             </thead>
@@ -1519,10 +1611,47 @@ function CovenantTab({ thresholds }) {
                     {col('paydown') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
                         {r.paydown > 0
-                          ? <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e05c20' }}>{formatCurrency(r.paydown)}</div>
+                          ? r.paydown >= r.loanAmount * 0.999
+                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
+                            : <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e05c20' }}>{formatCurrency(r.paydown)}</div>
                           : <span style={{ fontSize: '0.75rem', color: '#00d4b4' }}>None</span>}
                       </td>
                     )}
+
+                    {col('debtFund') && (() => {
+                      // Debt fund: use T1 NOI when available, fall back to covenant NOI
+                      const dfNOI = r.noiT1 != null ? r.noiT1 : r.noi;
+                      const dfRate = getSofr(r.covenantDate) + parseFloat(dfSpread) / 100;
+                      const dfDSCRVal = parseFloat(dfDSCR);
+                      // ADS per dollar of loan (I/O = rate, amort = mortgage constant)
+                      let adsPerDollar;
+                      if (dfIO) {
+                        adsPerDollar = dfRate;
+                      } else {
+                        const mRate = dfRate / 12, n = parseInt(dfAmort) * 12;
+                        adsPerDollar = (mRate * Math.pow(1 + mRate, n)) / (Math.pow(1 + mRate, n) - 1) * 12;
+                      }
+                      const maxDFLoan = dfNOI > 0 ? dfNOI / (dfDSCRVal * adsPerDollar) : 0;
+                      const dfPaydown = Math.max(0, r.loanAmount - maxDFLoan);
+                      const usingT1 = r.noiT1 != null;
+                      return (
+                        <td style={{ padding: '0.65rem 0.75rem' }}>
+                          {dfNOI <= 0
+                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
+                            : dfPaydown >= r.loanAmount * 0.999
+                              ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
+                              : dfPaydown > 0
+                                ? <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#a78bfa' }}>{formatCurrency(dfPaydown)}</div>
+                                    <div style={{ fontSize: '0.65rem', color: '#5a4a8a', marginTop: 2 }}>{(dfRate * 100).toFixed(2)}% {dfIO ? 'I/O' : `${dfAmort}yr`} · {usingT1 ? 'T1 NOI' : 'covenant NOI'}</div>
+                                  </div>
+                                : <div>
+                                    <span style={{ fontSize: '0.75rem', color: '#00d4b4' }}>None</span>
+                                    <div style={{ fontSize: '0.65rem', color: '#5a4a8a', marginTop: 2 }}>{usingT1 ? 'T1 NOI' : 'covenant NOI'}</div>
+                                  </div>}
+                        </td>
+                      );
+                    })()}
 
                     {/* ── Actions ── */}
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
