@@ -127,6 +127,111 @@ const SOFR_CURVE = [
 
 // Mutable active SOFR curve — hardcoded fallback, overridable from Supabase
 let ACTIVE_SOFR_CURVE = SOFR_CURVE;
+// ─── Chatham 10-Year Treasury Forward Curve (as of 03 Mar 2026) ─────────────
+const TEN_YEAR_CURVE = [
+  { date: "2026-03-09", rate: 0.0413482 },
+  { date: "2026-04-09", rate: 0.0414520 },
+  { date: "2026-05-11", rate: 0.0415678 },
+  { date: "2026-06-09", rate: 0.0416736 },
+  { date: "2026-07-09", rate: 0.0417951 },
+  { date: "2026-08-10", rate: 0.0419314 },
+  { date: "2026-09-09", rate: 0.0420577 },
+  { date: "2026-10-09", rate: 0.0421944 },
+  { date: "2026-11-09", rate: 0.0423323 },
+  { date: "2026-12-09", rate: 0.0424720 },
+  { date: "2027-01-11", rate: 0.0426219 },
+  { date: "2027-02-09", rate: 0.0427572 },
+  { date: "2027-03-09", rate: 0.0428971 },
+  { date: "2027-04-09", rate: 0.0430416 },
+  { date: "2027-05-10", rate: 0.0431925 },
+  { date: "2027-06-09", rate: 0.0433347 },
+  { date: "2027-07-09", rate: 0.0434833 },
+  { date: "2027-08-09", rate: 0.0436355 },
+  { date: "2027-09-09", rate: 0.0437818 },
+  { date: "2027-10-12", rate: 0.0439492 },
+  { date: "2027-11-09", rate: 0.0440875 },
+  { date: "2027-12-09", rate: 0.0442423 },
+  { date: "2028-01-10", rate: 0.0444033 },
+  { date: "2028-02-09", rate: 0.0445581 },
+  { date: "2028-03-09", rate: 0.0447003 },
+  { date: "2028-04-10", rate: 0.0448652 },
+  { date: "2028-05-09", rate: 0.0450209 },
+  { date: "2028-06-09", rate: 0.0451826 },
+  { date: "2028-07-10", rate: 0.0453509 },
+  { date: "2028-08-09", rate: 0.0455117 },
+  { date: "2028-09-11", rate: 0.0456814 },
+  { date: "2028-10-10", rate: 0.0458409 },
+  { date: "2028-11-09", rate: 0.0460004 },
+  { date: "2028-12-11", rate: 0.0461768 },
+  { date: "2029-01-09", rate: 0.0463313 },
+  { date: "2029-02-09", rate: 0.0464996 },
+  { date: "2029-03-09", rate: 0.0466610 },
+  { date: "2029-04-09", rate: 0.0468262 },
+  { date: "2029-05-09", rate: 0.0469916 },
+  { date: "2029-06-11", rate: 0.0471669 },
+  { date: "2029-07-09", rate: 0.0473209 },
+  { date: "2029-08-09", rate: 0.0474876 },
+  { date: "2029-09-10", rate: 0.0476502 },
+  { date: "2029-10-09", rate: 0.0478080 },
+  { date: "2029-11-09", rate: 0.0479694 },
+  { date: "2029-12-10", rate: 0.0481363 },
+  { date: "2030-01-09", rate: 0.0482906 },
+  { date: "2030-02-11", rate: 0.0484627 },
+  { date: "2030-03-11", rate: 0.0486305 },
+  { date: "2030-04-09", rate: 0.0487765 },
+  { date: "2030-05-09", rate: 0.0489329 },
+  { date: "2030-06-10", rate: 0.0490915 },
+  { date: "2030-07-09", rate: 0.0492402 },
+  { date: "2030-08-09", rate: 0.0493941 },
+  { date: "2030-09-09", rate: 0.0495372 },
+  { date: "2030-10-09", rate: 0.0496861 },
+  { date: "2030-11-12", rate: 0.0498456 },
+  { date: "2030-12-09", rate: 0.0499766 },
+  { date: "2031-01-09", rate: 0.0501178 },
+  { date: "2031-02-10", rate: 0.0502648 },
+  { date: "2031-03-10", rate: 0.0504029 },
+  { date: "2031-04-09", rate: 0.0505331 },
+  { date: "2031-05-09", rate: 0.0506683 },
+  { date: "2031-06-09", rate: 0.0507987 },
+  { date: "2031-07-09", rate: 0.0509300 },
+  { date: "2031-08-11", rate: 0.0510684 },
+  { date: "2031-09-09", rate: 0.0511787 },
+  { date: "2031-10-09", rate: 0.0513047 },
+  { date: "2031-11-10", rate: 0.0514300 },
+  { date: "2031-12-09", rate: 0.0515491 },
+  { date: "2032-01-09", rate: 0.0516674 },
+  { date: "2032-02-09", rate: 0.0517880 },
+  { date: "2032-03-09", rate: 0.0518920 },
+  { date: "2032-04-09", rate: 0.0520066 },
+  { date: "2032-05-10", rate: 0.0521275 },
+  { date: "2032-06-09", rate: 0.0522363 },
+  { date: "2032-07-09", rate: 0.0523518 },
+  { date: "2032-08-09", rate: 0.0524664 },
+  { date: "2032-09-09", rate: 0.0525698 },
+  { date: "2032-10-12", rate: 0.0526943 },
+  { date: "2032-11-09", rate: 0.0527925 },
+  { date: "2032-12-09", rate: 0.0529053 },
+  { date: "2033-01-10", rate: 0.0530175 },
+  { date: "2033-02-09", rate: 0.0531261 },
+  { date: "2033-03-09", rate: 0.0532398 },
+  { date: "2033-04-11", rate: 0.0533553 },
+  { date: "2033-05-09", rate: 0.0534604 },
+  { date: "2033-06-09", rate: 0.0535684 },
+  { date: "2033-07-11", rate: 0.0536876 },
+  { date: "2033-08-09", rate: 0.0537917 },
+  { date: "2033-09-09", rate: 0.0538914 },
+  { date: "2033-10-11", rate: 0.0540093 },
+  { date: "2033-11-09", rate: 0.0541079 },
+  { date: "2033-12-09", rate: 0.0542174 },
+  { date: "2034-01-09", rate: 0.0543217 },
+  { date: "2034-02-09", rate: 0.0544290 },
+  { date: "2034-03-09", rate: 0.0545504 },
+];
+
+// Mutable active 10-year curve — overridable from Supabase
+let ACTIVE_10Y_CURVE = TEN_YEAR_CURVE;
+
+
 
 const DY_THRESHOLDS = [0.08, 0.085, 0.09, 0.095, 0.10];
 
@@ -871,9 +976,24 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     return pts[0].sofr;
   }
 
+  function get10Y(date) {
+    const d = new Date(date).getTime();
+    const pts = ACTIVE_10Y_CURVE.map(p => ({ t: new Date(p.date).getTime(), rate: p.rate }));
+    if (d <= pts[0].t) return pts[0].rate;
+    if (d >= pts[pts.length - 1].t) return pts[pts.length - 1].rate;
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (d >= pts[i].t && d <= pts[i + 1].t) {
+        const frac = (d - pts[i].t) / (pts[i + 1].t - pts[i].t);
+        return pts[i].rate + frac * (pts[i + 1].rate - pts[i].rate);
+      }
+    }
+    return pts[0].rate;
+  }
+
   const EMPTY_FORM = {
     property: '', lender: '', loanAmount: '', noi: '',
-    spread: '2.50', amort: '30',
+    spread: '2.50', spread10y: '', sizingRate: '',
+    amort: '30',
     covenantType: 'dscr', covenantReq: '1.25',
     testType: 'Covenant', covenantDate: SOFR_MIN, maturityDate: '',
     incomeMonths: '3', expenseMonths: '3', note: '',
@@ -889,6 +1009,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     return {
       test_type: p.testType, property: p.property, lender: p.lender,
       loan_amount: p.loanAmount, noi: p.noi, noi_t1: p.noiT1 || null, spread: p.spread, amort: p.amort,
+      spread_10y: p.spread10y != null && p.spread10y !== '' ? parseFloat(p.spread10y) : null,
+      sizing_rate: p.sizingRate != null && p.sizingRate !== '' ? parseFloat(p.sizingRate) : null,
       covenant_type: p.covenantType, covenant_req: p.covenantReq,
       covenant_date: p.covenantDate, maturity_date: p.maturityDate || null,
       income_months: p.incomeMonths, expense_months: p.expenseMonths,
@@ -904,6 +1026,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       loanAmount: parseFloat(r.loan_amount), noi: parseFloat(r.noi),
       noiT1: r.noi_t1 != null ? parseFloat(r.noi_t1) : null,
       spread: parseFloat(r.spread), amort: parseInt(r.amort),
+      spread10y: r.spread_10y != null ? parseFloat(r.spread_10y) : null,
+      sizingRate: r.sizing_rate != null ? parseFloat(r.sizing_rate) : null,
       covenantType: r.covenant_type, covenantReq: parseFloat(r.covenant_req),
       covenantDate: r.covenant_date, maturityDate: r.maturity_date || '',
       incomeMonths: parseInt(r.income_months), expenseMonths: parseInt(r.expense_months),
@@ -1063,8 +1187,25 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   function setF(k, v) { setForm(f => ({ ...f, [k]: v })); }
 
   function calcRow(p) {
-    const sofr = getSofr(p.covenantDate);
-    const rate = sofr + parseFloat(p.spread) / 100;
+    const sofr    = getSofr(p.covenantDate);
+    const ten_y   = get10Y(p.covenantDate);
+    const spread  = parseFloat(p.spread);
+    const spread10y = p.spread10y != null ? parseFloat(p.spread10y) : null;
+    const sizingRate = p.sizingRate != null ? parseFloat(p.sizingRate) : null;
+
+    const sofrRate    = sofr + spread / 100;
+    const tenYRate    = spread10y != null ? ten_y + spread10y / 100 : null;
+    const sizingFloor = sizingRate != null ? sizingRate / 100 : null;
+
+    // Pick the highest of whichever prongs are defined
+    const candidates = [
+      { rate: sofrRate,    label: 'SOFR',        detail: `${(sofr*100).toFixed(3)}% + ${spread}%` },
+      ...(tenYRate   != null ? [{ rate: tenYRate,    label: '10 Year',    detail: `${(ten_y*100).toFixed(3)}% + ${spread10y}%` }] : []),
+      ...(sizingFloor != null ? [{ rate: sizingFloor, label: 'Sizing Rate', detail: `${sizingRate}% floor` }] : []),
+    ];
+    const winner = candidates.reduce((best, c) => c.rate > best.rate ? c : best, candidates[0]);
+    const rate = winner.rate;
+
     const loan = parseFloat(p.loanAmount);
     const noi  = parseFloat(p.noi);
     const req  = parseFloat(p.covenantReq);
@@ -1090,7 +1231,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         paydown = Math.max(0, loan - lo);
       }
     }
-    return { ...p, sofr, rate, ads, currentVal, satisfied, requiredNOI, noiVariance, paydown };
+    return { ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, ads, currentVal, satisfied, requiredNOI, noiVariance, paydown };
   }
 
   const rows = useMemo(() => {
@@ -1242,6 +1383,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       loanAmount: parseFloat(form.loanAmount),
       noi: parseFloat(form.noi),
       spread: parseFloat(form.spread),
+      spread10y: form.spread10y !== '' ? parseFloat(form.spread10y) : null,
+      sizingRate: form.sizingRate !== '' ? parseFloat(form.sizingRate) : null,
       covenantReq: parseFloat(form.covenantReq),
       incomeMonths: parseInt(form.incomeMonths),
       expenseMonths: parseInt(form.expenseMonths),
@@ -1276,7 +1419,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   }
 
   function startEdit(p) {
-    setForm({ ...p, spread: String(p.spread), covenantReq: String(p.covenantReq), loanAmount: String(p.loanAmount), noi: String(p.noi), incomeMonths: String(p.incomeMonths), expenseMonths: String(p.expenseMonths) });
+    setForm({ ...p, spread: String(p.spread), spread10y: p.spread10y != null ? String(p.spread10y) : '', sizingRate: p.sizingRate != null ? String(p.sizingRate) : '', covenantReq: String(p.covenantReq), loanAmount: String(p.loanAmount), noi: String(p.noi), incomeMonths: String(p.incomeMonths), expenseMonths: String(p.expenseMonths) });
     setEditId(p.id);
     setShowForm(true);
   }
@@ -1660,6 +1803,14 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
               <input type="number" value={form.spread} step="0.05" min="0" max="10" onChange={e => setF('spread', e.target.value)} style={inputStyle} />
             </div>
             <div>
+              <label style={labelStyle}>10yr Spread (%)</label>
+              <input type="number" value={form.spread10y ?? ''} step="0.05" min="0" max="10" placeholder="optional" onChange={e => setF('spread10y', e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Sizing / Floor Rate (%)</label>
+              <input type="number" value={form.sizingRate ?? ''} step="0.05" min="0" max="20" placeholder="optional" onChange={e => setF('sizingRate', e.target.value)} style={inputStyle} />
+            </div>
+            <div>
               <label style={labelStyle}>Test Type</label>
               <select value={form.testType || 'Covenant'} onChange={e => setF('testType', e.target.value)} style={inputStyle}>
                 <option value="Covenant">Covenant</option>
@@ -1830,7 +1981,13 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                     {col('rate') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
                         <div style={{ fontSize: '0.8rem', color: '#c87941', fontWeight: 600 }}>{(r.rate*100).toFixed(3)}%</div>
-                        <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>{(r.sofr*100).toFixed(3)}% + {r.spread}%</div>
+                        <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>
+                          {r.rateWinner
+                            ? (r.rateWinner.label === 'SOFR'        ? `SOFR +${r.spread}%`
+                              : r.rateWinner.label === '10 Year'    ? `10yr +${r.spread10y}%`
+                              : `Sizing: ${r.sizingRate}%`)
+                            : `${(r.sofr*100).toFixed(3)}% + ${r.spread}%`}
+                        </div>
                         <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>{r.amort === 0 ? 'I/O' : `${r.amort}yr`}</div>
                       </td>
                     )}
@@ -1944,10 +2101,35 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                                 <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Inputs</div>
                                 <MathLine label="Loan Amount" value={formatCurrency(r.loanAmount)} />
                                 <MathLine label="NOI" value={formatCurrency(r.noi)} />
-                                <MathLine label="SOFR (at test date)" value={`${(r.sofr * 100).toFixed(4)}%`} />
-                                <MathLine label="Spread" value={`${r.spread}%`} />
-                                <MathLine label="All-in Rate" value={`${(r.rate * 100).toFixed(4)}%`} eq="SOFR + Spread" />
                                 <MathLine label="Amortization" value={r.amort === 0 ? 'I/O' : `${r.amort} years`} />
+                              </div>
+
+                              {/* Rate Prongs */}
+                              <div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Rate Selection (highest wins)</div>
+                                {r.rateCandidates ? r.rateCandidates.map((c, i) => {
+                                  const isWinner = c.label === r.rateWinner?.label;
+                                  return (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                                      <span style={{ fontSize: '0.68rem', color: isWinner ? '#c87941' : '#9aa0aa', whiteSpace: 'nowrap' }}>
+                                        {isWinner ? '▶ ' : '  '}{c.label}
+                                      </span>
+                                      <div style={{ textAlign: 'right' }}>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: isWinner ? 700 : 400, color: isWinner ? '#c87941' : '#4a4f5a' }}>{(c.rate*100).toFixed(4)}%</span>
+                                        <div style={{ fontSize: '0.6rem', color: '#4a4f5a' }}>{c.detail}</div>
+                                      </div>
+                                    </div>
+                                  );
+                                }) : (
+                                  <>
+                                    <MathLine label="SOFR (at test date)" value={`${(r.sofr * 100).toFixed(4)}%`} />
+                                    <MathLine label="Spread" value={`${r.spread}%`} />
+                                    <MathLine label="All-in Rate" value={`${(r.rate * 100).toFixed(4)}%`} eq="SOFR + Spread" />
+                                  </>
+                                )}
+                                <div style={{ borderTop: '1px solid #2e3340', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
+                                  <MathLine label="Covenant Rate" value={`${(r.rate*100).toFixed(4)}%`} color="#c87941" />
+                                </div>
                               </div>
 
                               {/* Debt Service */}
@@ -2178,7 +2360,7 @@ export default function App() {
   const SB_KEY = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
   const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 
-  // Load SOFR curve from Supabase on mount (overrides hardcoded if present)
+  // Load SOFR and 10-year curves from Supabase on mount (overrides hardcoded if present)
   useState(() => { setTimeout(loadSofrCurve, 0); });
 
   async function loadSofrCurve() {
@@ -2188,6 +2370,12 @@ export default function App() {
       const rows = await res.json();
       if (rows.length > 0) {
         ACTIVE_SOFR_CURVE = rows.map(r => ({ date: r.date, sofr: parseFloat(r.sofr) }));
+      }
+      // Load 10-year curve
+      const tyRes = await fetch(`${SB_URL}/rest/v1/ten_year_curve?order=date.asc`, { headers: SB_HEADERS });
+      if (tyRes.ok) {
+        const tyRows = await tyRes.json();
+        if (tyRows.length > 0) ACTIVE_10Y_CURVE = tyRows.map(r => ({ date: r.date, rate: parseFloat(r.rate) }));
       }
       // Load sofr updated timestamp from settings
       const sRes = await fetch(`${SB_URL}/rest/v1/settings?key=eq.sofrUpdated`, { headers: SB_HEADERS });
@@ -2226,14 +2414,15 @@ export default function App() {
 
         const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-        // Find the header row containing "Date" and "1-month Term SOFR"
-        let dateCol = -1, sofrCol = -1, dataStartRow = -1;
+        // Find the header row containing "Date", "1-month Term SOFR", and "10 Year"
+        let dateCol = -1, sofrCol = -1, tenYCol = -1, dataStartRow = -1;
         for (let r = 0; r < rows.length; r++) {
           const row = rows[r];
           for (let c = 0; c < row.length; c++) {
             const val = String(row[c] || '').toLowerCase().trim();
             if (val === 'date') dateCol = c;
             if (val.includes('1-month term sofr') || val === '1-month term sofr') sofrCol = c;
+            if (val === '10 year') tenYCol = c;
           }
           if (dateCol >= 0 && sofrCol >= 0) { dataStartRow = r + 1; break; }
         }
@@ -2244,6 +2433,7 @@ export default function App() {
           return;
         }
 
+        let tenYPoints = [];
         for (let r = dataStartRow; r < rows.length; r++) {
           const row = rows[r];
           if (!row[dateCol] || row[sofrCol] == null) continue;
@@ -2259,7 +2449,6 @@ export default function App() {
             const d = String(raw.getDate()).padStart(2, '0');
             dateStr = `${y}-${m}-${d}`;
           } else {
-            // Try to parse string dates like "3/9/2026" or "2026-03-09"
             const asDate = new Date(raw);
             if (!isNaN(asDate.getTime())) {
               const y = asDate.getFullYear();
@@ -2272,6 +2461,10 @@ export default function App() {
           }
           if (dateStr && dateStr.match(/\d{4}-\d{2}-\d{2}/)) {
             points.push({ date: dateStr, sofr: sofrVal });
+            if (tenYCol >= 0 && row[tenYCol] != null) {
+              const tenY = parseFloat(row[tenYCol]);
+              if (!isNaN(tenY)) tenYPoints.push({ date: dateStr, rate: tenY });
+            }
           }
         }
 
@@ -2294,18 +2487,26 @@ export default function App() {
       }
       points.sort((a, b) => a.date.localeCompare(b.date));
 
-      // Save to Supabase — clear old and insert new
-      await fetch(`${SB_URL}/rest/v1/sofr_curve`, { method: 'DELETE', headers: { ...SB_HEADERS, 'Prefer': '' } });
-      // Delete all rows
+      // Save SOFR to Supabase
       await fetch(`${SB_URL}/rest/v1/sofr_curve?id=gte.0`, { method: 'DELETE', headers: SB_HEADERS });
       const insRes = await fetch(`${SB_URL}/rest/v1/sofr_curve`, {
         method: 'POST', headers: SB_HEADERS,
         body: JSON.stringify(points),
       });
-      if (!insRes.ok) throw new Error('Insert failed');
-
-      // Update active curve immediately
+      if (!insRes.ok) throw new Error('SOFR insert failed');
       ACTIVE_SOFR_CURVE = points;
+
+      // Save 10-year curve to Supabase if parsed
+      if (tenYPoints.length >= 2) {
+        tenYPoints.sort((a, b) => a.date.localeCompare(b.date));
+        await fetch(`${SB_URL}/rest/v1/ten_year_curve?id=gte.0`, { method: 'DELETE', headers: SB_HEADERS });
+        const ty = await fetch(`${SB_URL}/rest/v1/ten_year_curve`, {
+          method: 'POST', headers: SB_HEADERS,
+          body: JSON.stringify(tenYPoints),
+        });
+        if (ty.ok) ACTIVE_10Y_CURVE = tenYPoints;
+      }
+
       const now = new Date();
       setSofrUpdated(now);
 
@@ -2315,7 +2516,7 @@ export default function App() {
         method: 'POST', headers: SB_HEADERS,
         body: JSON.stringify({ key: 'sofrUpdated', value: JSON.stringify(now.toISOString()) }),
       });
-      alert(`✓ SOFR curve updated — ${points.length} data points loaded from ${file.name}`);
+      alert(`✓ Curves updated — ${points.length} SOFR points${tenYPoints.length >= 2 ? ` + ${tenYPoints.length} 10yr points` : ''} loaded from ${file.name}`);
     } catch (err) {
       alert('Error uploading SOFR curve: ' + err.message);
     }
