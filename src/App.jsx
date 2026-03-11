@@ -1084,9 +1084,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       variableLoan: r.variable_loan || false,
       loanCommitment: r.loan_commitment != null ? parseFloat(r.loan_commitment) : null,
       loanSchedule: r.loan_schedule ? (typeof r.loan_schedule === 'string' ? JSON.parse(r.loan_schedule) : r.loan_schedule) : null,
-      actualEarlyTermMonths: r.actual_early_term ? (typeof r.actual_early_term === 'string' ? JSON.parse(r.actual_early_term) : r.actual_early_term) : [],
+      actualEarlyTermMonths: r.actual_early_term ? (() => { try { const v = typeof r.actual_early_term === 'string' ? JSON.parse(r.actual_early_term) : r.actual_early_term; return Array.isArray(v) ? v : []; } catch(e) { return []; } })() : [],
       stdEarlyTerm: r.std_early_term != null ? parseFloat(r.std_early_term) : null,
-      oneTimeExpenseMonths: r.one_time_expenses ? (typeof r.one_time_expenses === 'string' ? JSON.parse(r.one_time_expenses) : r.one_time_expenses) : [],
+      oneTimeExpenseMonths: r.one_time_expenses ? (() => { try { const v = typeof r.one_time_expenses === 'string' ? JSON.parse(r.one_time_expenses) : r.one_time_expenses; return Array.isArray(v) ? v : []; } catch(e) { return []; } })() : [],
       replacementReserves: r.replacement_reserves != null ? parseFloat(r.replacement_reserves) : null,
       updatedAt: r.updated_at,
     };
@@ -1500,9 +1500,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       variableLoan: form.variableLoan || false,
       loanCommitment: form.loanCommitment !== '' ? parseFloat(form.loanCommitment) : null,
       loanSchedule: (form.loanSchedule || []).filter(e => e.month && e.balance !== ''),
-      actualEarlyTermMonths: (form.actualEarlyTermMonths || []).map(v => v !== '' ? parseFloat(v) || 0 : 0),
+      actualEarlyTermMonths: (Array.isArray(form.actualEarlyTermMonths) ? form.actualEarlyTermMonths : []).map(v => v !== '' && v != null ? parseFloat(v) || 0 : 0),
       stdEarlyTerm: form.stdEarlyTerm !== '' ? parseFloat(form.stdEarlyTerm) : null,
-      oneTimeExpenseMonths: (form.oneTimeExpenseMonths || []).map(v => v !== '' ? parseFloat(v) || 0 : 0),
+      oneTimeExpenseMonths: (Array.isArray(form.oneTimeExpenseMonths) ? form.oneTimeExpenseMonths : []).map(v => v !== '' && v != null ? parseFloat(v) || 0 : 0),
       replacementReserves: form.replacementReserves !== '' ? parseFloat(form.replacementReserves) : null,
     };
     if (!p.property || isNaN(p.loanAmount) || isNaN(p.noi)) return;
@@ -2055,9 +2055,14 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
             // Helper: get month label for slot idx (0 = most recent before test date)
             const monthLabel = (idx) => {
               if (!form.covenantDate) return `Month ${idx + 1}`;
-              const d = new Date(form.covenantDate + 'T00:00:00');
-              d.setMonth(d.getMonth() - 1 - idx);
-              return d.toLocaleString('default', { month: 'short', year: 'numeric' });
+              const base = new Date(form.covenantDate + 'T00:00:00');
+              const year = base.getFullYear();
+              const month = base.getMonth(); // 0-based month of test date
+              // idx 0 = one month before test date, idx 1 = two months before, etc.
+              const totalMonths = year * 12 + month - 1 - idx;
+              const y = Math.floor(totalMonths / 12);
+              const m = totalMonths % 12;
+              return new Date(y, m, 1).toLocaleString('default', { month: 'short', year: 'numeric' });
             };
             const setAETM = (idx, val) => {
               const arr = [...(form.actualEarlyTermMonths || [])];
