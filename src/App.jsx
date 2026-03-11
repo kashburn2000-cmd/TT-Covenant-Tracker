@@ -1086,7 +1086,12 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       // ── Process 2022 Fund separately ──────────────────────────────────────
       const fundRow = properties.find(p => p.isFund || p.property === '2022 Fund');
       if (fundRow) {
-        const updatedFundProps = (fundRow.fundProperties || []).map(fp => {
+        // If fundProperties is empty (manually added row), build from FUND_SHEETS constant
+        const baseFundProps = (fundRow.fundProperties && fundRow.fundProperties.length > 0)
+          ? fundRow.fundProperties
+          : Object.entries(FUND_SHEETS).map(([code, name]) => ({ name, sheetCode: code, noi: 0, allocatedLoan: null }));
+
+        const updatedFundProps = baseFundProps.map(fp => {
           const match = sheets.find(s => s.sheetName.toLowerCase().startsWith(fp.sheetCode));
           if (!match) return fp;
           const noi = computeNOI(match, fundRow.incomeMonths, fundRow.expenseMonths, fundRow.covenantDate);
