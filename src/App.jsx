@@ -990,6 +990,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     return pts[0].rate;
   }
 
+  const EMPTY_LOAN_SCHEDULE = Array.from({ length: 12 }, () => ({ month: '', balance: '' }));
+
   const EMPTY_FORM = {
     property: '', lender: '', loanAmount: '', noi: '',
     spread: '2.50', spread10y: '', sizingRate: '',
@@ -997,6 +999,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     covenantType: 'dscr', covenantReq: '1.25',
     testType: 'Covenant', covenantDate: SOFR_MIN, maturityDate: '',
     incomeMonths: '3', expenseMonths: '3', note: '',
+    variableLoan: false, loanCommitment: '', loanSchedule: EMPTY_LOAN_SCHEDULE,
   };
 
   // ── Supabase config ──────────────────────────────────────────────────────────
@@ -1018,6 +1021,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       is_fund: p.isFund || false,
       fund_properties: p.fundProperties ? JSON.stringify(p.fundProperties) : null,
       noi_detail: p.noiDetail ? JSON.stringify(p.noiDetail) : null,
+      variable_loan: p.variableLoan || false,
+      loan_commitment: p.loanCommitment != null && p.loanCommitment !== '' ? parseFloat(p.loanCommitment) : null,
+      loan_schedule: p.loanSchedule ? JSON.stringify(p.loanSchedule) : null,
     };
   }
   function fromDb(r) {
@@ -1035,6 +1041,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       isFund: r.is_fund || false,
       fundProperties: r.fund_properties ? (typeof r.fund_properties === 'string' ? JSON.parse(r.fund_properties) : r.fund_properties) : [],
       noiDetail: r.noi_detail ? (typeof r.noi_detail === 'string' ? JSON.parse(r.noi_detail) : r.noi_detail) : null,
+      variableLoan: r.variable_loan || false,
+      loanCommitment: r.loan_commitment != null ? parseFloat(r.loan_commitment) : null,
+      loanSchedule: r.loan_schedule ? (typeof r.loan_schedule === 'string' ? JSON.parse(r.loan_schedule) : r.loan_schedule) : null,
       updatedAt: r.updated_at,
     };
   }
@@ -1050,7 +1059,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     { testType: 'Covenant', property: 'North Port',    lender: 'Simmons',       loanAmount: 56813403, noi: -427412,  spread: 3.35, amort: 0,  covenantType: 'dscr', covenantReq: 1.25, covenantDate: '2026-12-31', maturityDate: '2027-03-15', incomeMonths: 12, expenseMonths: 12 },
     { testType: 'Covenant', property: 'St Augustine',  lender: 'Simmons',       loanAmount: 49200000, noi: -398522,  spread: 3.25, amort: 0,  covenantType: 'dscr', covenantReq: 1.25, covenantDate: '2026-12-31', maturityDate: '2028-09-16', incomeMonths: 12, expenseMonths: 12 },
     { testType: 'Covenant', property: 'Port St Lucie', lender: 'Blackstone',    loanAmount: 45000000, noi: 3383400,  spread: 2.50, amort: 30, covenantType: 'dy',   covenantReq: 8.00, covenantDate: '2027-02-14', maturityDate: '2027-09-01', incomeMonths: 1,  expenseMonths: 1,  note: 'NOI: T1 Dec 2026 annualized — 2027 test date uses Dec fallback' },
-    { testType: 'Covenant', property: '2022 Fund', lender: 'Barings',  loanAmount: 548500000, noi: 48986656, spread: 2.25, amort: 30, covenantType: 'dscr', covenantReq: 1.05, covenantDate: '2026-05-31', maturityDate: '2028-05-29', incomeMonths: 1, expenseMonths: 3, note: 'Portfolio DSCR: T1 income × 12 minus T3 expenses × 4 across 9 properties', isFund: true, fundProperties: [
+    { testType: 'Covenant', property: '2022 Fund', lender: 'Barings',  loanAmount: 548500000, noi: 48986656, spread: 2.25, sizingRate: 5.25, amort: 0, covenantType: 'dscr', covenantReq: 1.05, covenantDate: '2026-05-31', maturityDate: '2028-05-29', incomeMonths: 1, expenseMonths: 3, note: 'Portfolio DSCR: T1 income × 12 minus T3 expenses × 4 across 9 properties', isFund: true, variableLoan: true, loanCommitment: 548500000, loanSchedule: [], fundProperties: [
       { name: 'Buckeye',  sheetCode: 'wbuck', noi: 4418153, allocatedLoan: 52117000 },
       { name: 'Daytona',  sheetCode: 'wdwfl', noi: 5637604, allocatedLoan: 57114000 },
       { name: 'Fountain', sheetCode: 'wfoun', noi: 6334628, allocatedLoan: 70832000 },
@@ -1211,27 +1220,82 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     const req  = parseFloat(p.covenantReq);
     const amort = parseInt(p.amort);
 
-    const ads = calcADS(loan, rate, amort);
-    const currentVal = p.covenantType === 'dscr' ? noi / ads : (noi / loan) * 100;
+    // ── Variable loan balance: T-3 rolling interest ──────────────────────────
+    // If variableLoan is on, find the 3 schedule entries immediately before the
+    // test date, compute monthly interest for each (balance × rate / 12 using
+    // that month's SOFR), sum and annualize × 4.
+    let ads, variableLoanDetail = null;
+    if (p.variableLoan && p.loanSchedule && p.loanSchedule.length > 0) {
+      const testDate = new Date(p.covenantDate + 'T00:00:00');
+      // Parse schedule entries into { date, balance } sorted descending
+      const parsedSchedule = p.loanSchedule
+        .filter(e => e.month && e.balance !== '' && e.balance != null)
+        .map(e => ({ date: new Date(e.month + '-01T00:00:00'), balance: parseFloat(e.balance) }))
+        .filter(e => e.date < testDate)
+        .sort((a, b) => b.date - a.date);
+
+      const t3 = parsedSchedule.slice(0, 3);
+      if (t3.length > 0) {
+        const monthlyInterests = t3.map(entry => {
+          const entryDateStr = entry.date.toISOString().slice(0, 10);
+          // Recompute rate for that specific month using its SOFR
+          const mSofr = getSofr(entryDateStr);
+          const mTenY = get10Y(entryDateStr);
+          const mSofrRate = mSofr + spread / 100;
+          const mTenYRate = spread10y != null ? mTenY + spread10y / 100 : null;
+          const mSizing   = sizingRate != null ? sizingRate / 100 : null;
+          const mCands = [
+            { rate: mSofrRate },
+            ...(mTenYRate  != null ? [{ rate: mTenYRate  }] : []),
+            ...(mSizing    != null ? [{ rate: mSizing    }] : []),
+          ];
+          const mRate = mCands.reduce((best, c) => c.rate > best.rate ? c : best, mCands[0]).rate;
+          const monthlyInterest = entry.balance * mRate / 12;
+          return { date: entry.date, balance: entry.balance, sofr: mSofr, rate: mRate, monthlyInterest };
+        });
+        const totalT3Interest = monthlyInterests.reduce((s, m) => s + m.monthlyInterest, 0);
+        ads = (totalT3Interest / t3.length) * 12; // annualized average monthly interest
+        variableLoanDetail = { months: monthlyInterests, annualizedADS: ads };
+      } else {
+        // Fallback to commitment × rate I/O if no schedule entries before test date
+        const commitment = p.loanCommitment || loan;
+        ads = commitment * rate;
+      }
+    } else {
+      ads = calcADS(loan, rate, amort);
+    }
+
+    // For paydown calcs and display, use the effective loan balance
+    const effectiveLoan = (p.variableLoan && p.loanSchedule) ? (() => {
+      const testDate = new Date(p.covenantDate + 'T00:00:00');
+      const sorted = (p.loanSchedule || [])
+        .filter(e => e.month && e.balance !== '' && e.balance != null)
+        .map(e => ({ date: new Date(e.month + '-01T00:00:00'), balance: parseFloat(e.balance) }))
+        .filter(e => e.date < testDate)
+        .sort((a, b) => b.date - a.date);
+      return sorted.length > 0 ? sorted[0].balance : loan;
+    })() : loan;
+
+    const currentVal = p.covenantType === 'dscr' ? noi / ads : (noi / effectiveLoan) * 100;
     const satisfied = currentVal >= req;
-    const requiredNOI = p.covenantType === 'dscr' ? req * ads : (req / 100) * loan;
+    const requiredNOI = p.covenantType === 'dscr' ? req * ads : (req / 100) * effectiveLoan;
     const noiVariance = noi - requiredNOI;
 
     let paydown = 0;
     if (!satisfied) {
       if (p.covenantType === 'dy') {
-        paydown = Math.max(0, loan - noi / (req / 100));
+        paydown = Math.max(0, effectiveLoan - noi / (req / 100));
       } else {
-        let lo = 0, hi = loan;
+        let lo = 0, hi = effectiveLoan;
         for (let i = 0; i < 60; i++) {
           const mid = (lo + hi) / 2;
           const testAds = calcADS(mid, rate, amort);
           if (noi / testAds >= req) lo = mid; else hi = mid;
         }
-        paydown = Math.max(0, loan - lo);
+        paydown = Math.max(0, effectiveLoan - lo);
       }
     }
-    return { ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, ads, currentVal, satisfied, requiredNOI, noiVariance, paydown };
+    return { ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, ads, effectiveLoan, variableLoanDetail, currentVal, satisfied, requiredNOI, noiVariance, paydown };
   }
 
   const rows = useMemo(() => {
@@ -1389,6 +1453,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       incomeMonths: parseInt(form.incomeMonths),
       expenseMonths: parseInt(form.expenseMonths),
       testType: form.testType || 'Covenant',
+      variableLoan: form.variableLoan || false,
+      loanCommitment: form.loanCommitment !== '' ? parseFloat(form.loanCommitment) : null,
+      loanSchedule: (form.loanSchedule || []).filter(e => e.month && e.balance !== ''),
     };
     if (!p.property || isNaN(p.loanAmount) || isNaN(p.noi)) return;
 
@@ -1419,7 +1486,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   }
 
   function startEdit(p) {
-    setForm({ ...p, spread: String(p.spread), spread10y: p.spread10y != null ? String(p.spread10y) : '', sizingRate: p.sizingRate != null ? String(p.sizingRate) : '', covenantReq: String(p.covenantReq), loanAmount: String(p.loanAmount), noi: String(p.noi), incomeMonths: String(p.incomeMonths), expenseMonths: String(p.expenseMonths) });
+    const emptySchedule = Array.from({ length: 12 }, () => ({ month: '', balance: '' }));
+    const existingSchedule = p.loanSchedule && p.loanSchedule.length > 0 ? [...p.loanSchedule, ...emptySchedule].slice(0, 12) : emptySchedule;
+    setForm({ ...p, spread: String(p.spread), spread10y: p.spread10y != null ? String(p.spread10y) : '', sizingRate: p.sizingRate != null ? String(p.sizingRate) : '', covenantReq: String(p.covenantReq), loanAmount: String(p.loanAmount), noi: String(p.noi), incomeMonths: String(p.incomeMonths), expenseMonths: String(p.expenseMonths), variableLoan: p.variableLoan || false, loanCommitment: p.loanCommitment != null ? String(p.loanCommitment) : '', loanSchedule: existingSchedule });
     setEditId(p.id);
     setShowForm(true);
   }
@@ -1867,6 +1936,70 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
               <input type="date" value={form.maturityDate} onChange={e => setF('maturityDate', e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
             </div>
           </div>
+          {/* ── Variable Loan Balance Toggle ── */}
+          <div style={{ marginBottom: '1rem', paddingTop: '0.5rem', borderTop: '1px solid #2e3340' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
+              <div
+                onClick={() => setF('variableLoan', !form.variableLoan)}
+                style={{ width: 36, height: 20, borderRadius: 10, background: form.variableLoan ? '#c87941' : '#2e3340', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: 3, left: form.variableLoan ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: '#e8eaed', transition: 'left 0.2s' }} />
+              </div>
+              <span style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: form.variableLoan ? '#c87941' : '#9aa0aa', fontWeight: 600 }}>Variable Loan Balance</span>
+            </label>
+          </div>
+
+          {form.variableLoan && (
+            <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: '#16191f', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #c87941' }}>
+              {/* Commitment field — replaces loan amount display */}
+              <div style={{ marginBottom: '0.85rem' }}>
+                <label style={labelStyle}>Loan Commitment (Total Facility, $)</label>
+                <input
+                  type="number"
+                  value={form.loanCommitment ?? ''}
+                  placeholder="e.g. 548500000"
+                  onChange={e => setF('loanCommitment', e.target.value)}
+                  style={inputStyle}
+                />
+                <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginTop: '0.25rem' }}>
+                  The total facility size. The drawn balance schedule below drives the DSCR calculation.
+                </div>
+              </div>
+
+              {/* 12-row schedule */}
+              <div style={{ fontSize: '0.58rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9aa0aa', marginBottom: '0.5rem', fontWeight: 600 }}>Loan Balance Schedule (12 months)</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
+                {(form.loanSchedule || []).map((entry, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                    <input
+                      type="month"
+                      value={entry.month || ''}
+                      onChange={e => {
+                        const s = [...form.loanSchedule];
+                        s[i] = { ...s[i], month: e.target.value };
+                        setF('loanSchedule', s);
+                      }}
+                      style={{ ...inputStyle, colorScheme: 'dark', flex: '0 0 130px', fontSize: '0.7rem', padding: '4px 6px' }}
+                    />
+                    <input
+                      type="number"
+                      value={entry.balance || ''}
+                      placeholder="Balance $"
+                      onChange={e => {
+                        const s = [...form.loanSchedule];
+                        s[i] = { ...s[i], balance: e.target.value };
+                        setF('loanSchedule', s);
+                      }}
+                      style={{ ...inputStyle, flex: 1, fontSize: '0.7rem', padding: '4px 6px' }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginTop: '0.5rem' }}>
+                Enter months in any order. The 3 entries immediately before the test date will be used for T-3 interest calculation.
+              </div>
+            </div>
+          )}
+
           <div style={{ marginBottom: '1rem' }}>
             <label style={labelStyle}>Note (optional)</label>
             <input type="text" value={form.note || ''} placeholder="e.g. NOI: T1 Dec 2026 annualized"
@@ -2031,7 +2164,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                     {col('paydown') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
                         {r.paydown > 0
-                          ? r.paydown >= r.loanAmount * 0.999
+                          ? r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999
                             ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
                             : <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c87941' }}>{formatCurrency(r.paydown)}</div>
                           : <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>}
@@ -2056,15 +2189,15 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                         }
                         maxDFLoan = dfNOI > 0 ? dfNOI / (dfDSCRVal * adsPerDollar) : 0;
                       }
-                      const dfPaydown = Math.max(0, r.loanAmount - maxDFLoan);
+                      const dfPaydown = Math.max(0, (r.effectiveLoan || r.loanAmount) - maxDFLoan);
                       const modeLabel = dfMode === 'dy' ? `${dfDY}% DY` : `${(dfRate * 100).toFixed(2)}% ${dfIO ? 'I/O' : `${dfAmort}yr`}`;
                       return (
                         <td style={{ padding: '0.65rem 0.75rem' }}>
-                          {r.paydown >= r.loanAmount * 0.999
+                          {r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999
                             ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
                             : dfNOI <= 0
                             ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
-                            : dfPaydown >= r.loanAmount * 0.999
+                            : dfPaydown >= (r.effectiveLoan || r.loanAmount) * 0.999
                               ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
                               : dfPaydown > 0
                                 ? <div>
@@ -2088,7 +2221,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                   {expandedMath.has(r.id) && (() => {
                     const colCount = ['testType','property','covenant','noiPeriods','rate','result','noi','noiVariance','paydown','debtFund'].filter(col).length + 2;
                     const monthlyPayment = r.amort === 0 ? null : (r.loanAmount * (r.rate/12) * Math.pow(1+r.rate/12, r.amort*12)) / (Math.pow(1+r.rate/12, r.amort*12) - 1);
-                    const dyActual = (r.noi / r.loanAmount) * 100;
+                    const dyActual = (r.noi / (r.effectiveLoan || r.loanAmount)) * 100;
                     return (
                       <tr>
                         <td colSpan={colCount} style={{ padding: 0, background: '#16191f' }}>
@@ -2099,9 +2232,13 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                               {/* Inputs */}
                               <div>
                                 <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Inputs</div>
-                                <MathLine label="Loan Amount" value={formatCurrency(r.loanAmount)} />
+                                {r.variableLoan && r.loanCommitment
+                                  ? <MathLine label="Commitment" value={formatCurrency(r.loanCommitment)} />
+                                  : <MathLine label="Loan Amount" value={formatCurrency(r.loanAmount)} />}
+                                {r.variableLoan && r.effectiveLoan && r.effectiveLoan !== r.loanAmount &&
+                                  <MathLine label="Drawn Balance (latest)" value={formatCurrency(r.effectiveLoan)} color="#c87941" />}
                                 <MathLine label="NOI" value={formatCurrency(r.noi)} />
-                                <MathLine label="Amortization" value={r.amort === 0 ? 'I/O' : `${r.amort} years`} />
+                                <MathLine label="Amortization" value={r.variableLoan ? 'I/O (variable balance)' : r.amort === 0 ? 'I/O' : `${r.amort} years`} />
                               </div>
 
                               {/* Rate Prongs */}
@@ -2135,9 +2272,27 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                               {/* Debt Service */}
                               <div>
                                 <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Debt Service</div>
-                                {r.amort === 0 ? (
+                                {r.variableLoan && r.variableLoanDetail ? (
                                   <>
-                                    <MathLine label="Annual DS (I/O)" value={formatCurrency(r.ads)} eq={`${formatCurrency(r.loanAmount)} × ${(r.rate*100).toFixed(4)}%`} />
+                                    <div style={{ fontSize: '0.6rem', color: '#c87941', marginBottom: '0.3rem', fontWeight: 600 }}>T-3 Rolling Interest</div>
+                                    {r.variableLoanDetail.months.map((m, i) => {
+                                      const label = m.date instanceof Date
+                                        ? m.date.toLocaleString('default', { month: 'short', year: 'numeric' })
+                                        : String(m.date).slice(0, 7);
+                                      return (
+                                        <MathLine key={i} label={label}
+                                          value={formatCurrency(m.monthlyInterest)}
+                                          eq={`${formatCurrency(m.balance)} × ${(m.rate*100).toFixed(3)}% / 12`} />
+                                      );
+                                    })}
+                                    <div style={{ borderTop: '1px solid #2e3340', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
+                                      <MathLine label="Avg Monthly Interest" value={formatCurrency(r.variableLoanDetail.annualizedADS / 12)} eq="sum ÷ 3 months" />
+                                      <MathLine label="Annualized DS (× 12)" value={formatCurrency(r.variableLoanDetail.annualizedADS)} color="#c87941" />
+                                    </div>
+                                  </>
+                                ) : r.amort === 0 ? (
+                                  <>
+                                    <MathLine label="Annual DS (I/O)" value={formatCurrency(r.ads)} eq={`${formatCurrency(r.effectiveLoan || r.loanAmount)} × ${(r.rate*100).toFixed(4)}%`} />
                                     <MathLine label="Monthly DS" value={formatCurrency(r.ads / 12)} />
                                   </>
                                 ) : (
@@ -2662,7 +2817,7 @@ export default function App() {
               {pinUnlocked ? '🔓 Editing unlocked' : '🔒 View only'}
             </button>
             <span style={{ fontSize: "0.85rem", color: "#c8cdd6", fontWeight: 700, letterSpacing: "0.06em" }}>
-              Kevin Ashburn & Kenneth Thurman & Mo & Wes · <span style={{ color: TT_ORANGE }}>Thompson Thrift</span>
+              Kevin Ashburn · <span style={{ color: TT_ORANGE }}>Thompson Thrift</span>
             </span>
           </div>
         </div>
