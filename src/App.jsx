@@ -1403,7 +1403,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+          {dfMode === 'dscr' && <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Rate: SOFR +</span>
             <input
               type="number" step="0.01" value={dfSpreadInput}
@@ -1412,7 +1412,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
               style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
             />
             <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
-          </div>
+          </div>}
 
           {/* I/O Toggle — only relevant in DSCR mode */}
           {dfMode === 'dscr' && (
