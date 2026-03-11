@@ -1128,6 +1128,10 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [lastUpdated, setLastUpdated] = useState(null);
   const [expandedFund, setExpandedFund] = useState(false);
   const [expandedMath, setExpandedMath] = useState(new Set());
+  const [expandedHistory, setExpandedHistory] = useState(new Set()); // property IDs with history open
+  const [propertyEvents, setPropertyEvents] = useState({});           // { propertyId: [events] }
+  const [whatIfNOI, setWhatIfNOI] = useState({});                     // { rowId: overrideNOI string }
+  const [newComment, setNewComment] = useState({});                    // { propertyId: text }
   const [forecastMonth, setForecastMonth] = useState(null); // e.g. "February 2026"
   const [forecastMonthInput, setForecastMonthInput] = useState(''); // user-typed label before upload
   const [uploadResults, setUploadResults] = useState([]);
@@ -1526,7 +1530,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           const all = await reload.json();
           if (Array.isArray(all)) setProperties(all.map(fromDb));
         } else {
-          setProperties(ps => ps.map(x => x.id === editId ? fromDb(data[0]) : x));
+          const saved = fromDb(data[0]);
+          setProperties(ps => ps.map(x => x.id === editId ? saved : x));
+          const snapshotRow = calcRow(saved);
+          saveSnapshot(editId, snapshotRow);
+          if (expandedHistory.has(editId)) fetchEvents(editId);
         }
         setEditId(null);
       } else {
@@ -1547,7 +1555,10 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           const all = await reload.json();
           if (Array.isArray(all)) setProperties(all.map(fromDb));
         } else {
-          setProperties(ps => [...ps, fromDb(data[0])]);
+          const newRow = fromDb(data[0]);
+          setProperties(ps => [...ps, newRow]);
+          const snapshotRow = calcRow(newRow);
+          saveSnapshot(newRow.id, snapshotRow);
         }
       }
       setForm(EMPTY_FORM);
@@ -1555,6 +1566,58 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     } catch (err) {
       alert('Error saving: ' + err.message);
     }
+  }
+
+  // ── Property events (history + comments) ─────────────────────────────────
+  async function fetchEvents(propertyId) {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/property_events?property_id=eq.${propertyId}&order=created_at.desc`, { headers: SB_HEADERS });
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setPropertyEvents(prev => ({ ...prev, [propertyId]: data }));
+      }
+    } catch (err) { console.error('fetchEvents error', err); }
+  }
+
+  async function saveSnapshot(propertyId, row) {
+    try {
+      await fetch(`${SB_URL}/rest/v1/property_events`, {
+        method: 'POST',
+        headers: SB_HEADERS,
+        body: JSON.stringify({
+          property_id: propertyId,
+          type: 'snapshot',
+          noi: row.noi,
+          loan_amount: row.loanAmount,
+          rate: row.rate,
+          ads: row.ads,
+          result: row.currentVal,
+          covenant_req: row.covenantReq,
+          satisfied: row.satisfied,
+        }),
+      });
+    } catch (err) { console.error('saveSnapshot error', err); }
+  }
+
+  async function saveComment(propertyId) {
+    const text = (newComment[propertyId] || '').trim();
+    if (!text) return;
+    try {
+      await fetch(`${SB_URL}/rest/v1/property_events`, {
+        method: 'POST',
+        headers: SB_HEADERS,
+        body: JSON.stringify({ property_id: propertyId, type: 'comment', comment: text }),
+      });
+      setNewComment(prev => ({ ...prev, [propertyId]: '' }));
+      fetchEvents(propertyId);
+    } catch (err) { console.error('saveComment error', err); }
+  }
+
+  async function deleteEvent(eventId, propertyId) {
+    try {
+      await fetch(`${SB_URL}/rest/v1/property_events?id=eq.${eventId}`, { method: 'DELETE', headers: SB_HEADERS });
+      fetchEvents(propertyId);
+    } catch (err) { console.error('deleteEvent error', err); }
   }
 
   function startEdit(p) {
@@ -2375,6 +2438,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                       <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#9aa0aa' : '#2a2d35', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
                       <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#c4747444' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
                       <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? '#c87941' : '#4a4f5a' }} title="Show calculation">∑</button>
+                      <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? '#6a9e7f' : '#4a4f5a' }} title="History &amp; notes">⏱</button>
                     </td>
                   </tr>
 
@@ -2400,6 +2464,62 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                                   <MathLine label="Drawn Balance (latest)" value={formatCurrency(r.effectiveLoan)} color="#c87941" />}
                                 <MathLine label="NOI" value={formatCurrency(r.noi)} />
                                 <MathLine label="Amortization" value={r.variableLoan ? 'I/O (variable balance)' : r.amort === 0 ? 'I/O' : `${r.amort} years`} />
+                              </div>
+
+                              {/* What-if NOI */}
+                              <div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>What-if NOI</div>
+                                {(() => {
+                                  const wiRaw = whatIfNOI[r.id];
+                                  const wiNOI = wiRaw !== undefined && wiRaw !== '' ? parseFloat(wiRaw) : null;
+                                  const wiVal = wiNOI !== null && !isNaN(wiNOI)
+                                    ? (r.covenantType === 'dscr' ? wiNOI / r.ads : (wiNOI / (r.effectiveLoan || r.loanAmount)) * 100)
+                                    : null;
+                                  const wiSatisfied = wiVal !== null ? wiVal >= r.covenantReq : null;
+                                  const thresholds = r.covenantType === 'dscr'
+                                    ? [{ label: '1.00x', req: 1.00 }, { label: '1.05x', req: 1.05 }, { label: '1.10x', req: 1.10 }, { label: '1.25x', req: 1.25 }]
+                                    : [{ label: '7.00%', req: 7.00 }, { label: '7.50%', req: 7.50 }, { label: '8.00%', req: 8.00 }];
+                                  return (
+                                    <div>
+                                      <input
+                                        type="number"
+                                        value={wiRaw ?? ''}
+                                        placeholder={`Current: ${formatCurrency(r.noi)}`}
+                                        onChange={e => setWhatIfNOI(prev => ({ ...prev, [r.id]: e.target.value }))}
+                                        style={{ width: '100%', background: '#16191f', border: '1px solid #2e3340', borderRadius: 2, color: '#e8eaed', padding: '4px 6px', fontSize: '0.75rem', fontFamily: 'inherit', marginBottom: '0.4rem', boxSizing: 'border-box' }}
+                                      />
+                                      {wiVal !== null && !isNaN(wiVal) && (
+                                        <div>
+                                          <MathLine
+                                            label={r.covenantType === 'dscr' ? 'What-if DSCR' : 'What-if DY'}
+                                            value={r.covenantType === 'dscr' ? `${wiVal.toFixed(4)}x` : `${wiVal.toFixed(4)}%`}
+                                            color={wiSatisfied ? '#6a9e7f' : '#c47474'}
+                                          />
+                                          <div style={{ borderTop: '1px solid #1a1d24', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
+                                            {thresholds.map(t => {
+                                              const noiNeeded = r.covenantType === 'dscr' ? t.req * r.ads : (t.req / 100) * (r.effectiveLoan || r.loanAmount);
+                                              const delta = wiNOI - noiNeeded;
+                                              return (
+                                                <MathLine key={t.label}
+                                                  label={`NOI for ${t.label}`}
+                                                  value={formatCurrency(noiNeeded)}
+                                                  eq={`${delta >= 0 ? '+' : ''}${formatCurrency(delta)}`}
+                                                  color={delta >= 0 ? '#6a9e7f' : '#c47474'}
+                                                />
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {wiRaw !== undefined && wiRaw !== '' && (
+                                        <button onClick={() => setWhatIfNOI(prev => { const n = {...prev}; delete n[r.id]; return n; })}
+                                          style={{ fontSize: '0.6rem', color: '#4a4f5a', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: '0.2rem' }}>
+                                          ✕ Clear
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
 
                               {/* Rate Prongs */}
@@ -2582,6 +2702,74 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                               )}
 
                             </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })()}
+
+                  {/* ── History & Comments panel ── */}
+                  {expandedHistory.has(r.id) && (() => {
+                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','noi','noiVariance','paydown','debtFund'].filter(col).length + 2;
+                    const events = propertyEvents[r.id] || null;
+                    const fmtEvent = (iso) => {
+                      const d = new Date(iso);
+                      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                    };
+                    return (
+                      <tr>
+                        <td colSpan={colCount} style={{ padding: 0, background: '#16191f' }}>
+                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: '#1e2128', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #6a9e7f' }}>
+                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#6a9e7f', marginBottom: '0.75rem', fontWeight: 600 }}>History &amp; Notes — {r.property}</div>
+
+                            {/* Add comment */}
+                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.85rem' }}>
+                              <input
+                                type="text"
+                                value={newComment[r.id] || ''}
+                                placeholder="Add a note..."
+                                onChange={e => setNewComment(prev => ({ ...prev, [r.id]: e.target.value }))}
+                                onKeyDown={e => e.key === 'Enter' && saveComment(r.id)}
+                                style={{ flex: 1, background: '#16191f', border: '1px solid #2e3340', borderRadius: 2, color: '#e8eaed', padding: '5px 8px', fontSize: '0.75rem', fontFamily: 'inherit' }}
+                              />
+                              <button onClick={() => saveComment(r.id)} style={{ padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', background: '#6a9e7f', color: '#fff', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>Add</button>
+                            </div>
+
+                            {/* Events feed */}
+                            {events === null && <div style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>Loading...</div>}
+                            {events !== null && events.length === 0 && <div style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>No history yet — will record automatically on next save.</div>}
+                            {events !== null && events.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 320, overflowY: 'auto' }}>
+                                {events.map(ev => (
+                                  <div key={ev.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.5rem 0.65rem', background: '#16191f', borderRadius: 3, border: '1px solid #2e3340' }}>
+                                    {/* Icon */}
+                                    <div style={{ fontSize: '0.75rem', marginTop: '0.05rem', flexShrink: 0, color: ev.type === 'comment' ? '#6a9e7f' : '#c87941' }}>
+                                      {ev.type === 'comment' ? '💬' : '📸'}
+                                    </div>
+                                    {/* Content */}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginBottom: '0.2rem' }}>{fmtEvent(ev.created_at)}</div>
+                                      {ev.type === 'comment' ? (
+                                        <div style={{ fontSize: '0.75rem', color: '#c8cdd6' }}>{ev.comment}</div>
+                                      ) : (
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.2rem' }}>
+                                          <span style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>NOI <strong style={{ color: '#c8cdd6' }}>{formatCurrency(ev.noi)}</strong></span>
+                                          <span style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>Rate <strong style={{ color: '#c8cdd6' }}>{ev.rate ? `${(ev.rate * 100).toFixed(3)}%` : '—'}</strong></span>
+                                          <span style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'DY'} <strong style={{ color: ev.satisfied ? '#6a9e7f' : '#c47474' }}>{ev.result ? (r.covenantType === 'dscr' ? `${parseFloat(ev.result).toFixed(4)}x` : `${parseFloat(ev.result).toFixed(4)}%`) : '—'}</strong></span>
+                                          <span style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>Req <strong style={{ color: '#c8cdd6' }}>{ev.covenant_req ? (r.covenantType === 'dscr' ? `${parseFloat(ev.covenant_req).toFixed(2)}x` : `${parseFloat(ev.covenant_req).toFixed(2)}%`) : '—'}</strong></span>
+                                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: ev.satisfied ? '#6a9e7f' : '#c47474' }}>{ev.satisfied ? '✓ Pass' : '✗ Fail'}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {/* Delete */}
+                                    <button onClick={() => { if (window.confirm('Delete this entry?')) deleteEvent(ev.id, r.id); }}
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2e3340', fontSize: '0.7rem', padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}
+                                      onMouseEnter={e => e.target.style.color = '#c47474'}
+                                      onMouseLeave={e => e.target.style.color = '#2e3340'}>✕</button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>
