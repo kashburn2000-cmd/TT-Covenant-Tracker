@@ -832,7 +832,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     spread: '2.50', amort: '30',
     covenantType: 'dscr', covenantReq: '1.25',
     testType: 'Covenant', covenantDate: SOFR_MIN, maturityDate: '',
-    incomeMonths: '3', expenseMonths: '3',
+    incomeMonths: '3', expenseMonths: '3', note: '',
   };
 
   // ── Supabase config ──────────────────────────────────────────────────────────
@@ -875,7 +875,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     { testType: 'Maturity', property: 'Sarasota',      lender: 'Stifel',        loanAmount: 59900000, noi: 3763582,  spread: 2.19, amort: 30, covenantType: 'dscr', covenantReq: 1.20, covenantDate: '2026-12-29', maturityDate: '2026-12-29', incomeMonths: 1,  expenseMonths: 12 },
     { testType: 'Covenant', property: 'North Port',    lender: 'Simmons',       loanAmount: 56813403, noi: -427412,  spread: 3.35, amort: 0,  covenantType: 'dscr', covenantReq: 1.25, covenantDate: '2026-12-31', maturityDate: '2027-03-15', incomeMonths: 12, expenseMonths: 12 },
     { testType: 'Covenant', property: 'St Augustine',  lender: 'Simmons',       loanAmount: 49200000, noi: -398522,  spread: 3.25, amort: 0,  covenantType: 'dscr', covenantReq: 1.25, covenantDate: '2026-12-31', maturityDate: '2028-09-16', incomeMonths: 12, expenseMonths: 12 },
-    { testType: 'Covenant', property: 'Port St Lucie', lender: 'Blackstone',    loanAmount: 45000000, noi: 3475056,  spread: 2.50, amort: 30, covenantType: 'dy',   covenantReq: 8.00, covenantDate: '2027-02-14', maturityDate: '2027-09-01', incomeMonths: 1,  expenseMonths: 1,  note: 'NOI: T1 Nov 2026 (closest available to test date)' },
+    { testType: 'Covenant', property: 'Port St Lucie', lender: 'Blackstone',    loanAmount: 45000000, noi: 3383400,  spread: 2.50, amort: 30, covenantType: 'dy',   covenantReq: 8.00, covenantDate: '2027-02-14', maturityDate: '2027-09-01', incomeMonths: 1,  expenseMonths: 1,  note: 'NOI: T1 Dec 2026 annualized — 2027 test date uses Dec fallback' },
   ];
 
   const [properties, setProperties] = useState([]);
@@ -1577,6 +1577,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
               <label style={labelStyle}>Loan Maturity Date</label>
               <input type="date" value={form.maturityDate} onChange={e => setF('maturityDate', e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
             </div>
+          </div>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={labelStyle}>Note (optional)</label>
+            <input type="text" value={form.note || ''} placeholder="e.g. NOI: T1 Dec 2026 annualized"
+              onChange={e => setF('note', e.target.value)} style={inputStyle} />
           </div>
           <button onClick={saveForm} style={{ padding: '6px 20px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, background: '#c87941', color: '#fff' }}>
             {editId !== null ? 'Save Changes' : 'Add Property'}
