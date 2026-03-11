@@ -160,6 +160,9 @@ const DEFAULT_THRESHOLDS = { high: 1.25, mid: 1.10, low: 1.00 };
 const TT_NAVY   = "#0d2137";
 const TT_ORANGE = "#e05c20";
 
+// ── Edit PIN — change this to your desired PIN ────────────────────────────────
+const EDIT_PIN = "1234";
+
 const SHARED_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap');
   * { box-sizing: border-box; }
@@ -199,7 +202,68 @@ const SHARED_STYLES = `
   .mx-vlow { background: rgba(255,107,107,0.28); color: #ff4444; font-weight: 700; }
 `;
 
-// ── Matrix Tab ────────────────────────────────────────────────────────────────
+// ── PIN Modal ─────────────────────────────────────────────────────────────────
+function PinModal({ onSuccess, onClose }) {
+  const [digits, setDigits] = useState('');
+  const [shake, setShake] = useState(false);
+
+  function handleDigit(d) {
+    const next = (digits + d).slice(0, 4);
+    setDigits(next);
+    if (next.length === 4) {
+      if (next === EDIT_PIN) {
+        onSuccess();
+      } else {
+        setShake(true);
+        setTimeout(() => { setShake(false); setDigits(''); }, 600);
+      }
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#122640', border: '1px solid #1e3a5a', borderTop: `3px solid ${TT_ORANGE}`, borderRadius: 6, padding: '2rem', width: 280, textAlign: 'center' }}>
+        <div style={{ fontSize: '0.65rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: TT_ORANGE, marginBottom: '1.25rem', fontWeight: 600 }}>
+          Enter PIN to Edit
+        </div>
+        {/* Dot indicators */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+          {[0,1,2,3].map(i => (
+            <div key={i} style={{
+              width: 14, height: 14, borderRadius: '50%',
+              background: i < digits.length ? TT_ORANGE : 'transparent',
+              border: `2px solid ${i < digits.length ? TT_ORANGE : '#2a4a68'}`,
+              transition: 'all 0.1s',
+              transform: shake ? 'translateX(4px)' : 'none',
+            }} />
+          ))}
+        </div>
+        {/* Keypad */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
+          {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d, i) => (
+            <button key={i} onClick={() => d === '⌫' ? setDigits(p => p.slice(0,-1)) : d && handleDigit(d)}
+              style={{
+                padding: '0.75rem', borderRadius: 4, border: '1px solid #1e3a5a',
+                background: d ? '#091929' : 'transparent',
+                color: d === '⌫' ? '#5a7fa0' : '#d0e4f4',
+                fontSize: d === '⌫' ? '1rem' : '1.1rem', fontWeight: 600,
+                cursor: d ? 'pointer' : 'default', fontFamily: 'inherit',
+                opacity: d ? 1 : 0,
+              }}>
+              {d}
+            </button>
+          ))}
+        </div>
+        <button onClick={onClose} style={{ fontSize: '0.7rem', color: '#3a5a78', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: '0.25rem' }}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 function MatrixTab({ thresholds }) {
   const [rate, setRate] = useState("6.75");
 
@@ -712,37 +776,43 @@ async function parseForecasts(file) {
   return results;
 }
 
-// Compute trailing NOI given parsed sheet data, T periods, and covenant test date.
-// Uses months PRIOR to the test month (not including the test month itself).
-// If trailing period goes before Jan of the first available year, uses only available months and annualizes.
+// Compute NOI from forecast sheet data.
+// Normal: trailing T months STRICTLY BEFORE the test month (e.g. test Oct, T3 income = Jul/Aug/Sep).
+// Fallback (test date in 2027+, no months available before it): use T1 December annualized.
 function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate) {
-  const { monthData, incomeVals, totalExp } = sheetData;
+  const { monthData, noiVals, incomeVals, totalExp } = sheetData;
   const testDate = new Date(covenantDate + 'T00:00:00');
+  const testYear = testDate.getFullYear();
+  const testMonth = testDate.getMonth(); // 0-indexed
 
-  // Find months STRICTLY BEFORE the test month, sorted most-recent-first
+  // Find months strictly before the test month that exist in the sheet
   const available = monthData
     .map((m, i) => ({ ...m, i }))
     .filter(m => {
       if (!m) return false;
-      const mDate = new Date(m.year, m.month, 1);
-      const tDate = new Date(testDate.getFullYear(), testDate.getMonth(), 1);
-      return mDate < tDate; // strictly before test month
+      return (m.year * 12 + m.month) < (testYear * 12 + testMonth);
     })
-    .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
+    .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month)); // most recent first
 
-  if (available.length === 0) return null;
+  // Fallback: test date is in 2027+ and no prior months exist in this forecast file
+  // Use T1 December (last month of the forecast, annualized)
+  if (available.length === 0) {
+    const decIdx = monthData.findIndex(m => m && m.month === 11); // December = month 11
+    if (decIdx < 0) return null;
+    return noiVals[decIdx] * 12; // annualize the single month
+  }
 
-  // Take up to T months — if fewer available, use what we have and annualize
+  // Normal case: take up to T months of income and expense separately, annualize
   const takeInc = available.slice(0, incomeMonths);
   const takeExp = available.slice(0, expenseMonths);
 
   const avgIncome  = takeInc.reduce((s, m) => s + incomeVals[m.i], 0) / takeInc.length;
   const avgExpense = takeExp.reduce((s, m) => s + totalExp[m.i], 0) / takeExp.length;
 
-  return (avgIncome - avgExpense) * 12; // annualized
+  return (avgIncome - avgExpense) * 12;
 }
 
-function CovenantTab({ thresholds }) {
+function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn() }) {
   const SOFR_MIN = ACTIVE_SOFR_CURVE[0].date;
   const SOFR_MAX = ACTIVE_SOFR_CURVE[ACTIVE_SOFR_CURVE.length - 1].date;
 
@@ -821,6 +891,7 @@ function CovenantTab({ thresholds }) {
   const [exportMsg, setExportMsg] = useState('');
   const [uploadStatus, setUploadStatus] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [forecastMonth, setForecastMonth] = useState(null); // e.g. "February 2026"
   const [uploadResults, setUploadResults] = useState([]);
   const [showUploadResults, setShowUploadResults] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);
@@ -872,6 +943,7 @@ function CovenantTab({ thresholds }) {
       for (const row of rows) {
         const val = JSON.parse(row.value);
         if (row.key === 'lastUpdated' && val) setLastUpdated(new Date(val));
+        if (row.key === 'forecastMonth' && val) setForecastMonth(val);
         if (row.key === 'visibleCols' && val) setVisibleCols({ ...DEFAULT_COLS, ...val });
       }
     } catch (err) {
@@ -1017,6 +1089,21 @@ function CovenantTab({ thresholds }) {
 
       setUploadResults(results);
       setShowUploadResults(true);
+
+      // Determine the most recent month present across all parsed sheets
+      const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      let latestYear = 0, latestMonth = -1;
+      for (const sheet of sheets) {
+        for (const m of sheet.monthData) {
+          if (!m) continue;
+          if (m.year > latestYear || (m.year === latestYear && m.month > latestMonth)) {
+            latestYear = m.year; latestMonth = m.month;
+          }
+        }
+      }
+      const detectedForecastMonth = latestMonth >= 0 ? `${MONTH_NAMES[latestMonth]} ${latestYear}` : null;
+      if (detectedForecastMonth) setForecastMonth(detectedForecastMonth);
+
       setUploadStatus(`Parsed ${sheets.length} properties. Review matches below.`);
     } catch (err) {
       setUploadStatus('Error parsing file: ' + err.message);
@@ -1044,6 +1131,7 @@ function CovenantTab({ thresholds }) {
       const now = new Date();
       setLastUpdated(now);
       saveSetting('lastUpdated', now.toISOString());
+      if (forecastMonth) saveSetting('forecastMonth', forecastMonth);
       setUploadStatus(`✓ Updated NOI for ${matched.length} properties.`);
       setTimeout(() => setUploadStatus(''), 4000);
     }).catch(err => {
@@ -1185,6 +1273,13 @@ function CovenantTab({ thresholds }) {
           <span style={{ fontSize: '0.72rem', color: '#00d4b4', fontWeight: 600 }}>
             {lastUpdated.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} at {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
           </span>
+          {forecastMonth && (
+            <>
+              <span style={{ fontSize: '0.68rem', color: '#2a5a4a' }}>·</span>
+              <span style={{ fontSize: '0.72rem', color: '#5a9a8a' }}>Using</span>
+              <span style={{ fontSize: '0.72rem', color: '#00d4b4', fontWeight: 600 }}>{forecastMonth} reforecast</span>
+            </>
+          )}
         </div>
       )}
       {!lastUpdated && (
@@ -1248,13 +1343,7 @@ function CovenantTab({ thresholds }) {
               </div>
             )}
           </div>
-          <div style={{ fontSize: '0.68rem', color: '#3a5a78', marginLeft: 'auto' }}>
-            {(() => {
-              const sofr = getSofr(new Date().toISOString().slice(0,10));
-              const rate = sofr + parseFloat(dfSpread || 0) / 100;
-              return `All-in: ${(rate * 100).toFixed(2)}% ${dfIO ? 'I/O' : `${dfAmort}-yr amort`} · Min DSCR: ${parseFloat(dfDSCR).toFixed(2)}x`;
-            })()}
-          </div>
+
         </div>
       </div>
 
@@ -1274,14 +1363,22 @@ function CovenantTab({ thresholds }) {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
           {/* File Upload */}
-          <label style={{
-            padding: '5px 14px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(96,165,250,0.15)', color: '#60a5fa',
-            outline: '1px solid #60a5fa44', display: 'inline-block',
-          }}>
-            ↑ Upload Forecast
-            <input type="file" accept=".xlsx" onChange={handleFileUpload} style={{ display: 'none' }} />
-          </label>
+          {pinUnlocked ? (
+            <label style={{
+              padding: '5px 14px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(96,165,250,0.15)', color: '#60a5fa',
+              outline: '1px solid #60a5fa44', display: 'inline-block',
+            }}>
+              ↑ Upload Forecast
+              <input type="file" accept=".xlsx" onChange={handleFileUpload} style={{ display: 'none' }} />
+            </label>
+          ) : (
+            <button onClick={() => requirePin(() => {})} style={{
+              padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(96,165,250,0.06)', color: '#3a5a78',
+              outline: '1px solid #3a5a7833',
+            }}>🔒 Upload Forecast</button>
+          )}
           {exportMsg && <span style={{ fontSize: '0.7rem', color: '#00d4b4' }}>{exportMsg}</span>}
           {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? '#00d4b4' : '#60a5fa' }}>{uploadStatus}</span>}
           <button onClick={exportCSV} style={{
@@ -1323,12 +1420,12 @@ function CovenantTab({ thresholds }) {
               </div>
             )}
           </div>
-          <button onClick={() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); }} style={{
+          <button onClick={() => requirePin(() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); })} style={{
             padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '0.72rem', fontWeight: 600,
             background: showForm ? 'rgba(224,92,32,0.25)' : 'rgba(224,92,32,0.15)',
-            color: '#e05c20', outline: '1px solid #e05c2055',
-          }}>{showForm ? '✕ Cancel' : '+ Add Property'}</button>
+            color: pinUnlocked ? '#e05c20' : '#7a4a30', outline: '1px solid #e05c2055',
+          }}>{showForm ? '✕ Cancel' : (pinUnlocked ? '+ Add Property' : '🔒 Add Property')}</button>
         </div>
       </div>
 
@@ -1650,8 +1747,8 @@ function CovenantTab({ thresholds }) {
 
                     {/* ── Actions ── */}
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => startEdit(r)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#5a7fa0', fontSize: '0.75rem', padding: '2px 5px' }}>✏</button>
-                      <button onClick={() => deleteRow(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff6b6b44', fontSize: '0.75rem', padding: '2px 5px' }}>✕</button>
+                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#5a7fa0' : '#2a3a4a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
+                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#ff6b6b44' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
                     </td>
                   </tr>
                 );
@@ -1662,20 +1759,6 @@ function CovenantTab({ thresholds }) {
         {rows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: '#4a6a88', fontSize: '0.85rem' }}>No properties yet — click "+ Add Property" to get started</div>}
       </div>
 
-      <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
-        {[
-          { color: '#00d4b4', label: 'Covenant passing' },
-          { color: '#ffd93d', label: 'Below strong threshold' },
-          { color: '#ff6b6b', label: 'Covenant failing' },
-          { color: '#e05c20', label: 'Paydown required' },
-          { color: '#ffd93d', label: '⚠ Test date within 30 days' },
-        ].map(({ color, label }) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <div style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
-            <span style={{ fontSize: '0.68rem', color: '#4a6a88' }}>{label}</span>
-          </div>
-        ))}
-      </div>
       </div>
       )}
     </div>
@@ -1691,6 +1774,9 @@ export default function App() {
   const [tMid,  setTMid]  = useState("1.10");
   const [tLow,  setTLow]  = useState("1.00");
   const [sofrUpdated, setSofrUpdated] = useState(null);
+  const [pinUnlocked, setPinUnlocked] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinPendingAction, setPinPendingAction] = useState(null);
 
   const SB_URL = 'https://ngflppgqohmkkfiljqma.supabase.co';
   const SB_KEY = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
@@ -1847,20 +1933,25 @@ export default function App() {
     }
   }
 
+  // Gate any action behind PIN — if unlocked, run immediately; otherwise show modal
+  function requirePin(action) {
+    if (pinUnlocked) { action(); return; }
+    setPinPendingAction(() => action);
+    setShowPinModal(true);
+  }
+
+  function handlePinSuccess() {
+    setPinUnlocked(true);
+    setShowPinModal(false);
+    if (pinPendingAction) { pinPendingAction(); setPinPendingAction(null); }
+  }
+
   const LOGO_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAUIAAAFCCAYAAACErdScAAA/3UlEQVR4nO29/XNcV3ae+zR6QLQBdoDBAMYlA5GhxKLIoi5LKo1U9PjOR41ralIpuyqJHftvtBPHiR373ildT41GNRpeybxiaDGUEFIoUAhpDDAgYBAYAD2Nkx/evbQOWuhG9+kvEFhPVVd/n7PPOXu/Z+21114bgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiAIgiA4zZSGXYCTTJZl2bDLEIhSqdRRXc2y7C9KpdKfFr2Gne4vt9+B7i/oDXHyW5Aq9f1jfjYyiLKcYZ4BPyoiFOn6fQ4cAPX0bNh1Wwdm0/dlYBS42sX+HgC7aTsTwPYxf9sHvt3F/kJEe0A04tY8GHYBAn5U5E9JJL4A9oAah0WQ9P4AeB3YADaBGWC8i/09AC4gEZwCHrbx11td7G+pyH+Dr/ONYRfghLMFVI/5TdxM+kyBbnEGfALsAJPp4/IRP60ji/Eq8BRZhkX3t5C2dw+4jETqNrByzN/PFdzfOqqfQQ8IIWxNFVXuVhz3/VmnihrsHrKUQF1H64Z+Axcpu6lsAhXgVicikfPPfZyeJ4DfpO1OI7G6Aaym76dT2baAb0NhEXyGXChvp2NZB+Zwi62KRLkGjKVj2wLe7lIEjxL3oABhzQT9Zh11QceRAFSQMNj7GrqZ1PAu7LsUF8H7yAqcQeIzg0R4DVlon6b9TyFhvEUS6IKitIYE71Y6pnXcRziK3whG8PZ2QHER3AWW07HtdvL/oDkhhEG/OcBFoY4ar4meDSTU0vMmstg6EqUGEZxAQrGGRHAFuIL8gCZYa8A3kdW2CbxaUJQ+T/s063YtHa+5Uw5wUaylsgFcL7g/O8bz+HkMekCMNrUgy7JPia5vLziHzuNOeq6gm3ANCVIZCdItKCyCd9N26qjLe4AssRqy0n4f+GX6bgJ1j98CzhcUpS+AReAN4Hnah1mAZuGO4C6BChoh7sjSze1vG3gfuMZh10KhEe7gMGERBv3GrKJdVN+q6VFBDXkTja5eg8Ii+GHa1lypVPo26ho/xS1RG7y4nN6vA9+luAh+jizNN5D1uY18f9O4tWZ+zrF03N2IIEjob6fXB2mf0X57RAyWBP3GLD/wruEWEosD4F+hrmuloAg+Q13gXWAzy7JV4APkZ1zGhWgLF8ADKOwTvI+61CvAl2gwZhJZaHZco0gQa7gf9GYXonsAzCMrtJxe303bDnpA3FGCfnMuPZdxy8hGPOeBi8BUQRH8AondIyQWY+n1u0j0rDteRtbaZeAJxS3BL9M2H6H4w3Op/CZ2NgJdRqK/m/ZfVASXUEiPiThoQOYeGqFujI0MChIWYdBvRjjcYMuoMV8lxfgVFMFPkPjMpn1Mou7oHhKfp3iw9DbwAnUtRwqK0grwGHXh19L7sbT9GuruX8SDs8eRZVi0O2whMqtp22O4GJoFHHGEPSIswtbE+ekNOyhcxXyFo3QngvdRl/RbSJSM/AjxNLLeXiDL7TsUF8FnqLt9GQ2M7CEr8EX62TQ+KDOKhKpOcRFcQ2JaSmWvAb8G/kX6bAJZp7OdbDtoTjT0oN+sAddRF3aCFCgNhUXwPeSjm0HW0mmLE9zhcJyg+Vfn8QBtCw161sn2g+aEEAb95hrwGd6NvAmFRfAx8AoSgHUkQsfFCW4ArxUUpUWGEydYxUXQbh6PUNe7hizQcjq+oAeEEAb9ZgFZUjdQQ+4mTtC61heQGNhAyH3g95AorqTvHiA/5Hyn+0v7fILE9iYSpmdpf3N42I/FCR4gweomROYF8N9S2beR+E2nfa0gV4LFJ5oF+qiT/QTNCSEM+s0oEpMPUJevbXIieAf3Ky4g4VlBAtWzOMHc/lbw+cjDihM0kV9F3eJK2qfNV14D/jCCqXtDjBoH/aaOJyFo+8abE4hFfDR2BfhxqVSayrLsn5CVZr65ruIEG/YHPj96nf7GCX6GztF82vcIHic4hs7bQzQCbsLbcUKKoDVhEQb9ZhYPBZlv5w8NPsFnyNqrkbqJWZY9xK2jruMEc/szH6Al463R3zjBRTTokY8TnOBwnGANDfxsIF/oHnAtRLC3xMlsQZZl/4OY2N4LNlH3+B+B77dqxA1dxfzAQB2J4iUkHJtIWC2WrlCcYG5/C0gIx9M+N1DoyjYeJ1hJn++l343QXYjM09y2KvgA0Da6gSzh2XosQUXHo9HB8YRFGPSbvOXUcpQzJ0oP8MDrTSQ+o3iygRqeSbpwnGBuf5tIUCfTdleRQFn76EecoFmWY7j7YBKfj72MztcY8j9OECLYN0IIg36zgkZ0H+ADEF+jIU7QBgegT3GCuf09SduxzDjg0wEtVGbYcYITFAjJCdonhDDoN9NIvPLidogGn+At4KfpfZk+xAk2DIwsIwGsIsvSFnoCWWLDjhPc7PT4gs4JIQz6zRay3sockVE5ZyUtINF7jkZ+LZdgz+ME08v/mvZxPm3P8giaL66MRHHYcYLfDRHsPyGEQb8ZRw39PA3ZUpJA7AG/IFk+aA6tdQ1tpLjXcYLvo262jcpaAoOt9JktKTBCxAmeCUIIg35jI76LSOiArwRiE+XbezV9t4ji5b5IPxvFfXM76furdDdX+X3U5XyOD7iYQFfwrDF1PLlCmeIi+BmyXi1OcAvNjFlFlqHFCZY5HCf4Tojg4AghDPrNNppeN4nELJ/Wah3PHnMPhYw8RZafWU29jBP8CUoAUUdiaz46S6BgomdrqpgAR5zgKSeEMOg3E/hsjc30/ATv4looigUtjyLRs/T940hMV9L7jgYqciK4jPyANvf5DbxbvIPPGrH3tgTom12GyCym/U7nfmIj4RYPad8tEZbgUIgT3oIIqB4IFq/XbN3hZ+n5OhTuDm+igQdbJ8V8gZNIZG3d4X3cP7gFvNWlCOZDcvbwxebB/aA2gHSOCJEZGmERBsPmJMUJ2oLpdYqL4MDiBHOZcoIuCSEMhs1JihO0wZPXT3qcYAhgbwkhDIbNsOMEbTW9cSRSb5z0OMG0vwdoRDroASGEwbAZdpxgfrH5oiIIA4oTTPt7hnypsXhTj4h8hMGw6XU+wcY4QRM/8MES6wrvoS54Dbhx0vMJ5o5xHVnRsa5xjwiLMBg2JyFOsKgILjGgOMG0v/t4rsTbHB6FDroghupbEOEzA6XbfILLSETNOivj4lTDYxXt/RjyG14pKErrKPj7N/Q5n2DOB2ld/Edpm1UKBHsHXycswta8DD6YA9Toz+Fr4O7gCQuGzQ4+crqHGrQFT0/Tu3yCNiAxhwRpBQlUPX1u+7TF4GsUF8ENJGy2nOdkbn+WZMKmA3aVTzB3jJ/glucr6LzOdLKtoDnhIzyekyAmx1FGjW0HNfhZ1NAt2cEwsazOs8jJb3OKq8h3ZqPF3cQJrnB4rWG7Zvk4QZu3bJ8XFaXdtM+R9Pq3+Jos6/jo82soJnIOiWA3ITJ/h0TVBlt+Nx3TArGkZ08Ik7oFWZYdoPTyJxnzgdnKatYFtG7g/pDKZZxLz0vIb2bBxu8AH6PU+0VDZBbxBZzyx2zd0NHc38xf2G0WmY/w+L99ZExcSWWZzJWnho+GFw2ReYxEfiYd2xK+lMAKsjxjNkoPiBPYgizL/l/gW8MuxzGY+E2iBnKALJM6HiA8TM6hRnsdjaReROVaAn4EhS3B/4oECHwQxOYKg1uFNn+5QnciuI2WJL3KYevTBk1Ix2ZT9irI4v1xlyE5U+n1MrLuL6LzaUsfRNLWHhAnsAVZlv3/nPyu8RyepaXO18tb/9o/BotZaeuoUVtSg3eA0S5CZK4j66uOBMmCo22tE3MX5Ckqglna5610HDZ9zm48FpA9jkZ1bY2TjhMo5IKly+m4nqKbnC3yZHGRs6h73HFSiODrxGBJa16GEeM7qEFYI7FFgU6CNQiemPVQrj26E8FB5hP8HPniLqGQHMsnuI4EaSX3eIAstirFRbCGusKfpuO4ho885xNGWPc76AFxJ2lBlmW/An417HIcQz5o2MI4LMxij+EPlrxAwnUJdWd/AMx0ESf4JpqVYTNRLPErHE6aYCEzZYqn0gIPV7Ftn0eDJW/imXFqeOacdYrnLwQJ/TeR9byUtv8U+Tcv4MHg6+j6ficswu6JE9iCl2xi+zI+imgT/ucYfghQGXUlV5BPcOwliRMsTBFh6mafIYTdEyfwFJCbdXCAjyCPtvzT4DHLre0uapv5BLfwfIImgJZPsHDcXojL2SJ8hMGJpGA+wV7ECT7oruTBy0gEVAcnjiZxgs3yCcLhdYf3Kb7u8D1itsaZJCzC4ERRIJ9gr9YdtjVNwiI8g4QQBieGgvkEe7Hu8Mfp7ToamQ3OGCGEwYlgWHGC6T/TyCIcxWdyBGeIEMJg6PQgn2DRuL33syz7J2RxTqEQn2HPxAmGQAhhMFQa4gQHue7wfTxZgk2Zu0bKhBOcLUIIg34zhWaCjCPB+Yoh5hO8g1uAF5EI5gOygzNGhM8E/WYJCdcmShQADDWf4D0kftYFtvm6o8gafbOTbQang7AIg34zjubgrpJEJ7cS2306W3d4In1eNE7wQ+AmmqXyCI0QryAr1NYZfljgGIOXnLAIg34zisJT3kVWoWFid57m+QQtfGaU7uMEn6BQm/eQMO+lz2p4l3gZzWMOzhghhEG/mUAZaO4jq28jva9zOClEs3yCY+n7bkTwAzQQso6yZL/AMz9Po/VArqb3kdrqDBJd46DfLKP1OyaRZXcOny2SF0HoTz7Bn6RtPkCW4AvULb6GRG8VjVCvo9jFWCLzDBJCGPSba0iEdpBFaEte2nrG/YwTfA/NULEpei/Q4M0VZH2OI/GzfY8h8Q3OGJFq6BRwwtNwrQCvIgvP1leZQuVbxcNiep1P8BkS0WVk5VXxgRHLVvMCieQGEsVCq80FLz9xwU8BJ1wIj6NG7/MJLuNZnO087HG427uGfIL5DDavhwieTaJrHAybXucTfIxuCh+jeEEb/JjHV5szEXyW3o8TInimiQt/CnjJLUKjF+sOv4/WRplDVqGtnDeCusXT6ee2QlwN+DXw+yGCZ5sInwmGzR69iRP8EPf/rSGRu4BuDrYkZj2930EW4SPgD0MEg+gaB8OmUD7BLMv+PD2bCJ5P2ziHurozKKHCKuoWV9Bgjfkh1wgRDBIhhMGwKRQnWCqV/iyJoCVnqOBLYNaQ1fc2Pm2uTMPayiGCgRFCGAybbuIEHyOrzxa1X0V+wEulUuktNBhSQwK5geIH94BrIYJBnqgMp4CXfLCkqE/wLhLRi/j6xjOo+5tf9tPCc2ytk45Ho4PTT1iEQb+xjDIv8IDpg/ToZnT4KhK5bXw+cg11k22UeDx9t48GY0IEgyMJIQz6zRiy0i7hvrtximeWXkzbfIC6uu3ECU5QIHVXcHYIIQz6TQ2Frizia4N07KPLZZZeQ9bgOIoVnECW5iM8gHoazy+4SUybC44hhDDoNwt40oMyxZOqvo+P+lpG62nkC7Q0/3UkhDZT5RHw3SL7y7LsLzv5T/ByE0IY9JtrSLSsW9w2SZAsn+A38bVKFoHL6Wc9jRO0JQRKpdIfd/K/4OUmhDDoNytoYOQ1FPTcFrk1TZ6hrvAyvrj7FXzluZ7FCaZ9bh/7w+DUEUIY9BvL+PIxbWZ/zomgJVDYRGK4kT6fQ1mlZ+lRnGDa56ftljE4XYQQBv3Gcg1ea+fHORG8i7q9V3LbAfn/nqLu8BYSSUumsER3luDFtN/gjBFJF4J+Y767XSQ0TcmJ4H1k2c3hXdXGfIIv0EBJPk6w6EDMGgrHmSFS9Z9JwiIM+s0m8g+W0SDHkeRE8D0kgDPklgClD3GCuSSuP+NwTGJwxgghDPrNpVKp9H+grvGR9a3BJ/gKEjhb26QvcYK5dP5PgLfwKXmVVv8LTichhEG/Wcuy7BNkDZYbv2zwCdq6xheQ2O3QpzjBtM2P0n7qaVvjHNN9D04nIYRBvzFh+1q3MyeCd5DgTaIA7AMkVFX6Eyd4Dwnzj5AA7uIB30872V5wOgghDPpNFXU/N5HFBRwSwUXcClsBflwqlS7igdi9jhO8j1uaHwBvIqvQBknWj/xzcKqJUeOg39SRGE4iK67REjxIv7GF3VeyLHuIW3+NcYKLFM9a8xnKhrMK/BsksJupXOOpnN8qdJTBS01YhEG/2UH1bJPDM0vuIUtsBlmEVXyx9X1kHVp+wV7ECd5HYjqCgrNNhK3rPoeswRedHV5wGgiLMOg343gGmlFk0dXwBLLGHu5LrCBBMn9gL+IEn6ftr6XnTSS+u+mzaQ7HLQZniLAIg35jXd8DvKvb+BkMJk7QhHcSWafreLjMOBo4qXeyj+B0EEIYDIp9PDxmP/d5P+MEF5EQWpygDZL8Kr225T8n0+9uE0J4JgkhDPqN1bGDhod91684wc/QaLXFCS4gwZ1H3d89JMojSHTHkd/y25HE9ewRQhj0Gwuizte1kdx3/YgTfD/t4zoeJziZPnua9nsFD5XZTr/5fojg2SSEMBgEeTEcafis13GCd/B8hQ9Qt7gxTrCe9lNG1mkZuB0ieHYJIQz6TZ2j/W72eS/zCX6ARHQHWZq3kPAtoO53BXgV+SWX0/5nKLCQVHC6iIt/Cjjh6xrn/YFHfd71usO5dY4nkLjZeibPkOVXxX2RlfRYR13ySyGCQViEQb+xebx7SPwso8wmssa6Wnc4l0XGlvkED8sZy/10E3WBrXs+RohgkAghDPpNFcUHXkHW2kp6fxP58KD7YOkl1A0eR5aeWcSjaf82Cp0fwY7F3oOvCCEMBsFFJHoT+LS6pyixQjdxgp8hl0AZid4abnWCT6EbRRbiRPq8pejGUp5nj7gjngJOuI+wjMpjZZtBAxUgcSoaJ/gY+AJZgs+RJWgWoA3CjKAu+SjyC+5TIGFDcPqJucbBoJjB1ySuIMEq2h3+DAnfG7iojqHRZ1sA/gWaU2yECAZNia5x0G8mkTCVUVhLle5E8B6+0PsyPm2ugq9qN4rmElsChzIhgkELQgiDfrOCLDfrukJxEXyCp9W/lrZ3EYmdTc3bQsI3gbrkO8DNdveXZdlfdFKu4HQQd8hTwAn3Ee7hgxfrwHe6CJF5iARwLX1VQfGHFotYQYHZe2gEeYSCSVzDejxbhEUY9BuLE6xzODFrW+RE8BcoBMfmI4/jQdjT6TOzOmfS/opmsg7OGCGEwYll0HGCaX+RmPUMEkIYnDiyBBph7nmcYLN9ppf3uip88FIS4TPBiSInSB+jgZZ3UJzgMyR4c6jbu8nhOMEJCobIpH3uoqQNl7o/iuBlIyzC4MSQE8EHyO93A4XIbCNf4zTyM+4iIbS0XSN0J4KgpA23uzyE4CUlLMLgRNDQNa0jX2AVhb9Mou7xFt4VzscJ1uggRKZhn5+ntxeINUvOLGERBkMnJ4LvI9Gbw4Omexon2LDPRXzdks301UTTPwWnlhDCYKjkRPAnwGtIlO6ibvAIigu0sJiL6XkTtww7TqqaG43eQmJYxddODs4gIYSnB1uAyEZPbd3e8pAf4AHPtjwncEgELTfhOnAOCd6zdBwHwGz6zRi+RvI0xX2CG8Bv0vYuIjG087XayfaC00H4CF9ysiz7WXq5jAYXVlB3cRaJScdBzD1mDq0jUkGxgMAhEVxEZTaBA92g85mtn6Jg6sd4qEzHSVXTPvfRubKsOLaCniVo2Ohkm8HpIKYRnQJSA99BMXez+DQ7cs/DYgX4HururgN/mPvuTnou44s2gY4FPJmCTaOrIEvwQhejw/+AW5j7yCLcwcV4DrgRU+zOFnGxTwG5ucagmDtQPNxJsAjh8KLtFqdnITLW5QXFBNri7+Xc/9eBy8h67HjJzdyMkffRXOVdPEh7I5VjD0/v/3oI4dkiusanhzLu8D9A1tMMbl0Ni0kkZOt4iqxa+m4J1UETP7NeLWGCCdPvIsEqKoJ1ZH2+gwZJdnFxPofO0RbuWw3OGHHXOwWclUQBRay0oucmLMIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCIKXhyzL/u+C//vzXpdlmPsJgtNClmV/O+wynAn6LU5Zlv3HHm+vb+XNsuyv+7XtIAiCgRKWZ3Pi3ARGadgFOKtkWZa187tSqXTmrlGWZX9TKpX+aNjlaMVJu34nrTwvG4VOSrsnvdfkL2I7ZShy0ds8tr8qlUr/vsttfwZsAHPAJlADxoAysJvel4F37A8Fj+fPgT/t5D/dNJZO68ZR++pX/epWBBrKtQosA78D1NG12gdeANvANHAR2AFe61UZWpRnE1gAxlH9GQXOAY+AK0A1lfNKt2Xph+hmWfZXwL/t5TY7oeiJ2AOeoIvcb+ZQ5XrtCCG8iy76FeApUEnvJ4AbXQjhIqpYFVSxFoF5YAX4TqfbzVWcnwA/SGVdQZV1FDgARlDFHU2/rSMxrKX388AMdF4Z0v6X03FMpuMqA1vAN9A5O5e+u9wDIfwUicB9dP6qSBxmUZ2pp89fbSGEC6l8o43fd8gacIMuBCl3/X6JjmsFlb+ctm/HaNdyNz1AgriF6vAMcK3T/bcozxLwW1R3PgbeRO3lHrqW46j+7KTyrabv7bN3ipQl10asDq8Ab6B6PZ32tQB8v8B5/mUq4zJq1xXgWfrJrX4J4TcK/m8RCeFrwG96V5wjeZKeXzviuxouUFVgDxfDblgGrqLjXEcXpp4eHZGrNFuoon6UvppFFsQBqrCgyrmBGphZh3V0THdRxTjIsiwrUCGW037mUCWtoIa5gSrvGmo87xXcvh3rQ9Q4PkXXZiftt46u0wgwhSr3qy02N4pfz26YR1ZRFQnEOFBp9xjTMS2hG+PrqLGPp/LtoOtYT6/NEptIj11Uf88jAVxA13TDxKygCD3M7Wsv7evNtO2P0DWuovM9i+reNt5W7IZ0H7ha8Ho/Q/VnF91oVlA9qqXXYx1uzzhIDxPDPeBCOra+MVLwf1vALdR4rBGV02u7S1gD3sEbtFk5dhHJfd7sMY8a61HM4VbDDn5H7taKmEzHMZmOaTuVu9rJRlKlfYAa0fP0yFfSKmpUS+l1FYnETnq27rFZplvoXHyQJToojlkwdlyjaXvlVL7JtN9rnRzjEWwi6+cN4H/ltn8A/At0893j+HO5lSuTWa/ldBxr6f92w8tbzmW8jtljOpVhBB33KvDZcecvZ5mupTI/T+X/NfCt9Pk+3kgP0M1qPe2rkt6vpfKby6OGRPmg3WuYu94/T+fgCrqWtVQG8JtaFQmVWeJTqWzrqD1ZO6ykctwr4I6wa0M6trF0fPV07OPA/QLbreIW6zQSW7Oy+0ZRIVzGK+oysta2UaW5iU7CY/yk2IkHnfxRvEIcHPNYRifkKJ40+XzopApwDx3jCKqAo6gygrolVlknkBh+jqwHE3jz9+yiLpmJ4k3gwx4VdR81qj1kadRa/7wly6ic66irdr3r0qlsq/gN6R7wf6KyTqHyjuJW51Z6rqay2M3EfGOb6Xkfmvu70ucfp9/voOtnAjcP/BT4Xvr5GGqw08j3CxK/MXRN59B1u4i7BerpGDrxiVq38VE6D1fTcR2g+vNGer2Sykgq+/nc7x6nYzqPzpX1tP7TIH3/WZb950Htqx2KCuHreKXbRSf7Cjq5n6FGdRtVhkr6rQnbKH6HtzK0eoyRc/C+DKQK9Z9wAZ9C58msmhngv6HKugxcAt5CXcW19J+d9PuL6XkVncsqOsfngcc9qLw11LBWgR+m7X/R6XbT71+gazaLGuxil2UDWdSz6fUNdE6fIBEw0QMX8HF0Y9kEPsEHoZZxQTPr7v4x+55Mv6+g87OFxHAcCchHaVvrqZyr6fdX0uMJcBl17T5FFlsFnSez6D7Hb45Hkuu62nm4gurQaNqH3SgXcUt0C3Xjp4A76djngG/iPY8KMl4uoHP7oA9ieKRVWGSwsZ8UFcJ5dAGmcL+Dvb+CKt0CqizWTc1bhruoAs21sa8Kza2fbrtxPSdd9DvAu/hNYgV3E8wjsbuJN6oV1OUxC+rL9GyO+bn0WMEt8ReoYS12WXnN0ryayvNzdG2KsMvhnkAvbmDX0HEeIAvNBiYmUXnNJTKOym3d1XngbVQn19DNZgr3tV5D5/C9xvOX3t9H9XgVH8i6mLZhFqq5M94Gfgx8N+3nAqr/l1L5HiChMYuyDnyA/HrmXjoS81FmWWbX+xnufrJR4tn0/otUxl1U3+bSufj9dCzWuxpB1mg5/eZx+s8F4Kc9FsMy8GxYkSbtUnSwpAr8KPe+scJfyr1+np4nUNfGrMNxdOIvtLG/ZoL3C3rT/eo1O0jwF1FFu4DE3MRvMn1/E77uMM9Vmq8GgUql0o0sy57i3ZrdtO0D4G7RAQ7cZ7iDGsq/Ruf1RoFtmQ/qAFlhH9L9zeo+6l0sICuojHfnftjw26OE9wWyjC6l8l0Fdkql0tUsy5Zo7U82qxN0PJtpW2+k7TUd7Gho+A9SOd5CVur30PW7C/zouG2USqV/lWXZEyTG02nfz9D1f4bqUQ34N+n3F4/YzgXUnX+A3DLmz7Nu9CQSxI784G1QaJBx0BQSwnYbXLoA++giTaSPy/gdvNu4oNs0H0gZOLnu4SQS/auowi2jRvsIVdw/hObHbp+n7c0BC1mW7SOLqJ62uYYEp04x0TImUeX/CA2APULduS87HFm9l7azhVu+t+jeyX01le1VvOFe77AOTqLj2k7lG82ybAtZUDYq2Yh1eUHHsAD8ET6A1rLuNol5vYfOyc/Tc1MRzPFelmX/E11v6wIvpO9G0Y1mrlV5GuoTSICnUNuZR+3zLmqT86ReRo9CVZ6jG8eHPdxmzynaNe6Ug4bnxtdFOYmDJT/HrSJzBazj4QUtRTBP7jfXkIBOooZ8Bd3VbRR0GfctdspmevwIWbDlVP7HHW6nineHy+iYNwqWKc8W8AoeJ9pROE06hxa/dxEfLV/BfZqN9ciExs7vRdT9/Rt0ns930qBLCdQV3kOW23wb27BrbQM+0+haV3BBns8d57HlSC/fLpVKV/GR91VUny6ic7HS7rG1wQzw/9B9JEdfGYQQnkvP+ZCYXXrTSJr6VgZNzjd4A4nWOD5C+QYeOtGRFZz7rY0kv4UspEVUucwxvlbQD2MBvw+RlbKftt3JubWRStJ/rQs70fQf7WOhVuOowRaNT1vEY0wtFGkulXGr4dytIyuxhurrMrqWjV3xjkjX8rXc66bk4hctPtG6l9W0jYfIci9Un9L2d9F1mkTnZxkdd4Xkbml3uy2oI6t+jGLhNANhEEK4j4eBWOBwle4DZUFR9d9Iz3topoyF5HRDDVWOzeN+2IAF7V7gcDiHzVK5VqRrkP4zho7VZgdM4FZnheICsYcso99Fo9HfSNur0X6s3Sd4MK35mDo9d41Y1IDVExsVLiquc2iEdjb32XbaR2NZL6LzUsO7znV8FknhaYA567AdXtjfUAzmPyHD4n+g61XItZT7jw1qvcCtTIv7PG4g03zdFXRepnDLNR8Ib2FyXw3AHXPunqffTqHJGvlQur4xqK5xP7FgUpvr2QuBvYLP0eyEdeDfIV/eIhKFK2gUuJv4PKu8r+MVbwxV5OfoJtMyBKMF43hs5zRusY/Svn+vivxtU+n9IuoG9sJJbtaQTQvcKLidBWTxrqJyjuCNdB4OpUm7hAcnm2VvQb42y2etQFB7p8wi4augm807+PS+jqd65kn/fQuPw7R2U0eDcTatrVmWHgv/eYbcDk/x6XZz6fULDsd6llGvqRUW3jOI6btfcRqE0CrnGG4hnWv5jyPIsuy/5N4+Q3elraN/fSTmu/k7VDEOkCXxBHWXb/bAUWyDEVdR45xAwcXVtL8PCzTMddSVXcZn5hzQ/g1lBVlQc6g+bSEf1BS98QvZTBHz1xVlBrdYFvHZFrtoFLlUKpX+Q+731h3Pz5KaRN1Vm0H1Aam7l6eLMgKHgrm/QMf9JfIr3knH0UuRsMFLuzHs4vVsGaBUKv3ZEf+z0K9L6Xd2o7+Z+yyvLzP49MRWVuEm7lsfmF/xNAghSAQtYYGZ4C+yLPuHLMs+OeaxlWXZPwC1LMt+iY/O2UyQY0kX1bLGvIUa2DyyHGboMrA4y7K/yL2dxWPbNpDQWtD6+QKb30PCvYoLTp6Pm1Xa9Plz5K+aRcddBh6mUdlexHla4gALxu+oa5zKeBedI2uwNkvEph0eFYJ1Lv3Ppm9W0//fxH3AZrHdQcL1GAUl/7JRHFsJZBOL6wLyAVqX8Bk+Pa6dkLN2sbhGMyIsLnOS1jGqdoPaROfiRvrMZtbcTJ/ZSP0yGvmfQ8ZCM94ulUqvo5tN0V5Ox5wGIaygxryPZ3PZRifbgkdbPT5BjesHqLIvoQu6g7rH7XIfDyZfQXe/W/hsksKUSqXGNFrmO7qMd9vyIUqdMJOeb6OGMIE3/jrHD5rYvOz8HXyWYqLcDLMGD9C1PZYG8bF0WJZ0YpXDgw+HSJb7dXRTW0THNpP++wHuD91OD/MHm4vCfvdhen4G/KSZIDaxuGqoLm0jQdlCN+k1Oh/Rb8UBXn/Mh2+JHFrFFNqspyqqj8vpc9vGNPCztN1ZfPLFQvrfQhORfZRl2SeoTt0qckBFKBpQfZKwSfjjeKD2Cor0v4c39GZMIif6Prqoi8iSMfO+Xd7EG80cEoL7qAJ0HfSdZdlflUqlUpZlFkReRiL+Omp8ZikelaWnFWZxTKMGVsatW8uC04waunFcwoXAEmX0CpslUUGisImSFfwNurY2u2Mr9xsTkTv4NMbbuFU4ncp9g9aDOpay6kqpVCpnWfYR8AfIAh5DYlHHQ1tMBK27aYL5KRpxfh+4bgJwjKvE/KyLabtmCVaB5V7E46X69El6a/OzQefQjIpmmO/0C1KQOj4CbdvO8MxLNXQ9zMJvhYX1WI+q75wGi9DuaBYaYaPTkxzO6dfsMY2mRu2hO/cV/CJ04mv8KmcaEmLLIDMN3Om24pZKpX+Xe7uAKtjruG8Pig0UNfpBzRI0B/oKR3SRcl3OfH4788HdLVCOVpjIHqBGYim+LJOPTR9bRddstlQqvQL8CbpBvJHK94u0vQq6Tos08d3mRurPIz+gJaTYRi6JFXTzXMcHBuy6L+N+2zqy3BfTMayk718c40+0NFSWlMPmhC/Q+9kf1nasHZErezMsX8Ct9NtJdINo7M5azOZFJGqWnGKTo0N09tJ+JwkfYUfkha+GfFazqGt8Bb+zNXvYvGib8mcjpdYdaRerNNYwbJrZBt3N/GjkEt5dtbi6GWTVFqk4+UZl59Du2JYvsZlz3nLdmf/OYhI7Ssh5DCYCZrnlcxyuoet3Hs96VEf5/v476hGMoGtSQze8zfSfF3g37kjSMcwhy2w/vX6Ci2sNidwyHi9XR9ejjkTzHBKCddRLeYZnb/pJmz64DXSdrqbjmWxV7g6p4PO0N3OfHVeXdvEQM5vzbUHrwFfn71Yq9yp+HSzRyAGw03AOLqDruskA44RPgxBOouN4hA/bb9C+kFm6K7vDWZaOvKXVDlOoUTxBDdO6lNM094cUYRRVFBsFtUwrl+kiRCdV2mtpuzZhfw+dm6Oc1uvofFXx7uE6vU+gmff9jqAGZQHRM7gv0sqYt2JGkPBcQj7b53jmlhXkmG8p2Lm4v1vI7XANT3hg/sbXcF/1BBKJF7i/1QbePkaiAKpnk8Byk7phoWB5y7KGhKYnwc5pG+dR23kNHzUG1alW19K+t0G6fB1oZB6dD4tNvIDmPM/x9QxAj/G4417XpaacBiF8hircW6hS2sjiFu7DafWwDCXreM64BTwxZLt8jvxO11HFfYCsgXaCU9si1x29iY7bpotZ5StyB23s/myiemGhGnVS+ndrfLlGaHOeqyj+q0zvMwLZiK2l1yrjFmg7o/EX8C71Nqoja3QYh1dyptD5/z6e4eY+ugbraftW3n3c+rMegoXkfIpuXs2sUjtW86+Zr3MdWai9YiWV4x4+q8QScbSqtzalsiXpHI/iXWgb8DFjY4rDwm5JSvKi3HdOw2DJNKrg91FFm0+vf9zhNvIZcywerq14reQY/hxdvI9R4xhFDWGLw7MZumUeiew1JASXcEEoMrukcbDA/HFvobJPI9/PGw2/ex8dZz1t414q03qpVOrl8Vr3ew9ZLrfwpA7tWMBP8AGcCsdkjWmHo/57hIX2GaoDVSQst9E5W0Hnsoqs1DWOrqt1FD9ouR0X8NRfy/To5orfTK+i8/lVcuVSqTTbwvKcpLPZHpYxCTwT0ByeYs3YwLNqjzOgpCqnwSIcw1O4z+KNJX8Xb5u0zTKyuPaP2mETrqX/3cDniJ5DFayXoSRTqBIuoG7eCzwxwJMCDfwrKzL99zYSHct9uIYabmMo0XdRQ17Hc/Kt0XuLcBWPBriNd8nbHZD5PhqxvQZcarjOR5IVyJ58RD26jrqbNgr/AFnNr6JBG3NtvI1uIoe2hcTue7hgjqb/LNGbOdx5LBj+GT7Y9yTLWmaLGU3lOpbcNsyNZQOcK3hkwoeo/sziGds3ChxLIU6DRWhdWpsob5mRuwk6tcDZTjO67OMR+pa8doOcU7ioJZLuzF/gczHfRDFqF3L7+k6BTR/VNbOunVnFnyAxNH/WT/ABILub52cX9BKzgu6k7U/RZuKCopR6kD3ZypbO1yWUsdym+L2LZ95e5ujFpCzc5pvoHM+iem032vs9qE8foZv1HrI+53DD4jgjyazdtki9pgwXQMunaa6Pc+mzL9DN4nJ6PxBj7TRYhBV82tMz3FLqBkt31MmoMaiy2v7X03Yup+96MS3KBm82kEhfRXfPNYqPJG4c8dkIXt4LqOFaiMpa+mwUX93P/vNOH8RpJW3brMFVGOzC6d0MTOTKeRufDrqE+xB3aR4kfgkP4bLFkR4hMSyadi2PDUA9RanOysitZANlrbhHMWPDxG067e9C2uc2HuNpYXC96v4fy2kQwl0U5GoBntfo3slqsV8twyualOUauqAWlPwIT9leZC6w3b2/xPMF/gDdOffxUdWi1tiL/JvUcC09fh35BxdR996svwq+utut9JtN+hP3NY38bR8gK2lgI4npvD+h4HVr4Ame+ssSXZzjiNH+3JS7NdRGL6FzcBH32c5QcPQ4/efn+PW6jK7vCrLGrM624iod5gPNjb7bvO0vkIvjj9Jnl9GNvYJueF1NTe2E0yCEL/DFcyxusNs5ihWOX9jnEOkiX8G7C9a9uIguqM0u6WjpxNxvN/FkCI9QF3ECtxjeLGglNYvcn0r7u4ysERslXEmP6+hc30PC2cvYtjxl1Eh/CLzHgIJs03m/h451hrS2SReCOIr3FDbxJLuLNIz2l0qlP0vX8h18zRtbCc8yA00hq62jHH/pt79AQmZB89tI1MzCv8jxiWPHKa4fN0lrKiOXy8/Sfh/hEyGq9HZOdUsGIYSt5vn2gm+hdWb/JT7Bu2huPmMbN9075X8h3+tzVFl+i451GchS2b5oYyK+fX8f3TW/gSp/ncPLAfyG9s5ls2vQLOTGZhrs4IMnlqcwH2LxL0mB3U0aTn5fJTq//r9F52wV+UL7mfYqf95/hgfE/w7yS94HnnYiiOl3y/hKeqB6ZammvgXsthCdMSRYGToXu8hv+Ft0E6yRVjNssz6Zb/L/Q/XJ/Nqv4LNm2rmh2jS8o65vU3LHeTPt60uUa/EKHoSepe3Ycy/14khOg0V4YkgX+dvoLmeJC/bwymwXv5aef5Y1Ad2h76BKu4kqiN0tx5Dgn0uf3ejCZ/ZJ4wdpW2/iFsM4nkzX3h/gPrtxNN3vpSYnJH+PrKMZfM3nz3Bf3n2UHKDxmnHEZx+jrqxZ89N4ZiLzxR2ZXCBdhxu4H3EUWUmW5GICWewbaT87LerTvVRuSyn2/fSZ3ew/wwemXu+nDzZt2wZD3sZn21xDVqHNWR5Y9pnTMGp8EqkgX8vnuM/lFVTxLClEDXX57qXv38Yd1Bt4ONAinlxgDR+ksKlX3Q4MTbX4zkaOrbFYhpnR3Pvz9DY8aNhkSHxW8O7bErqJTSJL8VV8Sc011GBvZEpgcA/P+jyT/nMF7wI/xNNWLdHeuXs3/e8echG8wJNMfJDKNkqav4uPxo7isz8sW8wqqmdPkRj9M77I1g4DzPiCYlV/hm66z9G5fBeNZr+FR4T0nbAIe0zDnbSCKvA14JeoQcwj8amiCjuPYvJ28OVON1FjW0YNaQLdNW0kzWYYzANzfbx728ik1RNrLJZcwbJk9yNsZhj8Z9S9s4Gfy+gmNY+E7w5a7tT8oTbF0AY8NtE1n0XnbA2J3QPct2fLAFhA8Rutrl/uuxtofeIFPD3aOPIjbqVyruI9CDuGsfT6Svr+Mr7IlgnNJ/ji7wMZkU/7qCADwAbj9knZfpBQD2zUOCzCPpCLmRpDlW0JjfR+jM89HUcNxOa/mgCCKvxHeNDtJJ6Nw0bEJ2lvJbTjOHKwJHcM9/E0+bb//DzQOvDqoMJZ+kmpVPpjOLSw0UM8S83V9H4BF7U54H8iy9xmgGyhczKFT6l7joeHjCML7muDJC3KZddiHxflNXRdrMt9A7cYF9LvdlN5rqOu73l8VcWddEy/SbupoKw9g76Oj3DxrqBe1FV0szguhKdnhEXYJ1KFmkBdYvOnXUcV9ikSwRvIGlzHR5xHUWW4iPtKHqNGs5P+dxu41arSZoezWrfiuMpmo/LWRbZZDXW6T59/IslZK2+hhrqLRMxuGnZjssQBt3HRM3FbwmcoPUXXdyx9v5j+d6Fd4Um/ewWvF+AjyRb4fgNlXbJYvafoet3B06WtoxkrFth8H4n9wEUw7e/38Hn/FjhuLoNm8ZU9J4Swj+Qq1ruowu2g2CnLgGLdphvIWpzEwyK2kMjYIlJbqGI3XRc5y7K/zO27Mat1M46rbPP45H8bYbSGaLMBTh25qXK/h4TDsqtY6ikTvafAr9AN4yGeSHYeX6PjIvCPqJF/irqzlzoVntzvb6V938Wz1Fiuwx/gabXewCMDJnGR/nvkrqkB/7Zh28PgKjo3lkZtFh3L1KAKEF3jPtMw1QpUYZfS8zSqsKv4pHfLZ2jZRl7FM460XA7UunYd0tQZneuSTeKjeeB37xHg26ehW9yMI67fp+nZZkFY0P04fs1MDKeQRXgdCdYlCghgi/JcRTdQy+h8Hp9lZTGK5pc032IVCeQ8vXGtdEWujtm89nzs4MBusn09Ce3EWnU5V7Ln2+5nmZts/x/QHXAHn3mwRUO2lx7v82s02/4w/tvva9ANR5TNgpE3kMhYQtVvoq7sV/SjzEeU5xN8fektJCazNCQHHlZ96mabRbbbLqf2Tv4y0VgJhn2XDl5uoj6dEbIs++thlyEIgiA4ReQHWYIgCIIgCIIgCIIgCIIgCIIgCIIgCIIgCILgJSArsORkEARBEARBEARBEDQhy7K/GXYZTgKZLyN51HdxjoJTS0zG5qtJ6osotVQNpUyqovRXEy3+2jWlUulQVpAsy36B0l7toHRKtr7Jmyin4Xe7zNizlLZp2Ulm09d7wPVjMsk8SG9tHYxRfK3jZti5rOBLWb5NbqXBTo7niPNjC/y8lj5rmloqy7K/xfMrgq/K1w1LeL7IG2jJ0VngO7kUUw/wdF1rqdwbqRy/0+X+9/BcifvoelSB9VKp9H91ue0zQ+QjdJ6hBmbLWE6gSrU/4HJYpuMdPMdcFeWT68XawTV82UQT2un0Wbv/tzxx1vhaYQJorydRqihLcrpr2VLaFMTG8zOGrtU/pu3Nt/jvVHpYRuca3ScnvorOZRUtpPQHKMN4nvx6JpY9ejR93q0Qj6BzYOtoH6T3p2UdmYEQGaodW7HN0uXbur2zqFI9Q41sDVW6KZSVeDO9LqOK/gzlFFykWIbdMmqktjASqVzjTf/RGTt4eetpuyb+x2FrdVTS837aXhWdi4n0vpLbj4nmHC6Itq7vKLJoFmh/ofKjzs82yvh9nJifx5dTHUP1fwdl2q7g1v85/EZ4HOv4Ws9zSAQbz6Wt/meCuY7O1yjqlf0q7e+fkYW4lz7/NVq/+Bvp/XO0BvBv08NuHLZ0rL1eoyH/YNCaEEInv2pZFWUVXkPp0KsotfkdtD7FCspEfCH9x5ZWXEQV8AmyFHZQw231eNm5jMR/Bi1DcBVfQe0pvvDTCsqUbBmILbW8raXxgrQu7yALj8q/jo7BLMXt3Ovjrp9ZoBv4ok3mbjBsWc0JXHBtDWFbQnMlbWsJv4Fewa3IdeDtUql0GU9pv4mfuzH8BlFB1yJokxBCZxNVxldRhfoQNdKbqCLuobUrfoGvGbGCLIBdJKA3UNp9S5VuGYJbPV52HuFi9gq6WVxCDd/W1zVLch2ttAbyeW6idT5shb5lYHHAYmhLpl5P5byGW7yXOP76raDjqiIL8lO+zhYSyt3c6/30v5G0jXFUd24jX7DVx5H0v4toUfnP0TmdQxbuJIcte+sar3R5Xs4U4SN0ZvAVxsZQQ7WBClAF+xmqgCuoQk+nRw0tyPMYNaAN1DDgdFh9rSijBm1idgUNDkwii3orfbaCrEVbK/nv0HIEu8iCnkMWZBU0ODOgzMoj6Po9R2vCfCvLsi/Rje8BshhbsY9Eypbx/NdI3PNM4oMY20jIJvD1aaro/NSRML+DLxC1g6/sNoq67ePInVBBddVu1OPpN5Pohh60SViEzjKqbFZpQZXwIocthLwvyvxjtt4tqDKW0/tpTr9FOI8vIm5LftrC9bX0eg2dp7tICCbT57Y+si3nOI3O2yCtmT10TfeRNfpF2v8usvyPu34HuMVWQz2GZgtiWb05aHi/jM7HFL5m8Qo+oPMU3URsFbot1FOZQ+fVrMdX0vMHNFmvOjiaCJ+h/YVjcizgIvgIrU28hqzJ73eyoUarJ8uyT5DoNjr+TTBarmfcityC7bZQuy37CGqcbx4TPnMXb+T58u0hK6YddlD3uYwWONpEFs8u8h+uoYb/oyYLO7U6P7vIj9bsGP57emkr8IHEZwdZ8bfbPIa2yIXPdIIt63oZ+Dm+cLyJc9tljLVK2ie6xnQcx5bhISF1ZDX8AlXWmU63dwrYRNZKW8edzt8Pkfh8jM7bCDqnC6jhvwosDKh7vIF3Q3t+7QrUrUvoPDxEoTjL6fU4cOWM1a2BEV3jYtji61VkvVxGI3dnsTtyA1mZbZFbOH0cH0G2sJodZA2t477EflND16+vgfMd8AJ1gX8f3WDrqNtdRX7MoA+EEBajjoc1TCBhnEQhGL1mAg9HaSeu7ThW0jaf493ibrdXNMbRRjotoPsCGjkdRSOiveao+l5FI/+DDpxvxkZ6forORx0v22nwKZ9IQghPPlvIIrCA7W55FVlBM/TGCtql9WyOVtzD4+EqaETUFrqfbv63nrKFRq+7Ht3Psuwvui9OMAxCCE8+Fku2nR7dsoGsLpDV0S17SEyKcDv9fz5t4wvU1Z5GITWDYBT4CJ+ZUZhSqfSn3RcnGAYhhCefH6J4tml6Y8FZSNAi8FYPtvcaxcNdHqLu3xLqJl9Or81iHQRzSHyrx/0wOL2EEJ583gO+g48ckhUkbW8SjUT+AfD3PSjfJhLWlmm88qSyrKWy5MNnRvGg9l74Q9vhMT2wBiG6xi8zET5z8rmBLEKz4jaQZfiU9rLGTCERncGDb6eBXwLv4t3komzhluqfZlnWTvfwDj7qvpZe2zGNAj8GygMKFRlFXfOnKPHDUqlUupxl2UMU53ictWuzOWqkMKLg5SOE8OSziSynGTx+sYqc+0cFFjdiISmWJOBy+s8E3YsgeGD0XWTZPUr7GEOW5xQalf0DfOqZJbeYQl3jZ+g4LVfgB0gMB8EWnl3oJopf3EA3n22OH0Sp4TNDgpeUEMKTjwUbL6Zny1hiAnhcQ91AArOJhM/mr87g8ZDd8hkSglU0r3gdH+W2rD6f4/NgF3NlGknHMo8GTp6mbQyKK7h4b6Lzu4TnOTwurGaUwynBgpeQ8BGefGpIuExENtL7eeRXqx/zqCCBqeEDAqN47sVu2UGjv5/j84pNAGupvNN4jsJ1PFuNJcAtp/+tp99eG+AMii08uWodT3K6iSzd49Jw1dH57UXS3GBIhBCefCyBqYlXBZ+T+6KN/1s6MEvnNIH75zZ7UL4RJIJvo5CXfPblKvJtPkUiN58++xQXjkcoBdY8Oq43e1CmTrmL5xa0GS03UZxjrY3HBU5/lqFTTQjhyWczPcq4uFgS0Utt/P8ybvkd4AlHe5XxegoJsqW9z4f4jCCRmUJW19O0/1totHYcCc5PUXf5Cgx8rvYBEvE6Oq/mOniOzl3lmIdZs4sDLHPQY0IITz7jSPDMGlxOn72dXh/HOuqerqAR6BpqvHvkFlDqgm8if+MTUhgNbmluojjIbXyRI1s4ahIfpPgT0mJHQ0gqMI7O42MkfFO5z7fbfFSRuAcvKTFYcvKxKWdmqXy/yzRcZh2uImHt9mZ4F3WFv4dmaBykss7gKbfstc0ieYivBfPOkDOqrCPx+y6a33w99107FndwCgghPPmMowEEm33RLfv4AMoU3ScbeJu0GFKpVPpe45dJfO/gPjeLtVtFYrg8wGzUR2HhP2vAhUhzdTaJrvHJp9FH2C0v6K2PcBHPzt0Mmzt8FbdE55EIN6a1HzSW9j44w4QQnnzOI1/eKL0Z5bVtVfGUT90wTYvQkWRhXcNTzttylgco28xFklXYg7IU5SKR4upME0JYjJHco9Twvh9Y4HMvEhGMonL+BnUJu8Vi746jlPb3z8j39mtkEY7SnzyOR3HU/GXL7NOLgaPgJSWEMOg7ySr8Nr640yK+OtwmEsafDtkqDM4wIYTBIJnCA8RtGtsIHhK0F2IYDIMQwmAgJKvwKvLFzXB4mt8B8tMNe+AkOKOEEAaDpob76mwOch1PCPEkrMJg0IQQBn0ln6w0WYVvIdGzxAYbKAnDNLIWi6b9D4LChBAGfaXJOh4XkRU4jkJoFlCc4TQp6UFYhcEgCSEMBkqyCi8j0TOL8BaKRVxBmVweDKt8wdkkhLAYu/jc3zJqxObj6hab9WG+NJuT+5TepHoaR2W1rNXg+QqPw5LC1vDlNlfxZAudUEnbGccDxWfx9UM2m1iFjeeniqf5P64c9vul9J9zKLj7EoNbUP44LG3ZBD6QZOepJ2urBF8nhLAYZs1Mokq7g/u+uuUasozm0MjqHTTaeoPeZEFeRWXdwRtcu1mqF1GDvJBe15B192knBUhWoa0et4cL2xY6r3Wap7VqPD8rKCD6bSRwraiiUJ3vopvZl+haPkrHdBJYQseyjY5tFB3rCjr2oA/EBPMOacd31c3E/X5uv5tt97pc7foAG7d5ko6h15z08gVBEARBEARBEASFybLsr4ddhiAIekiWZX877DIE/SHLsr8cdhmCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAh6wP8GMDZpGBxVWa4AAAAASUVORK5CYII=";
   const TTLogo = () => (
     <img src={LOGO_SRC} alt="Thompson Thrift" style={{ height: 64, objectFit: "contain", filter: "none" }} />
   );
 
-  // Orange diagonal accent lines — matches TT brand image (bottom-right corner)
-  const OrangeAccent = () => (
-    <svg style={{ position: "fixed", bottom: 0, right: 0, pointerEvents: "none", zIndex: 0 }}
-      width="320" height="240" viewBox="0 0 320 240" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <line x1="320" y1="140" x2="60" y2="240" stroke="#e05c20" strokeWidth="1.8"/>
-      <line x1="320" y1="168" x2="88" y2="240" stroke="#e05c20" strokeWidth="1.8"/>
-      <line x1="320" y1="196" x2="116" y2="240" stroke="#e05c20" strokeWidth="1.1" strokeOpacity="0.6"/>
-    </svg>
-  );
+
 
   return (
     <div style={{
@@ -1874,7 +1965,7 @@ export default function App() {
       position: "relative",
     }}>
       <style>{SHARED_STYLES}</style>
-      <OrangeAccent />
+
       {/* Load SheetJS for xlsx parsing */}
       {!window.XLSX && (() => {
         const s = document.createElement('script');
@@ -1882,6 +1973,14 @@ export default function App() {
         document.head.appendChild(s);
         return null;
       })()}
+
+      {/* ── PIN Modal ── */}
+      {showPinModal && (
+        <PinModal
+          onSuccess={handlePinSuccess}
+          onClose={() => { setShowPinModal(false); setPinPendingAction(null); }}
+        />
+      )}
 
       {/* ── Header bar ── */}
       <div style={{
@@ -1909,18 +2008,44 @@ export default function App() {
               ? `Updated ${sofrUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
               : "as of 03 Mar 2026 (hardcoded)"}
           </div>
-          <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', outline: '1px solid #60a5fa33' }}>
-            ↑ Update Curve
-            <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
-          </label>
+          {pinUnlocked ? (
+            <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', outline: '1px solid #60a5fa33' }}>
+              ↑ Update Curve
+              <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
+            </label>
+          ) : (
+            <button onClick={() => setShowPinModal(true)} style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(96,165,250,0.06)', color: '#3a5a78', outline: '1px solid #3a5a7833', border: 'none' }}>
+              🔒 Update Curve
+            </button>
+          )}
         </div>
       </div>
 
       {/* ── Main content wrapper ── */}
       <div style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
 
+        {/* ── Tab Nav ── */}
+        <div style={{ display: "flex", borderBottom: `1px solid #1e3a5a`, marginBottom: "2rem" }}>
+          <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`}
+            onClick={() => setActiveTab("calculator")}>
+            Calculator
+          </button>
+          <button className={`tab-btn ${activeTab === "matrix" ? "tab-active" : "tab-inactive"}`}
+            onClick={() => setActiveTab("matrix")}>
+            DY / DSCR Matrix
+          </button>
+          <button className={`tab-btn ${activeTab === "covenant" ? "tab-active" : "tab-inactive"}`}
+            onClick={() => setActiveTab("covenant")}>
+            Covenant Tracker
+          </button>
+        </div>
+
+        {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
+        {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
+        {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+
         {/* ── DSCR Color Thresholds ── */}
-        <div className="card" style={{ marginBottom: "1.5rem", borderColor: "#1e3a5a", borderLeft: `3px solid ${TT_ORANGE}` }}>
+        <div className="card" style={{ marginTop: "1.5rem", borderColor: "#1e3a5a", borderLeft: `3px solid ${TT_ORANGE}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap" }}>
             <div style={{ fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", color: TT_ORANGE, whiteSpace: "nowrap", fontWeight: 600 }}>
               DSCR Color Thresholds
@@ -1957,34 +2082,30 @@ export default function App() {
           </div>
         </div>
 
-        {/* ── Tab Nav ── */}
-        <div style={{ display: "flex", borderBottom: `1px solid #1e3a5a`, marginBottom: "2rem" }}>
-          <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`}
-            onClick={() => setActiveTab("calculator")}>
-            Calculator
-          </button>
-          <button className={`tab-btn ${activeTab === "matrix" ? "tab-active" : "tab-inactive"}`}
-            onClick={() => setActiveTab("matrix")}>
-            DY / DSCR Matrix
-          </button>
-          <button className={`tab-btn ${activeTab === "covenant" ? "tab-active" : "tab-inactive"}`}
-            onClick={() => setActiveTab("covenant")}>
-            Covenant Tracker
-          </button>
-        </div>
-
-        {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
-        {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
-        {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} />}
-
         {/* ── Footer ── */}
         <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid #1e3a5a`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: "0.68rem", color: "#2a4a68" }}>
             Chatham 1-Month Term SOFR Forward Curve · as of 03 Mar 2026
           </span>
-          <span style={{ fontSize: "0.72rem", color: "#4a6a88", fontWeight: 600, letterSpacing: "0.05em" }}>
-            Kevin Ashburn · Thompson Thrift
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+            <button
+              onClick={() => pinUnlocked ? setPinUnlocked(false) : setShowPinModal(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                padding: '2px 8px', borderRadius: 2, border: 'none', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.08em',
+                background: pinUnlocked ? 'rgba(0,212,180,0.10)' : 'transparent',
+                color: pinUnlocked ? '#00d4b4' : '#2a4a68',
+                outline: pinUnlocked ? '1px solid rgba(0,212,180,0.25)' : '1px solid #1e3a5a',
+              }}
+              title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
+            >
+              {pinUnlocked ? '🔓 Editing unlocked' : '🔒 View only'}
+            </button>
+            <span style={{ fontSize: "0.85rem", color: "#b8d0e8", fontWeight: 700, letterSpacing: "0.06em" }}>
+              Kevin Ashburn · <span style={{ color: TT_ORANGE }}>Thompson Thrift</span>
+            </span>
+          </div>
         </div>
       </div>
     </div>
