@@ -144,21 +144,18 @@ function calcADS(loan, rate, amortYears) {
 }
 
 function dscrColor(v, t) {
-  if (v >= t.high) return "#00d4b4";
-  if (v >= t.mid)  return "#ffd93d";
-  if (v >= t.low)  return "#ff6b6b";
-  return "#ff6b6b";
+  if (v >= t.low) return "#6a9e7f";
+  return "#c47474";
 }
 function dscrClass(v, t) {
-  if (v >= t.high) return "green";
-  if (v >= t.mid)  return "yellow";
+  if (v >= t.low) return "green";
   return "red";
 }
 const DEFAULT_THRESHOLDS = { high: 1.25, mid: 1.10, low: 1.00 };
 
-// TT Brand colors: navy #0d2137, orange #e05c20, white
-const TT_NAVY   = "#0d2137";
-const TT_ORANGE = "#e05c20";
+// TT Brand colors: navy #16191f, orange #c87941, white
+const TT_NAVY   = "#16191f";
+const TT_ORANGE = "#c87941";
 
 // ── Edit PIN — change this to your desired PIN ────────────────────────────────
 const EDIT_PIN = "1234";
@@ -166,27 +163,27 @@ const EDIT_PIN = "1234";
 const SHARED_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap');
   * { box-sizing: border-box; }
-  input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: #1a3150; outline: none; }
+  input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: #2a2d35; outline: none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: ${TT_ORANGE}; cursor: pointer; }
-  .card { background: #122640; border: 1px solid #1e3a5a; border-radius: 4px; padding: 1.5rem; }
-  .label { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: #5a7fa0; margin-bottom: 0.5rem; }
+  .card { background: #1e2128; border: 1px solid #2e3340; border-radius: 4px; padding: 1.5rem; }
+  .label { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: #9aa0aa; margin-bottom: 0.5rem; }
   .metric { font-size: 1.9rem; font-weight: 700; text-shadow: 0 0 20px rgba(255,255,255,0.1); }
   .pill { display: inline-block; padding: 2px 10px; border-radius: 2px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; }
-  .green  { background: rgba(0,212,180,0.15);  color: #00d4b4; }
-  .yellow { background: rgba(255,217,61,0.15);  color: #ffd93d; }
-  .red    { background: rgba(255,107,107,0.15); color: #ff6b6b; }
-  .blue   { background: rgba(224,92,32,0.15);   color: ${TT_ORANGE}; }
+  .green  { background: rgba(106,158,127,0.15);  color: #6a9e7f; }
+  .yellow { background: rgba(138,122,66,0.15);  color: #8a7a42; }
+  .red    { background: rgba(160,82,82,0.15); color: #c47474; }
+  .blue   { background: rgba(200,121,65,0.15);   color: ${TT_ORANGE}; }
   input[type=number], select, input[type=date] {
-    background: #091929; border: 1px solid #1e3a5a; border-radius: 3px;
-    color: #f0f8ff; padding: 0.5rem 0.75rem; font-family: inherit;
+    background: #13151a; border: 1px solid #2e3340; border-radius: 3px;
+    color: #e8eaed; padding: 0.5rem 0.75rem; font-family: inherit;
     font-size: 0.85rem; width: 100%; outline: none;
   }
   input[type=number]:focus, select:focus, input[type=date]:focus { border-color: ${TT_ORANGE}; }
-  .sub  { font-size: 0.75rem; color: #a8c4dc; margin-top: 0.25rem; line-height: 1.5; }
-  .note { font-size: 0.7rem;  color: #4a6a88;  margin-top: 0.4rem;  line-height: 1.6; }
-  th { padding: 0.5rem 0.85rem; text-align: left; color: #5a7fa0; font-weight: 400;
+  .sub  { font-size: 0.75rem; color: #9aa0aa; margin-top: 0.25rem; line-height: 1.5; }
+  .note { font-size: 0.7rem;  color: #4a4f5a;  margin-top: 0.4rem;  line-height: 1.6; }
+  th { padding: 0.5rem 0.85rem; text-align: left; color: #9aa0aa; font-weight: 400;
        letter-spacing: 0.08em; font-size: 0.66rem; text-transform: uppercase; }
-  td { padding: 0.65rem 0.85rem; font-size: 0.82rem; border-bottom: 1px solid #0d2137; color: #d0e4f4; }
+  td { padding: 0.65rem 0.85rem; font-size: 0.82rem; border-bottom: 1px solid #16191f; color: #e8eaed; }
   tr:last-child td { border-bottom: none; }
   .section-title { font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase;
                    color: ${TT_ORANGE}; margin-bottom: 1rem; }
@@ -194,12 +191,12 @@ const SHARED_STYLES = `
              font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
              border-bottom: 2px solid transparent; background: transparent; transition: all 0.15s; }
   .tab-active   { color: ${TT_ORANGE}; border-bottom-color: ${TT_ORANGE}; }
-  .tab-inactive { color: #3a5a78; }
-  .tab-inactive:hover { color: #7a9ab8; }
-  .mx-high { background: rgba(0,212,180,0.18);  color: #00d4b4; font-weight: 700; }
-  .mx-mid  { background: rgba(255,217,61,0.13);  color: #ffd93d; font-weight: 600; }
-  .mx-low  { background: rgba(255,107,107,0.13); color: #ff6b6b; font-weight: 600; }
-  .mx-vlow { background: rgba(255,107,107,0.28); color: #ff4444; font-weight: 700; }
+  .tab-inactive { color: #4a4f5a; }
+  .tab-inactive:hover { color: #9aa0aa; }
+  .mx-high { background: rgba(106,158,127,0.18);  color: #6a9e7f; font-weight: 700; }
+  .mx-mid  { background: rgba(138,122,66,0.13);  color: #8a7a42; font-weight: 600; }
+  .mx-low  { background: rgba(160,82,82,0.13); color: #c47474; font-weight: 600; }
+  .mx-vlow { background: rgba(160,82,82,0.28); color: #c47474; font-weight: 700; }
 `;
 
 // ── PIN Modal ─────────────────────────────────────────────────────────────────
@@ -223,7 +220,7 @@ function PinModal({ onSuccess, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: '#122640', border: '1px solid #1e3a5a', borderTop: `3px solid ${TT_ORANGE}`, borderRadius: 6, padding: '2rem', width: 280, textAlign: 'center' }}>
+      <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderTop: `3px solid ${TT_ORANGE}`, borderRadius: 6, padding: '2rem', width: 280, textAlign: 'center' }}>
         <div style={{ fontSize: '0.65rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: TT_ORANGE, marginBottom: '1.25rem', fontWeight: 600 }}>
           Enter PIN to Edit
         </div>
@@ -233,7 +230,7 @@ function PinModal({ onSuccess, onClose }) {
             <div key={i} style={{
               width: 14, height: 14, borderRadius: '50%',
               background: i < digits.length ? TT_ORANGE : 'transparent',
-              border: `2px solid ${i < digits.length ? TT_ORANGE : '#2a4a68'}`,
+              border: `2px solid ${i < digits.length ? TT_ORANGE : '#4a4f5a'}`,
               transition: 'all 0.1s',
               transform: shake ? 'translateX(4px)' : 'none',
             }} />
@@ -244,9 +241,9 @@ function PinModal({ onSuccess, onClose }) {
           {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d, i) => (
             <button key={i} onClick={() => d === '⌫' ? setDigits(p => p.slice(0,-1)) : d && handleDigit(d)}
               style={{
-                padding: '0.75rem', borderRadius: 4, border: '1px solid #1e3a5a',
-                background: d ? '#091929' : 'transparent',
-                color: d === '⌫' ? '#5a7fa0' : '#d0e4f4',
+                padding: '0.75rem', borderRadius: 4, border: '1px solid #2e3340',
+                background: d ? '#13151a' : 'transparent',
+                color: d === '⌫' ? '#9aa0aa' : '#e8eaed',
                 fontSize: d === '⌫' ? '1rem' : '1.1rem', fontWeight: 600,
                 cursor: d ? 'pointer' : 'default', fontFamily: 'inherit',
                 opacity: d ? 1 : 0,
@@ -255,7 +252,7 @@ function PinModal({ onSuccess, onClose }) {
             </button>
           ))}
         </div>
-        <button onClick={onClose} style={{ fontSize: '0.7rem', color: '#3a5a78', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: '0.25rem' }}>
+        <button onClick={onClose} style={{ fontSize: '0.7rem', color: '#4a4f5a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: '0.25rem' }}>
           Cancel
         </button>
       </div>
@@ -316,7 +313,7 @@ function MatrixTab({ thresholds }) {
           />
           {validRate && (
             <div className="sub" style={{ marginTop: "0.5rem" }}>
-              Generating matrix at <strong style={{ color: "#ffd93d" }}>{parsed.toFixed(2)}%</strong>
+              Generating matrix at <strong style={{ color: "#8a7a42" }}>{parsed.toFixed(2)}%</strong>
             </div>
           )}
         </div>
@@ -324,24 +321,24 @@ function MatrixTab({ thresholds }) {
 
       {validRate ? (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ padding: "1rem 1.25rem 0.65rem", borderBottom: "1px solid #1e293b" }}>
-            <div style={{ fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "#00d4b4", marginBottom: "0.2rem" }}>
+          <div style={{ padding: "1rem 1.25rem 0.65rem", borderBottom: "1px solid #2e3340" }}>
+            <div style={{ fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a9e7f", marginBottom: "0.2rem" }}>
               DY vs DSCR Comparison Matrix
             </div>
-            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>
-              Fixed rate: <strong style={{ color: "#ffd93d" }}>{parsed.toFixed(2)}%</strong>
+            <div style={{ fontSize: "0.72rem", color: "#4a4f5a" }}>
+              Fixed rate: <strong style={{ color: "#8a7a42" }}>{parsed.toFixed(2)}%</strong>
               &nbsp;·&nbsp;DSCR = Debt Yield ÷ Annual Debt Service Constant
             </div>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 400 }}>
               <thead>
-                <tr style={{ borderBottom: "2px solid #1e293b", background: "#0d1b2e" }}>
-                  <th style={{ padding: "0.65rem 1.25rem", textAlign: "left", width: 100, color: "#b8d0e8", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                <tr style={{ borderBottom: "2px solid #2e3340", background: "#16191f" }}>
+                  <th style={{ padding: "0.65rem 1.25rem", textAlign: "left", width: 100, color: "#c8cdd6", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                     Debt Yield
                   </th>
                   {AMORT_COLS.map(col => (
-                    <th key={col.label} style={{ padding: "0.65rem 1rem", textAlign: "center", color: "#b8d0e8", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    <th key={col.label} style={{ padding: "0.65rem 1rem", textAlign: "center", color: "#c8cdd6", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                       {col.label}
                     </th>
                   ))}
@@ -349,7 +346,7 @@ function MatrixTab({ thresholds }) {
               </thead>
               <tbody>
                 {DY_ROWS.map((dy, i) => (
-                  <tr key={dy} style={{ background: i % 2 === 0 ? "transparent" : "#0a1220" }}>
+                  <tr key={dy} style={{ background: i % 2 === 0 ? "transparent" : "#252830" }}>
                     <td style={{ padding: "0.55rem 1.25rem", fontWeight: 700, color: "#ffffff", borderBottom: "1px solid #0f172a", fontSize: "0.85rem", textAlign: "left" }}>
                       {dy.toFixed(1)}%
                     </td>
@@ -367,7 +364,7 @@ function MatrixTab({ thresholds }) {
               </tbody>
             </table>
           </div>
-          <div style={{ display: "flex", gap: "1.5rem", padding: "0.85rem 1.25rem", borderTop: "1px solid #1e293b", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "1.5rem", padding: "0.85rem 1.25rem", borderTop: "1px solid #2e3340", flexWrap: "wrap" }}>
             {[
               { cls: "mx-high", label: `≥ ${thresholds.high.toFixed(2)}x — Strong` },
               { cls: "mx-mid",  label: `${thresholds.mid.toFixed(2)} – ${thresholds.high.toFixed(2)}x — Adequate` },
@@ -376,13 +373,13 @@ function MatrixTab({ thresholds }) {
             ].map(({ cls, label }) => (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                 <div className={cls} style={{ width: 24, height: 12, borderRadius: 2 }} />
-                <span style={{ fontSize: "0.68rem", color: "#64748b" }}>{label}</span>
+                <span style={{ fontSize: "0.68rem", color: "#4a4f5a" }}>{label}</span>
               </div>
             ))}
           </div>
         </div>
       ) : (
-        <div className="card" style={{ textAlign: "center", padding: "3rem 2rem", color: "#475569" }}>
+        <div className="card" style={{ textAlign: "center", padding: "3rem 2rem", color: "#4a4f5a" }}>
           <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>📊</div>
           <div style={{ fontSize: "0.85rem" }}>Enter an interest rate above to generate the matrix</div>
           <div style={{ fontSize: "0.75rem", color: "#334155", marginTop: "0.4rem" }}>
@@ -468,9 +465,9 @@ function CalculatorTab({ thresholds }) {
     <button onClick={() => setLocked(id)} style={{
       padding: "3px 14px", borderRadius: "3px", border: "none", cursor: "pointer",
       fontFamily: "inherit", fontSize: "0.72rem", fontWeight: 600, letterSpacing: "0.05em",
-      background: locked === id ? "rgba(96,165,250,0.2)" : "#1e293b",
-      color: locked === id ? "#60a5fa" : "#475569",
-      outline: locked === id ? "1px solid #60a5fa" : "1px solid #1e293b",
+      background: locked === id ? "rgba(96,165,250,0.2)" : "#2e3340",
+      color: locked === id ? "#c8cdd6" : "#4a4f5a",
+      outline: locked === id ? "1px solid #c8cdd6" : "1px solid #2e3340",
     }}>🔒 {label}</button>
   );
 
@@ -480,16 +477,16 @@ function CalculatorTab({ thresholds }) {
       <div className="section-title">Deal Inputs</div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
-        <span style={{ fontSize: "0.7rem", color: "#64748b", letterSpacing: "0.08em" }}>LOCK:</span>
+        <span style={{ fontSize: "0.7rem", color: "#4a4f5a", letterSpacing: "0.08em" }}>LOCK:</span>
         {lockBtn("loan", "Loan Amount")}
         {lockBtn("noi", "NOI")}
-        <span style={{ fontSize: "0.68rem", color: "#475569" }}>
+        <span style={{ fontSize: "0.68rem", color: "#4a4f5a" }}>
           Lock one value, then enter a target DY or DSCR to back-solve the other
         </span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-        <div className="card" style={{ borderColor: locked === "loan" ? "#60a5fa55" : "#1e293b" }}>
+        <div className="card" style={{ borderColor: locked === "loan" ? "#c8cdd655" : "#2e3340" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <div className="label" style={{ margin: 0 }}>Loan Amount</div>
             {locked === "loan" && <span className="pill blue">🔒 Locked</span>}
@@ -498,14 +495,14 @@ function CalculatorTab({ thresholds }) {
           <input type="range" min={20000000} max={75000000} step={500000}
             value={Math.min(Math.max(loanAmount, 20000000), 75000000)}
             onChange={e => setLoanAmount(+e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#8ab0cc", marginTop: "0.3rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#9aa0aa", marginTop: "0.3rem" }}>
             <span>$20M</span>
-            <span style={{ color: "#00d4b4", fontWeight: 600 }}>{formatCurrency(loanAmount)}</span>
+            <span style={{ color: "#6a9e7f", fontWeight: 600 }}>{formatCurrency(loanAmount)}</span>
             <span>$75M</span>
           </div>
         </div>
 
-        <div className="card" style={{ borderColor: locked === "noi" ? "#60a5fa55" : "#1e293b" }}>
+        <div className="card" style={{ borderColor: locked === "noi" ? "#c8cdd655" : "#2e3340" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <div className="label" style={{ margin: 0 }}>Net Operating Income (NOI)</div>
             {locked === "noi" && <span className="pill blue">🔒 Locked</span>}
@@ -514,9 +511,9 @@ function CalculatorTab({ thresholds }) {
           <input type="range" min={500000} max={10000000} step={25000}
             value={Math.min(Math.max(noi, 500000), 10000000)}
             onChange={e => setNoi(+e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#8ab0cc", marginTop: "0.3rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#9aa0aa", marginTop: "0.3rem" }}>
             <span>$500K</span>
-            <span style={{ color: "#00d4b4", fontWeight: 600 }}>{formatCurrency(noi)}</span>
+            <span style={{ color: "#6a9e7f", fontWeight: 600 }}>{formatCurrency(noi)}</span>
             <span>$10M</span>
           </div>
         </div>
@@ -524,18 +521,18 @@ function CalculatorTab({ thresholds }) {
 
       {/* Target Back-Solve */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-        <div className="card" style={{ borderColor: targetDY ? "#00d4b455" : "#1e293b" }}>
+        <div className="card" style={{ borderColor: targetDY ? "#6a9e7f55" : "#2e3340" }}>
           <div className="label">Target Debt Yield (%)</div>
           <input type="number" value={targetDY} step={0.1} min={0} max={30} placeholder="e.g. 9.00"
             onChange={e => { setTargetDY(e.target.value); setTargetDSCR(""); }}
             style={{ marginBottom: "0.5rem" }} />
           {solvedFromDY ? (
             <div style={{ marginTop: "0.25rem" }}>
-              <div style={{ fontSize: "0.68rem", color: "#64748b", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
+              <div style={{ fontSize: "0.68rem", color: "#4a4f5a", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
                 → {solvedFromDY.label}
               </div>
-              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#00d4b4" }}>{solvedFromDY.value}</div>
-              <div style={{ fontSize: "0.68rem", color: "#475569", marginTop: "0.25rem" }}>
+              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#6a9e7f" }}>{solvedFromDY.value}</div>
+              <div style={{ fontSize: "0.68rem", color: "#4a4f5a", marginTop: "0.25rem" }}>
                 At {parseFloat(targetDY).toFixed(2)}% DY · {locked === "loan" ? `Loan fixed at ${formatCurrency(loanAmount)}` : `NOI fixed at ${formatCurrency(noi)}`}
               </div>
             </div>
@@ -544,18 +541,18 @@ function CalculatorTab({ thresholds }) {
           )}
         </div>
 
-        <div className="card" style={{ borderColor: targetDSCR ? "#a78bfa55" : "#1e293b" }}>
+        <div className="card" style={{ borderColor: targetDSCR ? "#c8cdd655" : "#2e3340" }}>
           <div className="label">Target DSCR (x)</div>
           <input type="number" value={targetDSCR} step={0.05} min={0} max={10} placeholder="e.g. 1.25"
             onChange={e => { setTargetDSCR(e.target.value); setTargetDY(""); }}
             style={{ marginBottom: "0.5rem" }} />
           {solvedFromDSCR ? (
             <div style={{ marginTop: "0.25rem" }}>
-              <div style={{ fontSize: "0.68rem", color: "#64748b", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
+              <div style={{ fontSize: "0.68rem", color: "#4a4f5a", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
                 → {solvedFromDSCR.label}
               </div>
-              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#a78bfa" }}>{solvedFromDSCR.value}</div>
-              <div style={{ fontSize: "0.68rem", color: "#475569", marginTop: "0.25rem" }}>
+              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#c8cdd6" }}>{solvedFromDSCR.value}</div>
+              <div style={{ fontSize: "0.68rem", color: "#4a4f5a", marginTop: "0.25rem" }}>
                 At {parseFloat(targetDSCR).toFixed(2)}x · {(allInRate * 100).toFixed(3)}% all-in · {amort === 0 ? "I/O" : `${amort}yr amort`}
               </div>
             </div>
@@ -573,7 +570,7 @@ function CalculatorTab({ thresholds }) {
           <input type="date" value={pickedDate} min={minDate} max={maxDate}
             onChange={e => setPickedDate(e.target.value)}
             style={{ marginBottom: "0.6rem", colorScheme: "dark" }} />
-          <div className="sub">1-Mo Term SOFR: <strong style={{ color: "#60a5fa" }}>{formatPct(sofrRate, 4)}</strong></div>
+          <div className="sub">1-Mo Term SOFR: <strong style={{ color: "#c8cdd6" }}>{formatPct(sofrRate, 4)}</strong></div>
           <div className="note">Pick your closing or rate lock date. Rate is interpolated from the Chatham curve ({minDate} – {maxDate}).</div>
         </div>
 
@@ -582,13 +579,13 @@ function CalculatorTab({ thresholds }) {
           <input type="number" value={spread} step={0.05} min={0} max={10}
             onChange={e => setSpread(+e.target.value)} style={{ marginBottom: "0.75rem" }} />
           <input type="range" min={0.5} max={6} step={0.05} value={spread} onChange={e => setSpread(+e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#8ab0cc", marginTop: "0.3rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#9aa0aa", marginTop: "0.3rem" }}>
             <span>0.50%</span>
-            <span style={{ color: "#a78bfa", fontWeight: 600 }}>{spread.toFixed(2)}%</span>
+            <span style={{ color: "#c8cdd6", fontWeight: 600 }}>{spread.toFixed(2)}%</span>
             <span>6.00%</span>
           </div>
           <div className="sub" style={{ marginTop: "0.5rem" }}>
-            All-in Rate: <strong style={{ color: "#a78bfa" }}>{formatPct(allInRate, 4)}</strong>
+            All-in Rate: <strong style={{ color: "#c8cdd6" }}>{formatPct(allInRate, 4)}</strong>
           </div>
         </div>
 
@@ -599,7 +596,7 @@ function CalculatorTab({ thresholds }) {
             <option value={35}>35 Years</option>
             <option value={0}>Interest Only (I/O)</option>
           </select>
-          <div className="sub">Ann. Debt Service: <strong style={{ color: "#ffd93d" }}>{formatCurrency(ads)}</strong></div>
+          <div className="sub">Ann. Debt Service: <strong style={{ color: "#8a7a42" }}>{formatCurrency(ads)}</strong></div>
           <div className="note">{amort === 0 ? "I/O: Debt service = Loan × All-in Rate only" : `P&I: Monthly payment × 12 over ${amort}-yr schedule`}</div>
         </div>
       </div>
@@ -607,9 +604,9 @@ function CalculatorTab({ thresholds }) {
       {/* ── Results ── */}
       <div className="section-title">Results</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-        <div className="card" style={{ borderColor: "#00d4b4" }}>
+        <div className="card" style={{ borderColor: "#6a9e7f" }}>
           <div className="label">Debt Yield</div>
-          <div className="metric" style={{ color: "#00d4b4" }}>{currentDY}%</div>
+          <div className="metric" style={{ color: "#6a9e7f" }}>{currentDY}%</div>
           <div className="sub">NOI ÷ Loan Amount</div>
           <div style={{ marginTop: "0.5rem" }}>
             <span className={+currentDY >= 9 ? "pill green" : +currentDY >= 7 ? "pill yellow" : "pill red"}>
@@ -634,17 +631,17 @@ function CalculatorTab({ thresholds }) {
         <div className="card">
           <div className="label">Rate Composition</div>
           <div style={{ marginTop: "0.4rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid #1e293b" }}>
-              <span style={{ fontSize: "0.78rem", color: "#b8d0e8" }}>1-Mo Term SOFR</span>
-              <span style={{ fontSize: "0.78rem", color: "#60a5fa", fontWeight: 600 }}>{formatPct(sofrRate, 4)}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid #2e3340" }}>
+              <span style={{ fontSize: "0.78rem", color: "#c8cdd6" }}>1-Mo Term SOFR</span>
+              <span style={{ fontSize: "0.78rem", color: "#c8cdd6", fontWeight: 600 }}>{formatPct(sofrRate, 4)}</span>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid #1e293b" }}>
-              <span style={{ fontSize: "0.78rem", color: "#b8d0e8" }}>Spread</span>
-              <span style={{ fontSize: "0.78rem", color: "#a78bfa", fontWeight: 600 }}>+ {spread.toFixed(2)}%</span>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid #2e3340" }}>
+              <span style={{ fontSize: "0.78rem", color: "#c8cdd6" }}>Spread</span>
+              <span style={{ fontSize: "0.78rem", color: "#c8cdd6", fontWeight: 600 }}>+ {spread.toFixed(2)}%</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0 0" }}>
               <span style={{ fontSize: "0.82rem", color: "#ffffff", fontWeight: 600 }}>All-in Rate</span>
-              <span style={{ fontSize: "0.82rem", color: "#ffd93d", fontWeight: 700 }}>{formatPct(allInRate, 4)}</span>
+              <span style={{ fontSize: "0.82rem", color: "#8a7a42", fontWeight: 700 }}>{formatPct(allInRate, 4)}</span>
             </div>
           </div>
           <div className="note" style={{ marginTop: "0.6rem" }}>SOFR date: {pickedDate}</div>
@@ -655,13 +652,13 @@ function CalculatorTab({ thresholds }) {
       <div className="section-title">Minimum Loan Sizing by DY Threshold</div>
       <div className="card" style={{ marginBottom: "1.5rem" }}>
         <div className="sub" style={{ marginBottom: "1rem" }}>
-          Maximum loan a lender would approve at each DY floor given your NOI of <strong style={{ color: "#00d4b4" }}>{formatCurrency(noi)}</strong>.
-          DSCR calculated at <strong style={{ color: "#ffd93d" }}>{formatPct(allInRate, 4)}</strong> {amort === 0 ? "I/O" : `/ ${amort}yr amort`}.
-          Current loan: <strong style={{ color: "#60a5fa" }}>{formatCurrency(loanAmount)}</strong>.
+          Maximum loan a lender would approve at each DY floor given your NOI of <strong style={{ color: "#6a9e7f" }}>{formatCurrency(noi)}</strong>.
+          DSCR calculated at <strong style={{ color: "#8a7a42" }}>{formatPct(allInRate, 4)}</strong> {amort === 0 ? "I/O" : `/ ${amort}yr amort`}.
+          Current loan: <strong style={{ color: "#c8cdd6" }}>{formatCurrency(loanAmount)}</strong>.
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ borderBottom: "1px solid #1e293b" }}>
+            <tr style={{ borderBottom: "1px solid #2e3340" }}>
               {["DY Floor", "Max Loan Amount", "vs. Your Loan", "Implied DSCR", "Status"].map(h => (
                 <th key={h}>{h}</th>
               ))}
@@ -674,7 +671,7 @@ function CalculatorTab({ thresholds }) {
               return (
                 <tr key={dy}>
                   <td style={{ color: "#ffffff", fontWeight: 600 }}>{(dy * 100).toFixed(1)}%</td>
-                  <td style={{ color: "#00d4b4", fontWeight: 600 }}>{formatCurrency(maxLoan)}</td>
+                  <td style={{ color: "#6a9e7f", fontWeight: 600 }}>{formatCurrency(maxLoan)}</td>
                   <td>
                     {under
                       ? <span className="pill green">✓ Under by {formatCurrency(diff)}</span>
@@ -892,7 +889,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [uploadStatus, setUploadStatus] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [forecastMonth, setForecastMonth] = useState(null); // e.g. "February 2026"
-  const [forecastMonthInput, setForecastMonthInput] = useState(''); // manual override field
+  const [forecastMonthInput, setForecastMonthInput] = useState(''); // user-typed label before upload
   const [uploadResults, setUploadResults] = useState([]);
   const [showUploadResults, setShowUploadResults] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);
@@ -944,7 +941,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       for (const row of rows) {
         const val = JSON.parse(row.value);
         if (row.key === 'lastUpdated' && val) setLastUpdated(new Date(val));
-        if (row.key === 'forecastMonth' && val) { setForecastMonth(val); setForecastMonthInput(val); }
+        if (row.key === 'forecastMonth' && val) setForecastMonth(val);
         if (row.key === 'visibleCols' && val) setVisibleCols({ ...DEFAULT_COLS, ...val });
       }
     } catch (err) {
@@ -1103,10 +1100,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         }
       }
       const detectedForecastMonth = latestMonth >= 0 ? `${MONTH_NAMES[latestMonth]} ${latestYear}` : null;
-      // Only fill in the input if the user hasn't already typed something
-      if (detectedForecastMonth && !forecastMonthInput.trim()) {
-        setForecastMonthInput(detectedForecastMonth);
-      }
+      if (detectedForecastMonth) setForecastMonth(detectedForecastMonth);
 
       setUploadStatus(`Parsed ${sheets.length} properties. Review matches below.`);
     } catch (err) {
@@ -1135,11 +1129,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const now = new Date();
       setLastUpdated(now);
       saveSetting('lastUpdated', now.toISOString());
-      const monthLabel = forecastMonthInput.trim() || forecastMonth;
-      if (monthLabel) {
-        setForecastMonth(monthLabel);
-        saveSetting('forecastMonth', monthLabel);
-      }
+      const label = forecastMonthInput.trim() || forecastMonth;
+      if (label) { setForecastMonth(label); saveSetting('forecastMonth', label); }
       setUploadStatus(`✓ Updated NOI for ${matched.length} properties.`);
       setTimeout(() => setUploadStatus(''), 4000);
     }).catch(err => {
@@ -1225,22 +1216,22 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const fmtDate = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
   const daysUntil = d => { try { return Math.ceil((new Date(d + 'T00:00:00') - new Date()) / 86400000); } catch { return null; } };
 
-  const inputStyle = { width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: '#091929', border: '1px solid #1e3a5a', borderRadius: 3, color: '#f0f8ff', fontFamily: 'inherit' };
-  const labelStyle = { fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', marginBottom: '0.3rem', display: 'block' };
+  const inputStyle = { width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit' };
+  const labelStyle = { fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', marginBottom: '0.3rem', display: 'block' };
 
   return (
     <div>
       {/* ── DB Loading / Error states ── */}
       {dbLoading && (
-        <div style={{ textAlign: 'center', padding: '3rem', color: '#5a7fa0', fontSize: '0.85rem' }}>
+        <div style={{ textAlign: 'center', padding: '3rem', color: '#9aa0aa', fontSize: '0.85rem' }}>
           <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>⟳</div>
           Loading properties from database...
         </div>
       )}
       {dbError && (
-        <div style={{ padding: '1rem', marginBottom: '1rem', background: 'rgba(255,107,107,0.08)', border: '1px solid rgba(255,107,107,0.25)', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.78rem', color: '#ff6b6b' }}>⚠ {dbError}</span>
-          <button onClick={loadProperties} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: 'rgba(255,107,107,0.15)', color: '#ff6b6b' }}>Retry</button>
+        <div style={{ padding: '1rem', marginBottom: '1rem', background: 'rgba(160,82,82,0.08)', border: '1px solid rgba(160,82,82,0.25)', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.78rem', color: '#c47474' }}>⚠ {dbError}</span>
+          <button onClick={loadProperties} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: 'rgba(160,82,82,0.15)', color: '#c47474' }}>Retry</button>
         </div>
       )}
       {!dbLoading && (
@@ -1249,92 +1240,92 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           <div className="card" style={{ textAlign: 'center' }}>
             <div style={labelStyle}>Total Properties</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#b8d0e8' }}>{summary.total}</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#c8cdd6' }}>{summary.total}</div>
           </div>
           <div className="card" style={{ textAlign: 'center' }}>
             <div style={labelStyle}>Passing</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#00d4b4' }}>{summary.passing}</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#6a9e7f' }}>{summary.passing}</div>
           </div>
           <div className="card" style={{ textAlign: 'center' }}>
             <div style={labelStyle}>Failing</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#ff6b6b' }}>{summary.failing}</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#c47474' }}>{summary.failing}</div>
           </div>
           <div className="card" style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowPaydown(v => !v)}>
             <div style={{ ...labelStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
               Potential Maximum Paydown
-              <span style={{ fontSize: '0.95rem', color: showPaydown ? '#e05c20' : '#3a5a78' }}>
+              <span style={{ fontSize: '0.95rem', color: showPaydown ? '#c87941' : '#4a4f5a' }}>
                 {showPaydown ? '👁' : '👁'}
               </span>
             </div>
             {showPaydown
-              ? <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#e05c20' }}>{formatCurrency(summary.totalPaydown)}</div>
-              : <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#2a4a68', letterSpacing: '0.2em' }}>••••••••</div>
+              ? <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#c87941' }}>{formatCurrency(summary.totalPaydown)}</div>
+              : <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#4a4f5a', letterSpacing: '0.2em' }}>••••••••</div>
             }
           </div>
       </div>
 
       {/* ── Last Updated Banner ── */}
       {lastUpdated && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'rgba(0,212,180,0.08)', border: '1px solid rgba(0,212,180,0.2)', borderRadius: 3 }}>
-          <span style={{ fontSize: '0.7rem', color: '#00d4b4' }}>✓</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'rgba(106,158,127,0.08)', border: '1px solid rgba(106,158,127,0.2)', borderRadius: 3 }}>
+          <span style={{ fontSize: '0.7rem', color: '#6a9e7f' }}>✓</span>
           <span style={{ fontSize: '0.72rem', color: '#5a9a8a' }}>NOI last updated from forecast file:</span>
-          <span style={{ fontSize: '0.72rem', color: '#00d4b4', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.72rem', color: '#6a9e7f', fontWeight: 600 }}>
             {lastUpdated.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} at {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
           </span>
           {forecastMonth && (
             <>
               <span style={{ fontSize: '0.68rem', color: '#2a5a4a' }}>·</span>
               <span style={{ fontSize: '0.72rem', color: '#5a9a8a' }}>Using</span>
-              <span style={{ fontSize: '0.72rem', color: '#00d4b4', fontWeight: 600 }}>{forecastMonth} reforecast</span>
+              <span style={{ fontSize: '0.72rem', color: '#6a9e7f', fontWeight: 600 }}>{forecastMonth} reforecast</span>
             </>
           )}
         </div>
       )}
       {!lastUpdated && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'rgba(255,107,107,0.06)', border: '1px solid rgba(255,107,107,0.15)', borderRadius: 3 }}>
-          <span style={{ fontSize: '0.7rem', color: '#ff6b6b' }}>⚠</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'rgba(160,82,82,0.06)', border: '1px solid rgba(160,82,82,0.15)', borderRadius: 3 }}>
+          <span style={{ fontSize: '0.7rem', color: '#c47474' }}>⚠</span>
           <span style={{ fontSize: '0.72rem', color: '#7a5a5a' }}>NOI not yet updated this session —</span>
-          <span style={{ fontSize: '0.72rem', color: '#ff9a7a' }}>upload a forecast file to refresh figures</span>
+          <span style={{ fontSize: '0.72rem', color: '#c47474' }}>upload a forecast file to refresh figures</span>
         </div>
       )}
       {/* ── Debt Fund Settings Panel ── */}
-      <div className="card" style={{ marginBottom: '1rem', borderColor: '#1e3a5a', borderLeft: '3px solid #a78bfa', padding: '0.85rem 1.1rem' }}>
+      <div className="card" style={{ marginBottom: '1rem', borderColor: '#2e3340', borderLeft: '3px solid #c8cdd6', padding: '0.85rem 1.1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#a78bfa', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 600, whiteSpace: 'nowrap' }}>
             Debt Fund Assumptions
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#5a7fa0', whiteSpace: 'nowrap' }}>Min DSCR</span>
+            <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Min DSCR</span>
             <input
               type="number" step="0.01" value={dfDSCRInput}
               onChange={e => setDfDSCRInput(e.target.value)}
               onBlur={() => { const v = parseFloat(dfDSCRInput); if (!isNaN(v) && v > 0) setDfDSCR(String(v)); }}
-              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#091929', border: '1px solid #1e3a5a', borderRadius: 3, color: '#f0f8ff', fontFamily: 'inherit', textAlign: 'center' }}
+              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
             />
-            <span style={{ fontSize: '0.7rem', color: '#3a5a78' }}>x</span>
+            <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>x</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#5a7fa0', whiteSpace: 'nowrap' }}>Rate: SOFR +</span>
+            <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Rate: SOFR +</span>
             <input
               type="number" step="0.01" value={dfSpreadInput}
               onChange={e => setDfSpreadInput(e.target.value)}
               onBlur={() => { const v = parseFloat(dfSpreadInput); if (!isNaN(v) && v >= 0) setDfSpread(String(v)); }}
-              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#091929', border: '1px solid #1e3a5a', borderRadius: 3, color: '#f0f8ff', fontFamily: 'inherit', textAlign: 'center' }}
+              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
             />
-            <span style={{ fontSize: '0.7rem', color: '#3a5a78' }}>%</span>
+            <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
           </div>
           {/* I/O Toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#5a7fa0' }}>Amortization</span>
-            <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid #1e3a5a' }}>
+            <span style={{ fontSize: '0.7rem', color: '#9aa0aa' }}>Amortization</span>
+            <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid #2e3340' }}>
               {['I/O', 'Amort'].map(opt => {
                 const active = opt === 'I/O' ? dfIO : !dfIO;
                 return (
                   <button key={opt} onClick={() => setDfIO(opt === 'I/O')} style={{
                     padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                     fontSize: '0.7rem', fontWeight: 600,
-                    background: active ? 'rgba(167,139,250,0.25)' : '#091929',
-                    color: active ? '#a78bfa' : '#3a5a78',
+                    background: active ? 'rgba(200,205,214,0.15)' : '#13151a',
+                    color: active ? '#c8cdd6' : '#4a4f5a',
                   }}>{opt}</button>
                 );
               })}
@@ -1345,9 +1336,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                   type="number" step="1" min="1" max="40" value={dfAmortInput}
                   onChange={e => setDfAmortInput(e.target.value)}
                   onBlur={() => { const v = parseInt(dfAmortInput); if (!isNaN(v) && v > 0) setDfAmort(String(v)); }}
-                  style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: '#091929', border: '1px solid #1e3a5a', borderRadius: 3, color: '#f0f8ff', fontFamily: 'inherit', textAlign: 'center' }}
+                  style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
                 />
-                <span style={{ fontSize: '0.7rem', color: '#3a5a78' }}>yr</span>
+                <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>yr</span>
               </div>
             )}
           </div>
@@ -1358,37 +1349,38 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       {/* ── Toolbar ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.68rem', color: '#5a7fa0', letterSpacing: '0.08em' }}>SORT:</span>
+          <span style={{ fontSize: '0.68rem', color: '#9aa0aa', letterSpacing: '0.08em' }}>SORT:</span>
           {[['covenantDate','Date'],['property','Property'],['satisfied','Status']].map(([f,l]) => (
             <button key={f} onClick={() => setSortField(f)} style={{
               padding: '3px 10px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
               fontSize: '0.7rem', fontWeight: 600,
-              background: sortField === f ? 'rgba(224,92,32,0.2)' : '#0f2033',
-              color: sortField === f ? '#e05c20' : '#5a7fa0',
-              outline: sortField === f ? '1px solid #e05c2055' : '1px solid #1e3a5a',
+              background: sortField === f ? 'rgba(200,121,65,0.2)' : '#1e2128',
+              color: sortField === f ? '#c87941' : '#9aa0aa',
+              outline: sortField === f ? '1px solid #c8794155' : '1px solid #2e3340',
             }}>{l}</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* File Upload */}
+          {/* Forecast month label input */}
           {pinUnlocked && (
             <input
               type="text"
-              placeholder="Forecast month (e.g. February 2026)"
               value={forecastMonthInput}
               onChange={e => setForecastMonthInput(e.target.value)}
+              placeholder="e.g. February 2026"
               style={{
-                padding: '4px 10px', borderRadius: 2, border: '1px solid #3a5a7866',
-                background: 'rgba(13,33,55,0.8)', color: '#c8d8e8',
-                fontFamily: 'inherit', fontSize: '0.72rem', width: '220px',
+                padding: '4px 8px', borderRadius: 2, fontSize: '0.72rem', fontFamily: 'inherit',
+                background: '#13151a', border: '1px solid #2e3340', color: '#e8eaed',
+                width: 140, outline: 'none',
               }}
             />
           )}
+          {/* File Upload */}
           {pinUnlocked ? (
             <label style={{
               padding: '5px 14px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(96,165,250,0.15)', color: '#60a5fa',
-              outline: '1px solid #60a5fa44', display: 'inline-block',
+              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,205,214,0.12)', color: '#c8cdd6',
+              outline: '1px solid #c8cdd644', display: 'inline-block',
             }}>
               ↑ Upload Forecast
               <input type="file" accept=".xlsx" onChange={handleFileUpload} style={{ display: 'none' }} />
@@ -1396,46 +1388,46 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           ) : (
             <button onClick={() => requirePin(() => {})} style={{
               padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(96,165,250,0.06)', color: '#3a5a78',
-              outline: '1px solid #3a5a7833',
+              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,205,214,0.05)', color: '#4a4f5a',
+              outline: '1px solid #4a4f5a33',
             }}>🔒 Upload Forecast</button>
           )}
-          {exportMsg && <span style={{ fontSize: '0.7rem', color: '#00d4b4' }}>{exportMsg}</span>}
-          {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? '#00d4b4' : '#60a5fa' }}>{uploadStatus}</span>}
+          {exportMsg && <span style={{ fontSize: '0.7rem', color: '#6a9e7f' }}>{exportMsg}</span>}
+          {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? '#6a9e7f' : '#c8cdd6' }}>{uploadStatus}</span>}
           <button onClick={exportCSV} style={{
             padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(0,212,180,0.15)', color: '#00d4b4', outline: '1px solid #00d4b444',
+            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(106,158,127,0.15)', color: '#6a9e7f', outline: '1px solid #6a9e7f44',
           }}>↓ Export CSV</button>
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowColPicker(v => !v)} style={{
               padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: showColPicker ? 'rgba(96,165,250,0.25)' : 'rgba(96,165,250,0.12)',
-              color: '#60a5fa', outline: '1px solid #60a5fa44',
+              fontSize: '0.72rem', fontWeight: 600, background: showColPicker ? 'rgba(200,205,214,0.15)' : 'rgba(200,205,214,0.10)',
+              color: '#c8cdd6', outline: '1px solid #c8cdd644',
             }}>⊞ Columns</button>
             {showColPicker && (
               <div style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 100,
-                background: '#0d2137', border: '1px solid #1e3a5a', borderRadius: 4,
+                background: '#16191f', border: '1px solid #2e3340', borderRadius: 4,
                 padding: '0.6rem 0', minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
               }}>
-                <div style={{ padding: '0.25rem 0.85rem 0.5rem', fontSize: '0.6rem', letterSpacing: '0.12em', color: '#3a5a78', textTransform: 'uppercase', borderBottom: '1px solid #1e3a5a', marginBottom: '0.4rem' }}>Toggle Columns</div>
+                <div style={{ padding: '0.25rem 0.85rem 0.5rem', fontSize: '0.6rem', letterSpacing: '0.12em', color: '#4a4f5a', textTransform: 'uppercase', borderBottom: '1px solid #2e3340', marginBottom: '0.4rem' }}>Toggle Columns</div>
                 {ALL_COLS.map(c => (
                   <div key={c.key} onClick={() => toggleCol(c.key)} style={{
                     display: 'flex', alignItems: 'center', gap: '0.6rem',
                     padding: '0.35rem 0.85rem', cursor: 'pointer',
                     background: 'transparent',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#122640'}
+                  onMouseEnter={e => e.currentTarget.style.background = '#1e2128'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <div style={{
                       width: 14, height: 14, borderRadius: 2, flexShrink: 0,
-                      background: visibleCols[c.key] ? '#60a5fa' : 'transparent',
-                      border: `1px solid ${visibleCols[c.key] ? '#60a5fa' : '#2e5a7a'}`,
+                      background: visibleCols[c.key] ? '#c8cdd6' : 'transparent',
+                      border: `1px solid ${visibleCols[c.key] ? '#c8cdd6' : '#2e5a7a'}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: '#091929', fontWeight: 900 }}>✓</span>}
+                      {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: '#13151a', fontWeight: 900 }}>✓</span>}
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: visibleCols[c.key] ? '#d0e8ff' : '#4a6a88' }}>{c.label}</span>
+                    <span style={{ fontSize: '0.75rem', color: visibleCols[c.key] ? '#d0e8ff' : '#4a4f5a' }}>{c.label}</span>
                   </div>
                 ))}
               </div>
@@ -1444,57 +1436,57 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           <button onClick={() => requirePin(() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); })} style={{
             padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '0.72rem', fontWeight: 600,
-            background: showForm ? 'rgba(224,92,32,0.25)' : 'rgba(224,92,32,0.15)',
-            color: pinUnlocked ? '#e05c20' : '#7a4a30', outline: '1px solid #e05c2055',
+            background: showForm ? 'rgba(224,92,32,0.25)' : 'rgba(200,121,65,0.15)',
+            color: pinUnlocked ? '#c87941' : '#7a4a30', outline: '1px solid #c8794155',
           }}>{showForm ? '✕ Cancel' : (pinUnlocked ? '+ Add Property' : '🔒 Add Property')}</button>
         </div>
       </div>
 
       {/* ── Upload Results Review ── */}
       {showUploadResults && (
-        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid #60a5fa' }}>
+        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid #c8cdd6' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#60a5fa', fontWeight: 600 }}>
+            <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 600 }}>
               Upload Preview — Review NOI Updates
             </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={() => setShowUploadResults(false)} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: '#0f2033', color: '#5a7fa0', outline: '1px solid #1e3a5a' }}>Dismiss</button>
-              <button onClick={applyUploadResults} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, background: '#60a5fa', color: '#091929' }}>Apply All Updates</button>
+              <button onClick={() => setShowUploadResults(false)} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: '#1e2128', color: '#9aa0aa', outline: '1px solid #2e3340' }}>Dismiss</button>
+              <button onClick={applyUploadResults} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, background: '#c8cdd6', color: '#13151a' }}>Apply All Updates</button>
             </div>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #1e3a5a' }}>
+              <tr style={{ borderBottom: '1px solid #2e3340' }}>
                 {['Property','Status','Matched Sheet','T-Periods','Old NOI','New NOI','Change'].map(h => (
-                  <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400 }}>{h}</th>
+                  <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {uploadResults.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid #0d2137' }}>
+                <tr key={r.id} style={{ borderBottom: '1px solid #16191f' }}>
                   <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#ffffff', fontSize: '0.82rem' }}>{r.property}</td>
                   <td style={{ padding: '0.5rem 0.75rem' }}>
                     <span style={{
                       padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 600,
-                      background: r.status === 'matched' ? 'rgba(0,212,180,0.15)' : 'rgba(255,107,107,0.15)',
-                      color: r.status === 'matched' ? '#00d4b4' : '#ff6b6b',
+                      background: r.status === 'matched' ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)',
+                      color: r.status === 'matched' ? '#6a9e7f' : '#c47474',
                     }}>
                       {r.status === 'matched' ? `✓ Matched (${Math.round(r.score*100)}%)` : r.status === 'no_match' ? '✗ No match' : '⚠ Insufficient data'}
                     </span>
                   </td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: '#7a9ab8', maxWidth: 200 }}>
+                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: '#9aa0aa', maxWidth: 200 }}>
                     {r.matchedSheet ? r.matchedSheet.replace(/^Budget Analysis - /, '').replace(/ - \d{4}.*$/, '') : '—'}
                   </td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: '#7a9ab8' }}>
+                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: '#9aa0aa' }}>
                     {r.incomeMonths ? `T${r.incomeMonths} Inc / T${r.expenseMonths} Exp` : '—'}
                   </td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: '#7a9ab8' }}>{r.oldNOI != null ? formatCurrency(r.oldNOI) : '—'}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: r.newNOI != null ? '#00d4b4' : '#5a7fa0', fontWeight: 600 }}>{r.newNOI != null ? formatCurrency(r.newNOI) : '—'}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: '#9aa0aa' }}>{r.oldNOI != null ? formatCurrency(r.oldNOI) : '—'}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: r.newNOI != null ? '#6a9e7f' : '#9aa0aa', fontWeight: 600 }}>{r.newNOI != null ? formatCurrency(r.newNOI) : '—'}</td>
                   <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem' }}>
                     {r.oldNOI != null && r.newNOI != null ? (() => {
                       const delta = r.newNOI - r.oldNOI;
-                      return <span style={{ color: delta >= 0 ? '#00d4b4' : '#ff6b6b' }}>{delta >= 0 ? '+' : ''}{formatCurrency(delta)}</span>;
+                      return <span style={{ color: delta >= 0 ? '#6a9e7f' : '#c47474' }}>{delta >= 0 ? '+' : ''}{formatCurrency(delta)}</span>;
                     })() : '—'}
                   </td>
                 </tr>
@@ -1506,8 +1498,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
 
       {/* ── Add / Edit Form ── */}
       {showForm && (
-        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid #e05c20' }}>
-          <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#e05c20', marginBottom: '1rem', fontWeight: 600 }}>
+        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid #c87941' }}>
+          <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c87941', marginBottom: '1rem', fontWeight: 600 }}>
             {editId !== null ? 'Edit Property' : 'Add New Property'}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
@@ -1576,9 +1568,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
             <div>
               <label style={labelStyle}>Covenant Test Date (SOFR lookup + NOI trailing period)</label>
               <input type="date" value={form.covenantDate} min={SOFR_MIN} max={SOFR_MAX} onChange={e => setF('covenantDate', e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
-              {form.covenantDate && <div style={{ fontSize: '0.68rem', color: '#5a7fa0', marginTop: '0.25rem' }}>
-                SOFR: <strong style={{ color: '#60a5fa' }}>{(getSofr(form.covenantDate)*100).toFixed(4)}%</strong>
-                &nbsp;· All-in: <strong style={{ color: '#e05c20' }}>{((getSofr(form.covenantDate) + parseFloat(form.spread||0)/100)*100).toFixed(4)}%</strong>
+              {form.covenantDate && <div style={{ fontSize: '0.68rem', color: '#9aa0aa', marginTop: '0.25rem' }}>
+                SOFR: <strong style={{ color: '#c8cdd6' }}>{(getSofr(form.covenantDate)*100).toFixed(4)}%</strong>
+                &nbsp;· All-in: <strong style={{ color: '#c87941' }}>{((getSofr(form.covenantDate) + parseFloat(form.spread||0)/100)*100).toFixed(4)}%</strong>
               </div>}
             </div>
             <div>
@@ -1586,7 +1578,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
               <input type="date" value={form.maturityDate} onChange={e => setF('maturityDate', e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
             </div>
           </div>
-          <button onClick={saveForm} style={{ padding: '6px 20px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, background: '#e05c20', color: '#fff' }}>
+          <button onClick={saveForm} style={{ padding: '6px 20px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, background: '#c87941', color: '#fff' }}>
             {editId !== null ? 'Save Changes' : 'Add Property'}
           </button>
         </div>
@@ -1597,19 +1589,19 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead>
-              <tr style={{ background: '#091929', borderBottom: '2px solid #1e3a5a' }}>
+              <tr style={{ background: '#13151a', borderBottom: '2px solid #2e3340' }}>
                 {/* Test Date — always visible, far left */}
-                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Test Date</th>
-                {col('testType')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Type</th>}
-                {col('property')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Property / Lender</th>}
-                {col('covenant')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Requirement</th>}
-                {col('noiPeriods') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Periods</th>}
-                {col('rate')       && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Rate</th>}
-                {col('result')     && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Our Calc → Req</th>}
-                {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Annual NOI</th>}
-                {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Variance</th>}
-                {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#5a7fa0', fontWeight: 400, whiteSpace: 'nowrap' }}>Paydown</th>}
-                {col('debtFund')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#a78bfa', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown</th>}
+                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Test Date</th>
+                {col('testType')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Type</th>}
+                {col('property')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Property / Lender</th>}
+                {col('covenant')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Requirement</th>}
+                {col('noiPeriods') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Periods</th>}
+                {col('rate')       && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Rate</th>}
+                {col('result')     && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Our Calc → Req</th>}
+                {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Annual NOI</th>}
+                {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Variance</th>}
+                {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Paydown</th>}
+                {col('debtFund')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown</th>}
                 <th style={{ padding: '0.65rem 0.4rem' }}></th>
               </tr>
             </thead>
@@ -1619,20 +1611,20 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                 const isUrgent = days !== null && days <= 30 && days >= 0;
                 const isPast = days !== null && days < 0;
                 const metColor = r.covenantType === 'dscr'
-                  ? (r.currentVal >= thresholds.high ? '#00d4b4' : r.currentVal >= thresholds.low ? '#ffd93d' : '#ff6b6b')
-                  : (r.satisfied ? '#00d4b4' : '#ff6b6b');
-                const dateColor = isUrgent ? '#ffd93d' : isPast ? '#ff6b6b' : '#b8d0e8';
+                  ? (r.currentVal >= thresholds.high ? '#6a9e7f' : r.currentVal >= thresholds.low ? '#8a7a42' : '#c47474')
+                  : (r.satisfied ? '#6a9e7f' : '#c47474');
+                const dateColor = isUrgent ? '#8a7a42' : isPast ? '#c47474' : '#c8cdd6';
                 const delta = r.currentVal - r.covenantReq;
                 return (
-                  <tr key={r.id} style={{ background: i % 2 === 0 ? 'transparent' : '#091929', borderBottom: '1px solid #0d2137' }}>
+                  <tr key={r.id} style={{ background: i % 2 === 0 ? 'transparent' : '#13151a', borderBottom: '1px solid #16191f' }}>
 
                     {/* ── Test Date — always first ── */}
-                    <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap', borderRight: '1px solid #1e3a5a' }}>
+                    <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap', borderRight: '1px solid #2e3340' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 700, color: dateColor }}>
                         {isUrgent ? '⚠ ' : isPast ? '✗ ' : ''}{fmtDate(r.covenantDate)}
                       </div>
                       {days !== null && (
-                        <div style={{ fontSize: '0.65rem', color: isUrgent ? '#ffd93d' : isPast ? '#ff6b6b55' : '#4a6a88' }}>
+                        <div style={{ fontSize: '0.65rem', color: isUrgent ? '#8a7a42' : isPast ? '#c4747455' : '#4a4f5a' }}>
                           {isPast ? `${Math.abs(days)}d ago` : `${days}d away`}
                         </div>
                       )}
@@ -1645,8 +1637,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                           display: 'inline-block', padding: '2px 10px', borderRadius: 2,
                           fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em',
                           background: r.testType === 'Maturity' ? 'rgba(167,139,250,0.18)' : 'rgba(224,92,32,0.18)',
-                          color: r.testType === 'Maturity' ? '#a78bfa' : '#e05c20',
-                          border: r.testType === 'Maturity' ? '1px solid #a78bfa44' : '1px solid #e05c2044',
+                          color: r.testType === 'Maturity' ? '#c8cdd6' : '#c87941',
+                          border: r.testType === 'Maturity' ? '1px solid #c8cdd644' : '1px solid #c8794144',
                         }}>{r.testType || 'Covenant'}</span>
                       </td>
                     )}
@@ -1655,19 +1647,19 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                     {col('property') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
                         <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.85rem' }}>{r.property}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#5a7fa0' }}>{r.lender}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#4a6a88' }}>{formatCurrency(r.loanAmount)}</div>
-                        {r.note && <div style={{ fontSize: '0.63rem', color: '#ffd93d', marginTop: '0.2rem' }}>{r.note}</div>}
+                        <div style={{ fontSize: '0.7rem', color: '#9aa0aa' }}>{r.lender}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>{formatCurrency(r.loanAmount)}</div>
+                        {r.note && <div style={{ fontSize: '0.63rem', color: '#8a7a42', marginTop: '0.2rem' }}>{r.note}</div>}
                       </td>
                     )}
 
                     {/* ── Requirement + Pass/Fail ── */}
                     {col('covenant') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.78rem', color: '#b8d0e8', fontWeight: 600 }}>
+                        <div style={{ fontSize: '0.78rem', color: '#c8cdd6', fontWeight: 600 }}>
                           {r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x DSCR` : `${r.covenantReq.toFixed(2)}% DY`}
                         </div>
-                        <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: r.satisfied ? 'rgba(0,212,180,0.15)' : 'rgba(255,107,107,0.15)', color: r.satisfied ? '#00d4b4' : '#ff6b6b' }}>
+                        <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: r.satisfied ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: r.satisfied ? '#6a9e7f' : '#c47474' }}>
                           {r.satisfied ? '✓ PASS' : '✗ FAIL'}
                         </span>
                       </td>
@@ -1676,17 +1668,17 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                     {/* ── NOI Periods ── */}
                     {col('noiPeriods') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#7a9ab8' }}>Inc: <strong style={{ color: '#b8d0e8' }}>T{r.incomeMonths}</strong></div>
-                        <div style={{ fontSize: '0.72rem', color: '#7a9ab8' }}>Exp: <strong style={{ color: '#b8d0e8' }}>T{r.expenseMonths}</strong></div>
+                        <div style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>Inc: <strong style={{ color: '#c8cdd6' }}>T{r.incomeMonths}</strong></div>
+                        <div style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>Exp: <strong style={{ color: '#c8cdd6' }}>T{r.expenseMonths}</strong></div>
                       </td>
                     )}
 
                     {/* ── Rate ── */}
                     {col('rate') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#e05c20', fontWeight: 600 }}>{(r.rate*100).toFixed(3)}%</div>
-                        <div style={{ fontSize: '0.68rem', color: '#4a6a88' }}>{(r.sofr*100).toFixed(3)}% + {r.spread}%</div>
-                        <div style={{ fontSize: '0.68rem', color: '#4a6a88' }}>{r.amort === 0 ? 'I/O' : `${r.amort}yr`}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#c87941', fontWeight: 600 }}>{(r.rate*100).toFixed(3)}%</div>
+                        <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>{(r.sofr*100).toFixed(3)}% + {r.spread}%</div>
+                        <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>{r.amort === 0 ? 'I/O' : `${r.amort}yr`}</div>
                       </td>
                     )}
 
@@ -1697,12 +1689,12 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                           <span style={{ fontSize: '1rem', fontWeight: 700, color: metColor }}>
                             {r.covenantType === 'dscr' ? r.currentVal.toFixed(3)+'x' : r.currentVal.toFixed(2)+'%'}
                           </span>
-                          <span style={{ fontSize: '0.7rem', color: '#3a5a78' }}>vs</span>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#5a7fa0' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>vs</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#9aa0aa' }}>
                             {r.covenantType === 'dscr' ? r.covenantReq.toFixed(2)+'x' : r.covenantReq.toFixed(2)+'%'}
                           </span>
                         </div>
-                        <span style={{ display: 'inline-block', marginTop: '0.2rem', padding: '1px 7px', borderRadius: 2, fontSize: '0.72rem', fontWeight: 600, background: delta >= 0 ? 'rgba(0,212,180,0.12)' : 'rgba(255,107,107,0.12)', color: delta >= 0 ? '#00d4b4' : '#ff6b6b' }}>
+                        <span style={{ display: 'inline-block', marginTop: '0.2rem', padding: '1px 7px', borderRadius: 2, fontSize: '0.72rem', fontWeight: 600, background: delta >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: delta >= 0 ? '#6a9e7f' : '#c47474' }}>
                           {delta >= 0 ? '+' : ''}{r.covenantType === 'dscr' ? delta.toFixed(3)+'x' : delta.toFixed(2)+'%'}
                         </span>
                       </td>
@@ -1711,15 +1703,15 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                     {/* ── Annual NOI ── */}
                     {col('noi') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#b8d0e8', fontWeight: 600 }}>{formatCurrency(r.noi)}</div>
-                        <div style={{ fontSize: '0.68rem', color: '#4a6a88' }}>Req: {formatCurrency(r.requiredNOI)}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#c8cdd6', fontWeight: 600 }}>{formatCurrency(r.noi)}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>Req: {formatCurrency(r.requiredNOI)}</div>
                       </td>
                     )}
 
                     {/* ── NOI Variance ── */}
                     {col('noiVariance') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.75rem', fontWeight: 600, background: r.noiVariance >= 0 ? 'rgba(0,212,180,0.12)' : 'rgba(255,107,107,0.12)', color: r.noiVariance >= 0 ? '#00d4b4' : '#ff6b6b' }}>
+                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.75rem', fontWeight: 600, background: r.noiVariance >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: r.noiVariance >= 0 ? '#6a9e7f' : '#c47474' }}>
                           {r.noiVariance >= 0 ? '+' : ''}{formatCurrency(r.noiVariance)}
                         </span>
                       </td>
@@ -1730,9 +1722,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                       <td style={{ padding: '0.65rem 0.75rem' }}>
                         {r.paydown > 0
                           ? r.paydown >= r.loanAmount * 0.999
-                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
-                            : <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#e05c20' }}>{formatCurrency(r.paydown)}</div>
-                          : <span style={{ fontSize: '0.75rem', color: '#00d4b4' }}>None</span>}
+                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
+                            : <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c87941' }}>{formatCurrency(r.paydown)}</div>
+                          : <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>}
                       </td>
                     )}
 
@@ -1753,25 +1745,25 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                       return (
                         <td style={{ padding: '0.65rem 0.75rem' }}>
                           {r.paydown >= r.loanAmount * 0.999
-                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
+                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
                             : dfNOI <= 0
-                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
+                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
                             : dfPaydown >= r.loanAmount * 0.999
-                              ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ff6b6b' }}>TBD</span>
+                              ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
                               : dfPaydown > 0
                                 ? <div>
-                                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#a78bfa' }}>{formatCurrency(dfPaydown)}</div>
-                                    <div style={{ fontSize: '0.65rem', color: '#5a4a8a', marginTop: 2 }}>{(dfRate * 100).toFixed(2)}% {dfIO ? 'I/O' : `${dfAmort}yr`}</div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c8cdd6' }}>{formatCurrency(dfPaydown)}</div>
+                                    <div style={{ fontSize: '0.65rem', color: '#4a4f5a', marginTop: 2 }}>{(dfRate * 100).toFixed(2)}% {dfIO ? 'I/O' : `${dfAmort}yr`}</div>
                                   </div>
-                                : <span style={{ fontSize: '0.75rem', color: '#00d4b4' }}>None</span>}
+                                : <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>}
                         </td>
                       );
                     })()}
 
                     {/* ── Actions ── */}
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#5a7fa0' : '#2a3a4a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
-                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#ff6b6b44' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
+                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#9aa0aa' : '#2a2d35', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
+                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#c4747444' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
                     </td>
                   </tr>
                 );
@@ -1779,7 +1771,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
             </tbody>
           </table>
         </div>
-        {rows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: '#4a6a88', fontSize: '0.85rem' }}>No properties yet — click "+ Add Property" to get started</div>}
+        {rows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: '#4a4f5a', fontSize: '0.85rem' }}>No properties yet — click "+ Add Property" to get started</div>}
       </div>
 
       </div>
@@ -1981,7 +1973,7 @@ export default function App() {
       fontFamily: "'Inter', sans-serif",
       background: TT_NAVY,
       minHeight: "100vh",
-      color: "#f0f8ff",
+      color: "#e8eaed",
       padding: "0",
       display: "flex",
       flexDirection: "column",
@@ -2007,7 +1999,7 @@ export default function App() {
 
       {/* ── Header bar ── */}
       <div style={{
-        background: "#091929",
+        background: "#13151a",
         borderBottom: `3px solid ${TT_ORANGE}`,
         padding: "1.25rem 2rem",
         display: "flex",
@@ -2025,19 +2017,19 @@ export default function App() {
         </div>
         {/* Right side — SOFR curve status + upload */}
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: "0.7rem", color: "#4a6a88" }}>Chatham 1-Mo Term SOFR Forward Curve</div>
-          <div style={{ fontSize: "0.7rem", color: sofrUpdated ? "#00d4b4" : "#4a6a88" }}>
+          <div style={{ fontSize: "0.7rem", color: "#4a4f5a" }}>Chatham 1-Mo Term SOFR Forward Curve</div>
+          <div style={{ fontSize: "0.7rem", color: sofrUpdated ? "#6a9e7f" : "#4a4f5a" }}>
             {sofrUpdated
               ? `Updated ${sofrUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
               : "as of 03 Mar 2026 (hardcoded)"}
           </div>
           {pinUnlocked ? (
-            <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', outline: '1px solid #60a5fa33' }}>
+            <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: '#c8cdd6', outline: '1px solid #c8cdd633' }}>
               ↑ Update Curve
               <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
             </label>
           ) : (
-            <button onClick={() => setShowPinModal(true)} style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(96,165,250,0.06)', color: '#3a5a78', outline: '1px solid #3a5a7833', border: 'none' }}>
+            <button onClick={() => setShowPinModal(true)} style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(200,205,214,0.05)', color: '#4a4f5a', outline: '1px solid #4a4f5a33', border: 'none' }}>
               🔒 Update Curve
             </button>
           )}
@@ -2048,7 +2040,7 @@ export default function App() {
       <div style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
 
         {/* ── Tab Nav ── */}
-        <div style={{ display: "flex", borderBottom: `1px solid #1e3a5a`, marginBottom: "2rem" }}>
+        <div style={{ display: "flex", borderBottom: `1px solid #2e3340`, marginBottom: "2rem" }}>
           <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`}
             onClick={() => setActiveTab("calculator")}>
             Calculator
@@ -2068,8 +2060,8 @@ export default function App() {
         {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} />}
 
         {/* ── Footer ── */}
-        <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid #1e3a5a`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: "0.68rem", color: "#2a4a68" }}>
+        <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid #2e3340`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: "0.68rem", color: "#4a4f5a" }}>
             Chatham 1-Month Term SOFR Forward Curve · as of 03 Mar 2026
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
@@ -2079,15 +2071,15 @@ export default function App() {
                 display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
                 padding: '2px 8px', borderRadius: 2, border: 'none', cursor: 'pointer',
                 fontFamily: 'inherit', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.08em',
-                background: pinUnlocked ? 'rgba(0,212,180,0.10)' : 'transparent',
-                color: pinUnlocked ? '#00d4b4' : '#2a4a68',
-                outline: pinUnlocked ? '1px solid rgba(0,212,180,0.25)' : '1px solid #1e3a5a',
+                background: pinUnlocked ? 'rgba(106,158,127,0.10)' : 'transparent',
+                color: pinUnlocked ? '#6a9e7f' : '#4a4f5a',
+                outline: pinUnlocked ? '1px solid rgba(106,158,127,0.25)' : '1px solid #2e3340',
               }}
               title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
             >
               {pinUnlocked ? '🔓 Editing unlocked' : '🔒 View only'}
             </button>
-            <span style={{ fontSize: "0.85rem", color: "#b8d0e8", fontWeight: 700, letterSpacing: "0.06em" }}>
+            <span style={{ fontSize: "0.85rem", color: "#c8cdd6", fontWeight: 700, letterSpacing: "0.06em" }}>
               Kevin Ashburn · <span style={{ color: TT_ORANGE }}>Thompson Thrift</span>
             </span>
           </div>
