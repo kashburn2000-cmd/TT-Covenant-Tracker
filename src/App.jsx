@@ -1514,8 +1514,20 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           headers: SB_HEADERS,
           body: JSON.stringify({ ...toDb(p), updated_at: new Date().toISOString() }),
         });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(`Save failed (${res.status}): ${err.message || err.hint || 'Unknown error — check Supabase columns exist'}`);
+          return;
+        }
         const data = await res.json();
-        setProperties(ps => ps.map(x => x.id === editId ? fromDb(data[0]) : x));
+        if (!Array.isArray(data) || !data[0]) {
+          alert('Save succeeded but response was unexpected. Refreshing data...');
+          const reload = await fetch(`${SB_URL}/rest/v1/properties?order=id`, { headers: SB_HEADERS });
+          const all = await reload.json();
+          if (Array.isArray(all)) setProperties(all.map(fromDb));
+        } else {
+          setProperties(ps => ps.map(x => x.id === editId ? fromDb(data[0]) : x));
+        }
         setEditId(null);
       } else {
         const res = await fetch(`${SB_URL}/rest/v1/properties`, {
@@ -1523,8 +1535,20 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           headers: SB_HEADERS,
           body: JSON.stringify(toDb(p)),
         });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(`Save failed (${res.status}): ${err.message || err.hint || 'Unknown error — check Supabase columns exist'}`);
+          return;
+        }
         const data = await res.json();
-        setProperties(ps => [...ps, fromDb(data[0])]);
+        if (!Array.isArray(data) || !data[0]) {
+          alert('Save succeeded but response was unexpected. Refreshing data...');
+          const reload = await fetch(`${SB_URL}/rest/v1/properties?order=id`, { headers: SB_HEADERS });
+          const all = await reload.json();
+          if (Array.isArray(all)) setProperties(all.map(fromDb));
+        } else {
+          setProperties(ps => [...ps, fromDb(data[0])]);
+        }
       }
       setForm(EMPTY_FORM);
       setShowForm(false);
