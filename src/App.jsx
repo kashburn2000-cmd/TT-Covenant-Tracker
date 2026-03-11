@@ -776,37 +776,55 @@ async function parseForecasts(file) {
 // Compute NOI from forecast sheet data.
 // Normal: trailing T months STRICTLY BEFORE the test month (e.g. test Oct, T3 income = Jul/Aug/Sep).
 // Fallback (test date in 2027+, no months available before it): use T1 December annualized.
+// Returns { noi, detail } where detail has incomeMonths[], expenseMonths[], avgIncome, avgExpense, annualizer, fallback
+const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate) {
   const { monthData, noiVals, incomeVals, totalExp } = sheetData;
   const testDate = new Date(covenantDate + 'T00:00:00');
   const testYear = testDate.getFullYear();
-  const testMonth = testDate.getMonth(); // 0-indexed
+  const testMonth = testDate.getMonth();
 
-  // Find months strictly before the test month that exist in the sheet
   const available = monthData
     .map((m, i) => ({ ...m, i }))
     .filter(m => {
       if (!m) return false;
       return (m.year * 12 + m.month) < (testYear * 12 + testMonth);
     })
-    .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month)); // most recent first
+    .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
 
-  // Fallback: test date is in 2027+ and no prior months exist in this forecast file
-  // Use T1 December (last month of the forecast, annualized)
+  // Fallback: use T1 December annualized
   if (available.length === 0) {
-    const decIdx = monthData.findIndex(m => m && m.month === 11); // December = month 11
-    if (decIdx < 0) return null;
-    return noiVals[decIdx] * 12; // annualize the single month
+    const decIdx = monthData.findIndex(m => m && m.month === 11);
+    if (decIdx < 0) return { noi: null, detail: null };
+    const decNOI = noiVals[decIdx];
+    const decIncome = incomeVals[decIdx];
+    const decExp = totalExp[decIdx];
+    return {
+      noi: decNOI * 12,
+      detail: {
+        fallback: true,
+        incomeRows: [{ label: `Dec ${monthData[decIdx].year}`, value: decIncome }],
+        expenseRows: [{ label: `Dec ${monthData[decIdx].year}`, value: decExp }],
+        avgIncome: decIncome, avgExpense: decExp, annualizer: 12,
+      }
+    };
   }
 
-  // Normal case: take up to T months of income and expense separately, annualize
   const takeInc = available.slice(0, incomeMonths);
   const takeExp = available.slice(0, expenseMonths);
 
   const avgIncome  = takeInc.reduce((s, m) => s + incomeVals[m.i], 0) / takeInc.length;
   const avgExpense = takeExp.reduce((s, m) => s + totalExp[m.i], 0) / takeExp.length;
 
-  return (avgIncome - avgExpense) * 12;
+  return {
+    noi: (avgIncome - avgExpense) * 12,
+    detail: {
+      fallback: false,
+      incomeRows: takeInc.map(m => ({ label: `${MONTH_NAMES_SHORT[m.month]} ${m.year}`, value: incomeVals[m.i] })),
+      expenseRows: takeExp.map(m => ({ label: `${MONTH_NAMES_SHORT[m.month]} ${m.year}`, value: totalExp[m.i] })),
+      avgIncome, avgExpense, annualizer: 12,
+    }
+  };
 }
 
 // ── Math transparency helper ─────────────────────────────────────────────────
@@ -877,6 +895,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       note: p.note || null,
       is_fund: p.isFund || false,
       fund_properties: p.fundProperties ? JSON.stringify(p.fundProperties) : null,
+      noi_detail: p.noiDetail ? JSON.stringify(p.noiDetail) : null,
     };
   }
   function fromDb(r) {
@@ -891,6 +910,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       note: r.note || '',
       isFund: r.is_fund || false,
       fundProperties: r.fund_properties ? (typeof r.fund_properties === 'string' ? JSON.parse(r.fund_properties) : r.fund_properties) : [],
+      noiDetail: r.noi_detail ? (typeof r.noi_detail === 'string' ? JSON.parse(r.noi_detail) : r.noi_detail) : null,
       updatedAt: r.updated_at,
     };
   }
@@ -1112,8 +1132,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         const updatedFundProps = baseFundProps.map(fp => {
           const match = sheets.find(s => s.sheetName.toLowerCase().startsWith(fp.sheetCode));
           if (!match) return fp;
-          const noi = computeNOI(match, fundRow.incomeMonths, fundRow.expenseMonths, fundRow.covenantDate);
-          return { ...fp, noi: noi !== null ? Math.round(noi) : fp.noi };
+          const { noi, detail } = computeNOI(match, fundRow.incomeMonths, fundRow.expenseMonths, fundRow.covenantDate);
+          return { ...fp, noi: noi !== null ? Math.round(noi) : fp.noi, noiDetail: detail };
         });
         const totalNOI = updatedFundProps.reduce((s, fp) => s + (fp.noi || 0), 0);
         results.push({
@@ -1140,20 +1160,21 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           continue;
         }
 
-        const computedNOI = computeNOI(bestSheet, prop.incomeMonths, prop.expenseMonths, prop.covenantDate);
+        const { noi: computedNOI, detail: computedDetail } = computeNOI(bestSheet, prop.incomeMonths, prop.expenseMonths, prop.covenantDate);
         if (computedNOI === null) {
           results.push({ id: prop.id, property: prop.property, status: 'insufficient_data', matchedSheet: bestSheet.propertyTitle, score: bestScore });
           continue;
         }
 
         // T1 NOI (most recent single month annualized) for debt fund sizing
-        const computedT1 = computeNOI(bestSheet, 1, 1, prop.covenantDate);
+        const { noi: computedT1 } = computeNOI(bestSheet, 1, 1, prop.covenantDate);
 
         results.push({
           id: prop.id, property: prop.property, status: 'matched',
           matchedSheet: bestSheet.propertyTitle, score: bestScore,
           oldNOI: prop.noi, newNOI: computedNOI,
           newNOIT1: computedT1,
+          noiDetail: computedDetail,
           incomeMonths: prop.incomeMonths, expenseMonths: prop.expenseMonths,
         });
       }
@@ -1190,6 +1211,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       if (!prop) return;
       const patch = { noi: m.newNOI, noi_t1: m.newNOIT1 ?? null, updated_at: new Date().toISOString() };
       if (m.isFund && m.fundProperties) { patch.fund_properties = JSON.stringify(m.fundProperties); patch.is_fund = true; }
+      if (m.noiDetail) patch.noi_detail = JSON.stringify(m.noiDetail);
       await fetch(`${SB_URL}/rest/v1/properties?id=eq.${m.id}`, {
         method: 'PATCH',
         headers: SB_HEADERS,
@@ -1199,7 +1221,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       setProperties(ps => ps.map(p => {
         const match = matched.find(r => r.id === p.id);
         if (!match) return p;
-        return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
+        return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
       }));
       setShowUploadResults(false);
       const now = new Date();
@@ -1974,6 +1996,53 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                                   {r.covenantType === 'dscr' && r.paydown < r.loanAmount * 0.999 && (
                                     <MathLine label="Verify DSCR" value={`${(r.noi / calcADS(r.loanAmount - r.paydown, r.rate, r.amort)).toFixed(4)}x`} eq="NOI ÷ new ADS" color="#6a9e7f" />
                                   )}
+                                </div>
+                              )}
+
+                              {/* NOI Calculation Detail */}
+                              {r.noiDetail && (
+                                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #2e3340', paddingTop: '0.6rem', marginTop: '0.2rem' }}>
+                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                                    NOI Build-up {r.noiDetail.fallback ? '— Dec fallback (2027 test date)' : ''}
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
+                                    {/* Income side */}
+                                    <div>
+                                      <div style={{ fontSize: '0.62rem', color: '#6a9e7f', fontWeight: 600, marginBottom: '0.3rem' }}>Income (T{r.incomeMonths})</div>
+                                      {r.noiDetail.incomeRows.map((row, i) => (
+                                        <MathLine key={i} label={row.label} value={formatCurrency(row.value)} />
+                                      ))}
+                                      {r.noiDetail.incomeRows.length > 1 && (
+                                        <MathLine label="Average" value={formatCurrency(r.noiDetail.avgIncome)} color="#c8cdd6" />
+                                      )}
+                                      <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgIncome * r.noiDetail.annualizer)} color="#6a9e7f" />
+                                    </div>
+                                    {/* Expense side */}
+                                    <div>
+                                      <div style={{ fontSize: '0.62rem', color: '#c47474', fontWeight: 600, marginBottom: '0.3rem' }}>Expenses (T{r.expenseMonths})</div>
+                                      {r.noiDetail.expenseRows.map((row, i) => (
+                                        <MathLine key={i} label={row.label} value={formatCurrency(row.value)} />
+                                      ))}
+                                      {r.noiDetail.expenseRows.length > 1 && (
+                                        <MathLine label="Average" value={formatCurrency(r.noiDetail.avgExpense)} color="#c8cdd6" />
+                                      )}
+                                      <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgExpense * r.noiDetail.annualizer)} color="#c47474" />
+                                    </div>
+                                  </div>
+                                  {/* Final NOI */}
+                                  <div style={{ borderTop: '1px solid #2e3340', marginTop: '0.5rem', paddingTop: '0.4rem' }}>
+                                    <MathLine
+                                      label="Annual NOI (Income − Expenses)"
+                                      value={formatCurrency(r.noi)}
+                                      eq={`${formatCurrency(r.noiDetail.avgIncome * r.noiDetail.annualizer)} − ${formatCurrency(r.noiDetail.avgExpense * r.noiDetail.annualizer)}`}
+                                      color="#c8cdd6"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                              {!r.noiDetail && (
+                                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #2e3340', paddingTop: '0.5rem', marginTop: '0.2rem' }}>
+                                  <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>NOI detail not available — upload a forecast file to populate.</div>
                                 </div>
                               )}
 
