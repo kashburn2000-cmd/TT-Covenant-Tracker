@@ -893,7 +893,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     { testType: 'Covenant', property: 'North Port',    lender: 'Simmons',       loanAmount: 56813403, noi: -427412,  spread: 3.35, amort: 0,  covenantType: 'dscr', covenantReq: 1.25, covenantDate: '2026-12-31', maturityDate: '2027-03-15', incomeMonths: 12, expenseMonths: 12 },
     { testType: 'Covenant', property: 'St Augustine',  lender: 'Simmons',       loanAmount: 49200000, noi: -398522,  spread: 3.25, amort: 0,  covenantType: 'dscr', covenantReq: 1.25, covenantDate: '2026-12-31', maturityDate: '2028-09-16', incomeMonths: 12, expenseMonths: 12 },
     { testType: 'Covenant', property: 'Port St Lucie', lender: 'Blackstone',    loanAmount: 45000000, noi: 3383400,  spread: 2.50, amort: 30, covenantType: 'dy',   covenantReq: 8.00, covenantDate: '2027-02-14', maturityDate: '2027-09-01', incomeMonths: 1,  expenseMonths: 1,  note: 'NOI: T1 Dec 2026 annualized — 2027 test date uses Dec fallback' },
-    { testType: 'Covenant', property: '2022 Fund', lender: 'Arbor',  loanAmount: 548500000, noi: 48986656, spread: 2.25, amort: 30, covenantType: 'dscr', covenantReq: 1.05, covenantDate: '2026-05-31', maturityDate: '2028-05-29', incomeMonths: 1, expenseMonths: 3, note: 'Portfolio DSCR: T1 income × 12 minus T3 expenses × 4 across 9 properties', isFund: true, fundProperties: [
+    { testType: 'Covenant', property: '2022 Fund', lender: 'Barings',  loanAmount: 548500000, noi: 48986656, spread: 2.25, amort: 30, covenantType: 'dscr', covenantReq: 1.05, covenantDate: '2026-05-31', maturityDate: '2028-05-29', incomeMonths: 1, expenseMonths: 3, note: 'Portfolio DSCR: T1 income × 12 minus T3 expenses × 4 across 9 properties', isFund: true, fundProperties: [
       { name: 'Buckeye',  sheetCode: 'wbuck', noi: 4418153, allocatedLoan: null },
       { name: 'Daytona',  sheetCode: 'wdwfl', noi: 5637604, allocatedLoan: null },
       { name: 'Fountain', sheetCode: 'wfoun', noi: 6334628, allocatedLoan: null },
@@ -1084,7 +1084,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const results = [];
 
       // ── Process 2022 Fund separately ──────────────────────────────────────
-      const fundRow = properties.find(p => p.isFund);
+      const fundRow = properties.find(p => p.isFund || p.property === '2022 Fund');
       if (fundRow) {
         const updatedFundProps = (fundRow.fundProperties || []).map(fp => {
           const match = sheets.find(s => s.sheetName.toLowerCase().startsWith(fp.sheetCode));
@@ -1104,7 +1104,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
 
       // ── Process individual properties ─────────────────────────────────────
       for (const prop of properties) {
-        if (prop.isFund) continue; // already handled above
+        if (prop.isFund || prop.property === '2022 Fund') continue; // already handled above
         // Find best matching sheet
         let bestSheet = null, bestScore = 0;
         for (const sheet of sheets) {
@@ -1166,7 +1166,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const prop = properties.find(p => p.id === m.id);
       if (!prop) return;
       const patch = { noi: m.newNOI, noi_t1: m.newNOIT1 ?? null, updated_at: new Date().toISOString() };
-      if (m.isFund && m.fundProperties) patch.fund_properties = JSON.stringify(m.fundProperties);
+      if (m.isFund && m.fundProperties) { patch.fund_properties = JSON.stringify(m.fundProperties); patch.is_fund = true; }
       await fetch(`${SB_URL}/rest/v1/properties?id=eq.${m.id}`, {
         method: 'PATCH',
         headers: SB_HEADERS,
@@ -1673,7 +1673,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                   : (r.satisfied ? '#6a9e7f' : '#c47474');
                 const dateColor = isUrgent ? '#8a7a42' : isPast ? '#c47474' : '#c8cdd6';
                 const delta = r.currentVal - r.covenantReq;
-                const isFundRow = r.isFund;
+                const isFundRow = r.isFund || r.property === '2022 Fund';
                 const fundProps = r.fundProperties || [];
                 return (
                   <React.Fragment key={r.id}>
