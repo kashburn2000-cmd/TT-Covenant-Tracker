@@ -809,6 +809,19 @@ function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate) {
   return (avgIncome - avgExpense) * 12;
 }
 
+// ── Math transparency helper ─────────────────────────────────────────────────
+function MathLine({ label, value, eq, color }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.2rem' }}>
+      <span style={{ fontSize: '0.68rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>{label}</span>
+      <div style={{ textAlign: 'right' }}>
+        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: color || '#e8eaed' }}>{value}</span>
+        {eq && <div style={{ fontSize: '0.6rem', color: '#4a4f5a' }}>{eq}</div>}
+      </div>
+    </div>
+  );
+}
+
 // ── 2022 Fund — hardcoded sheet codes → display names ────────────────────────
 const FUND_SHEETS = {
   wbuck: 'Buckeye',
@@ -917,6 +930,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [uploadStatus, setUploadStatus] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [expandedFund, setExpandedFund] = useState(false);
+  const [expandedMath, setExpandedMath] = useState(new Set());
   const [forecastMonth, setForecastMonth] = useState(null); // e.g. "February 2026"
   const [forecastMonthInput, setForecastMonthInput] = useState(''); // user-typed label before upload
   const [uploadResults, setUploadResults] = useState([]);
@@ -1887,8 +1901,88 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
                       <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#9aa0aa' : '#2a2d35', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
                       <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#c4747444' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
+                      <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? '#c87941' : '#4a4f5a' }} title="Show calculation">∑</button>
                     </td>
                   </tr>
+
+                  {/* ── Math transparency panel ── */}
+                  {expandedMath.has(r.id) && (() => {
+                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','noi','noiVariance','paydown','debtFund'].filter(col).length + 2;
+                    const monthlyPayment = r.amort === 0 ? null : (r.loanAmount * (r.rate/12) * Math.pow(1+r.rate/12, r.amort*12)) / (Math.pow(1+r.rate/12, r.amort*12) - 1);
+                    const dyActual = (r.noi / r.loanAmount) * 100;
+                    return (
+                      <tr>
+                        <td colSpan={colCount} style={{ padding: 0, background: '#16191f' }}>
+                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: '#1e2128', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #c87941' }}>
+                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#c87941', marginBottom: '0.75rem', fontWeight: 600 }}>Calculation Breakdown — {r.property}</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem 1.5rem' }}>
+
+                              {/* Inputs */}
+                              <div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Inputs</div>
+                                <MathLine label="Loan Amount" value={formatCurrency(r.loanAmount)} />
+                                <MathLine label="NOI" value={formatCurrency(r.noi)} />
+                                <MathLine label="SOFR (at test date)" value={`${(r.sofr * 100).toFixed(4)}%`} />
+                                <MathLine label="Spread" value={`${r.spread}%`} />
+                                <MathLine label="All-in Rate" value={`${(r.rate * 100).toFixed(4)}%`} eq="SOFR + Spread" />
+                                <MathLine label="Amortization" value={r.amort === 0 ? 'I/O' : `${r.amort} years`} />
+                              </div>
+
+                              {/* Debt Service */}
+                              <div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Debt Service</div>
+                                {r.amort === 0 ? (
+                                  <>
+                                    <MathLine label="Annual DS (I/O)" value={formatCurrency(r.ads)} eq={`${formatCurrency(r.loanAmount)} × ${(r.rate*100).toFixed(4)}%`} />
+                                    <MathLine label="Monthly DS" value={formatCurrency(r.ads / 12)} />
+                                  </>
+                                ) : (
+                                  <>
+                                    <MathLine label="Monthly Payment" value={formatCurrency(monthlyPayment)} eq="Standard amortization formula" />
+                                    <MathLine label="Annual DS" value={formatCurrency(r.ads)} eq="Monthly × 12" />
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Covenant Result */}
+                              <div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'Debt Yield'}</div>
+                                {r.covenantType === 'dscr' ? (
+                                  <>
+                                    <MathLine label="DSCR" value={`${r.currentVal.toFixed(4)}x`} eq={`${formatCurrency(r.noi)} ÷ ${formatCurrency(r.ads)}`} />
+                                    <MathLine label="Requirement" value={`${r.covenantReq.toFixed(2)}x`} />
+                                    <MathLine label="Variance" value={`${r.currentVal >= r.covenantReq ? '+' : ''}${(r.currentVal - r.covenantReq).toFixed(4)}x`} color={r.currentVal >= r.covenantReq ? '#6a9e7f' : '#c47474'} />
+                                    <MathLine label="Required NOI" value={formatCurrency(r.requiredNOI)} eq={`${r.covenantReq}x × ${formatCurrency(r.ads)}`} />
+                                  </>
+                                ) : (
+                                  <>
+                                    <MathLine label="Debt Yield" value={`${dyActual.toFixed(4)}%`} eq={`${formatCurrency(r.noi)} ÷ ${formatCurrency(r.loanAmount)}`} />
+                                    <MathLine label="Requirement" value={`${r.covenantReq.toFixed(2)}%`} />
+                                    <MathLine label="Variance" value={`${dyActual >= r.covenantReq ? '+' : ''}${(dyActual - r.covenantReq).toFixed(4)}%`} color={dyActual >= r.covenantReq ? '#6a9e7f' : '#c47474'} />
+                                    <MathLine label="Required NOI" value={formatCurrency(r.requiredNOI)} eq={`${r.covenantReq}% × ${formatCurrency(r.loanAmount)}`} />
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Paydown */}
+                              {!r.satisfied && (
+                                <div>
+                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Paydown to Clear</div>
+                                  <MathLine label="NOI Shortfall" value={formatCurrency(r.noiVariance)} color="#c47474" />
+                                  <MathLine label="Required Paydown" value={r.paydown >= r.loanAmount * 0.999 ? 'TBD' : formatCurrency(r.paydown)} color="#c87941" />
+                                  {r.paydown < r.loanAmount * 0.999 && <MathLine label="New Loan Balance" value={formatCurrency(r.loanAmount - r.paydown)} eq="after paydown" />}
+                                  {r.covenantType === 'dscr' && r.paydown < r.loanAmount * 0.999 && (
+                                    <MathLine label="Verify DSCR" value={`${(r.noi / calcADS(r.loanAmount - r.paydown, r.rate, r.amort)).toFixed(4)}x`} eq="NOI ÷ new ADS" color="#6a9e7f" />
+                                  )}
+                                </div>
+                              )}
+
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })()}
 
                   {/* ── Fund sub-rows ── */}
                   {isFundRow && expandedFund && fundProps.map((fp, fi) => {
