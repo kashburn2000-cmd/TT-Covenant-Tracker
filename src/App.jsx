@@ -930,6 +930,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [dfIO, setDfIO] = useState(true);
   const [dfAmortInput, setDfAmortInput] = useState('30');
   const [dfAmort, setDfAmort] = useState('30');
+  const [dfMode, setDfMode] = useState('dscr'); // 'dscr' or 'dy'
+  const [dfDY, setDfDY] = useState('8.00');
+  const [dfDYInput, setDfDYInput] = useState('8.00');
 
   const ALL_COLS = [
     { key: 'testType',    label: 'Type' },
@@ -1353,16 +1356,53 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 600, whiteSpace: 'nowrap' }}>
             Debt Fund Assumptions
           </div>
+
+          {/* DSCR / DY mode toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Min DSCR</span>
-            <input
-              type="number" step="0.01" value={dfDSCRInput}
-              onChange={e => setDfDSCRInput(e.target.value)}
-              onBlur={() => { const v = parseFloat(dfDSCRInput); if (!isNaN(v) && v > 0) setDfDSCR(String(v)); }}
-              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
-            />
-            <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>x</span>
+            <span style={{ fontSize: '0.7rem', color: '#9aa0aa' }}>Size by</span>
+            <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid #2e3340' }}>
+              {['DSCR', 'DY'].map(opt => {
+                const active = dfMode === opt.toLowerCase();
+                return (
+                  <button key={opt} onClick={() => setDfMode(opt.toLowerCase())} style={{
+                    padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: '0.7rem', fontWeight: 600,
+                    background: active ? 'rgba(200,121,65,0.2)' : '#13151a',
+                    color: active ? '#c87941' : '#4a4f5a',
+                  }}>{opt}</button>
+                );
+              })}
+            </div>
           </div>
+
+          {/* DSCR input — shown in DSCR mode */}
+          {dfMode === 'dscr' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Min DSCR</span>
+              <input
+                type="number" step="0.01" value={dfDSCRInput}
+                onChange={e => setDfDSCRInput(e.target.value)}
+                onBlur={() => { const v = parseFloat(dfDSCRInput); if (!isNaN(v) && v > 0) setDfDSCR(String(v)); }}
+                style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+              />
+              <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>x</span>
+            </div>
+          )}
+
+          {/* DY input — shown in DY mode */}
+          {dfMode === 'dy' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Min DY</span>
+              <input
+                type="number" step="0.01" value={dfDYInput}
+                onChange={e => setDfDYInput(e.target.value)}
+                onBlur={() => { const v = parseFloat(dfDYInput); if (!isNaN(v) && v > 0) setDfDY(String(v)); }}
+                style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+              />
+              <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Rate: SOFR +</span>
             <input
@@ -1373,34 +1413,37 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
             />
             <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
           </div>
-          {/* I/O Toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#9aa0aa' }}>Amortization</span>
-            <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid #2e3340' }}>
-              {['I/O', 'Amort'].map(opt => {
-                const active = opt === 'I/O' ? dfIO : !dfIO;
-                return (
-                  <button key={opt} onClick={() => setDfIO(opt === 'I/O')} style={{
-                    padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                    fontSize: '0.7rem', fontWeight: 600,
-                    background: active ? 'rgba(200,205,214,0.15)' : '#13151a',
-                    color: active ? '#c8cdd6' : '#4a4f5a',
-                  }}>{opt}</button>
-                );
-              })}
-            </div>
-            {!dfIO && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                <input
-                  type="number" step="1" min="1" max="40" value={dfAmortInput}
-                  onChange={e => setDfAmortInput(e.target.value)}
-                  onBlur={() => { const v = parseInt(dfAmortInput); if (!isNaN(v) && v > 0) setDfAmort(String(v)); }}
-                  style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
-                />
-                <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>yr</span>
+
+          {/* I/O Toggle — only relevant in DSCR mode */}
+          {dfMode === 'dscr' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span style={{ fontSize: '0.7rem', color: '#9aa0aa' }}>Amortization</span>
+              <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid #2e3340' }}>
+                {['I/O', 'Amort'].map(opt => {
+                  const active = opt === 'I/O' ? dfIO : !dfIO;
+                  return (
+                    <button key={opt} onClick={() => setDfIO(opt === 'I/O')} style={{
+                      padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: '0.7rem', fontWeight: 600,
+                      background: active ? 'rgba(200,205,214,0.15)' : '#13151a',
+                      color: active ? '#c8cdd6' : '#4a4f5a',
+                    }}>{opt}</button>
+                  );
+                })}
               </div>
-            )}
-          </div>
+              {!dfIO && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <input
+                    type="number" step="1" min="1" max="40" value={dfAmortInput}
+                    onChange={e => setDfAmortInput(e.target.value)}
+                    onBlur={() => { const v = parseInt(dfAmortInput); if (!isNaN(v) && v > 0) setDfAmort(String(v)); }}
+                    style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>yr</span>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       </div>
@@ -1665,7 +1708,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                 {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Annual NOI</th>}
                 {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Variance</th>}
                 {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Paydown</th>}
-                {col('debtFund')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown</th>}
+                {col('debtFund')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown ({dfMode === 'dy' ? `${dfDY}% DY` : `${dfDSCR}x DSCR`})</th>}
                 <th style={{ padding: '0.65rem 0.4rem' }}></th>
               </tr>
             </thead>
@@ -1803,19 +1846,25 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                     )}
 
                     {col('debtFund') && (() => {
-                      // Debt fund: T1 NOI when available, else covenant NOI
                       const dfNOI = r.noiT1 != null ? r.noiT1 : r.noi;
                       const dfRate = getSofr(r.covenantDate) + parseFloat(dfSpread) / 100;
-                      const dfDSCRVal = parseFloat(dfDSCR);
-                      let adsPerDollar;
-                      if (dfIO) {
-                        adsPerDollar = dfRate;
+                      let maxDFLoan = 0;
+                      if (dfMode === 'dy') {
+                        const dyReq = parseFloat(dfDY) / 100;
+                        maxDFLoan = dfNOI > 0 ? dfNOI / dyReq : 0;
                       } else {
-                        const mRate = dfRate / 12, n = parseInt(dfAmort) * 12;
-                        adsPerDollar = (mRate * Math.pow(1 + mRate, n)) / (Math.pow(1 + mRate, n) - 1) * 12;
+                        const dfDSCRVal = parseFloat(dfDSCR);
+                        let adsPerDollar;
+                        if (dfIO) {
+                          adsPerDollar = dfRate;
+                        } else {
+                          const mRate = dfRate / 12, n = parseInt(dfAmort) * 12;
+                          adsPerDollar = (mRate * Math.pow(1 + mRate, n)) / (Math.pow(1 + mRate, n) - 1) * 12;
+                        }
+                        maxDFLoan = dfNOI > 0 ? dfNOI / (dfDSCRVal * adsPerDollar) : 0;
                       }
-                      const maxDFLoan = dfNOI > 0 ? dfNOI / (dfDSCRVal * adsPerDollar) : 0;
                       const dfPaydown = Math.max(0, r.loanAmount - maxDFLoan);
+                      const modeLabel = dfMode === 'dy' ? `${dfDY}% DY` : `${(dfRate * 100).toFixed(2)}% ${dfIO ? 'I/O' : `${dfAmort}yr`}`;
                       return (
                         <td style={{ padding: '0.65rem 0.75rem' }}>
                           {r.paydown >= r.loanAmount * 0.999
@@ -1827,7 +1876,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                               : dfPaydown > 0
                                 ? <div>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c8cdd6' }}>{formatCurrency(dfPaydown)}</div>
-                                    <div style={{ fontSize: '0.65rem', color: '#4a4f5a', marginTop: 2 }}>{(dfRate * 100).toFixed(2)}% {dfIO ? 'I/O' : `${dfAmort}yr`}</div>
+                                    <div style={{ fontSize: '0.65rem', color: '#4a4f5a', marginTop: 2 }}>{modeLabel}</div>
                                   </div>
                                 : <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>}
                         </td>
