@@ -887,11 +887,11 @@ const MONTH_NAMES_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep'
 function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate, adjustments) {
   const { monthData, noiVals, incomeVals, totalExp } = sheetData;
   const adj = adjustments || {};
-  const actualEarlyTerm    = parseFloat(adj.actualEarlyTerm)    || 0;
-  const stdEarlyTerm       = parseFloat(adj.stdEarlyTerm)       || 0;
-  const oneTimeExpenses    = parseFloat(adj.oneTimeExpenses)    || 0;
-  const replacementReserves = parseFloat(adj.replacementReserves) || 0;
-  const hasAdj = actualEarlyTerm !== 0 || stdEarlyTerm !== 0 || oneTimeExpenses !== 0 || replacementReserves !== 0;
+  // Per-month arrays (index 0 = most recent trailing month)
+  const actualEarlyTermMonths  = adj.actualEarlyTermMonths  || [];
+  const oneTimeExpenseMonths   = adj.oneTimeExpenseMonths   || [];
+  const stdEarlyTerm           = parseFloat(adj.stdEarlyTerm)       || 0;
+  const replacementReserves    = parseFloat(adj.replacementReserves) || 0;
 
   const testDate = new Date(covenantDate + 'T00:00:00');
   const testYear = testDate.getFullYear();
@@ -911,17 +911,20 @@ function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate, adjust
     if (decIdx < 0) return { noi: null, detail: null };
     const decIncome = incomeVals[decIdx];
     const decExp = totalExp[decIdx];
-    const adjIncome  = decIncome - actualEarlyTerm + stdEarlyTerm;
-    const adjExpense = decExp + oneTimeExpenses + replacementReserves;
+    const earlyTermAdj0 = parseFloat(actualEarlyTermMonths[0]) || 0;
+    const oneTimeAdj0   = parseFloat(oneTimeExpenseMonths[0])  || 0;
+    const adjIncome  = decIncome - earlyTermAdj0 + stdEarlyTerm;
+    const adjExpense = decExp - oneTimeAdj0 + replacementReserves;
+    const hasAdj = earlyTermAdj0 !== 0 || stdEarlyTerm !== 0 || oneTimeAdj0 !== 0 || replacementReserves !== 0;
     return {
       noi: (adjIncome - adjExpense) * 12,
       detail: {
         fallback: true,
-        incomeRows: [{ label: `Dec ${monthData[decIdx].year}`, value: decIncome }],
-        expenseRows: [{ label: `Dec ${monthData[decIdx].year}`, value: decExp }],
+        incomeRows: [{ label: `Dec ${monthData[decIdx].year}`, value: decIncome, earlyTermAdj: earlyTermAdj0 }],
+        expenseRows: [{ label: `Dec ${monthData[decIdx].year}`, value: decExp, oneTimeAdj: oneTimeAdj0 }],
         avgIncome: decIncome, avgExpense: decExp, annualizer: 12,
         adjIncome, adjExpense, hasAdj,
-        actualEarlyTerm, stdEarlyTerm, oneTimeExpenses, replacementReserves,
+        stdEarlyTerm, replacementReserves,
       }
     };
   }
@@ -929,22 +932,37 @@ function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate, adjust
   const takeInc = available.slice(0, incomeMonths);
   const takeExp = available.slice(0, expenseMonths);
 
-  const avgIncome  = takeInc.reduce((s, m) => s + incomeVals[m.i], 0) / takeInc.length;
-  const avgExpense = takeExp.reduce((s, m) => s + totalExp[m.i], 0) / takeExp.length;
+  // Apply per-month adjustments to each month's actual before averaging
+  const adjIncomeRows = takeInc.map((m, idx) => {
+    const earlyTermAdj = parseFloat(actualEarlyTermMonths[idx]) || 0;
+    const raw = incomeVals[m.i];
+    return { label: `${MONTH_NAMES_SHORT[m.month]} ${m.year}`, value: raw, earlyTermAdj, adjValue: raw - earlyTermAdj };
+  });
+  const adjExpenseRows = takeExp.map((m, idx) => {
+    const oneTimeAdj = parseFloat(oneTimeExpenseMonths[idx]) || 0;
+    const raw = totalExp[m.i];
+    return { label: `${MONTH_NAMES_SHORT[m.month]} ${m.year}`, value: raw, oneTimeAdj, adjValue: raw - oneTimeAdj };
+  });
 
-  // Apply monthly adjustments to the averages
-  const adjIncome  = avgIncome  - actualEarlyTerm + stdEarlyTerm;
-  const adjExpense = avgExpense + oneTimeExpenses + replacementReserves;
+  const avgIncome  = adjIncomeRows.reduce((s, r) => s + r.adjValue, 0) / adjIncomeRows.length;
+  const avgExpense = adjExpenseRows.reduce((s, r) => s + r.adjValue, 0) / adjExpenseRows.length;
+
+  // Apply fixed adjustments to the averages
+  const adjIncome  = avgIncome  + stdEarlyTerm;
+  const adjExpense = avgExpense + replacementReserves;
+
+  const hasAdj = adjIncomeRows.some(r => r.earlyTermAdj !== 0) || stdEarlyTerm !== 0
+    || adjExpenseRows.some(r => r.oneTimeAdj !== 0) || replacementReserves !== 0;
 
   return {
     noi: (adjIncome - adjExpense) * 12,
     detail: {
       fallback: false,
-      incomeRows: takeInc.map(m => ({ label: `${MONTH_NAMES_SHORT[m.month]} ${m.year}`, value: incomeVals[m.i] })),
-      expenseRows: takeExp.map(m => ({ label: `${MONTH_NAMES_SHORT[m.month]} ${m.year}`, value: totalExp[m.i] })),
+      incomeRows: adjIncomeRows,
+      expenseRows: adjExpenseRows,
       avgIncome, avgExpense, annualizer: 12,
       adjIncome, adjExpense, hasAdj,
-      actualEarlyTerm, stdEarlyTerm, oneTimeExpenses, replacementReserves,
+      stdEarlyTerm, replacementReserves,
     }
   };
 }
@@ -1017,7 +1035,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     testType: 'Covenant', covenantDate: SOFR_MIN, maturityDate: '',
     incomeMonths: '3', expenseMonths: '3', note: '',
     variableLoan: false, loanCommitment: '', loanSchedule: EMPTY_LOAN_SCHEDULE,
-    actualEarlyTerm: '', stdEarlyTerm: '', oneTimeExpenses: '', replacementReserves: '',
+    actualEarlyTermMonths: [], oneTimeExpenseMonths: [], stdEarlyTerm: '', replacementReserves: '',
   };
 
   // ── Supabase config ──────────────────────────────────────────────────────────
@@ -1042,9 +1060,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       variable_loan: p.variableLoan || false,
       loan_commitment: p.loanCommitment != null && p.loanCommitment !== '' ? parseFloat(p.loanCommitment) : null,
       loan_schedule: p.loanSchedule ? JSON.stringify(p.loanSchedule) : null,
-      actual_early_term: p.actualEarlyTerm != null && p.actualEarlyTerm !== '' ? parseFloat(p.actualEarlyTerm) : null,
+      actual_early_term: p.actualEarlyTermMonths ? JSON.stringify(p.actualEarlyTermMonths) : null,
       std_early_term: p.stdEarlyTerm != null && p.stdEarlyTerm !== '' ? parseFloat(p.stdEarlyTerm) : null,
-      one_time_expenses: p.oneTimeExpenses != null && p.oneTimeExpenses !== '' ? parseFloat(p.oneTimeExpenses) : null,
+      one_time_expenses: p.oneTimeExpenseMonths ? JSON.stringify(p.oneTimeExpenseMonths) : null,
       replacement_reserves: p.replacementReserves != null && p.replacementReserves !== '' ? parseFloat(p.replacementReserves) : null,
     };
   }
@@ -1066,9 +1084,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       variableLoan: r.variable_loan || false,
       loanCommitment: r.loan_commitment != null ? parseFloat(r.loan_commitment) : null,
       loanSchedule: r.loan_schedule ? (typeof r.loan_schedule === 'string' ? JSON.parse(r.loan_schedule) : r.loan_schedule) : null,
-      actualEarlyTerm: r.actual_early_term != null ? parseFloat(r.actual_early_term) : null,
+      actualEarlyTermMonths: r.actual_early_term ? (typeof r.actual_early_term === 'string' ? JSON.parse(r.actual_early_term) : r.actual_early_term) : [],
       stdEarlyTerm: r.std_early_term != null ? parseFloat(r.std_early_term) : null,
-      oneTimeExpenses: r.one_time_expenses != null ? parseFloat(r.one_time_expenses) : null,
+      oneTimeExpenseMonths: r.one_time_expenses ? (typeof r.one_time_expenses === 'string' ? JSON.parse(r.one_time_expenses) : r.one_time_expenses) : [],
       replacementReserves: r.replacement_reserves != null ? parseFloat(r.replacement_reserves) : null,
       updatedAt: r.updated_at,
     };
@@ -1363,7 +1381,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         const updatedFundProps = baseFundProps.map(fp => {
           const match = sheets.find(s => s.sheetName.toLowerCase().startsWith(fp.sheetCode));
           if (!match) return fp;
-          const { noi, detail } = computeNOI(match, fundRow.incomeMonths, fundRow.expenseMonths, fundRow.covenantDate, { actualEarlyTerm: fundRow.actualEarlyTerm, stdEarlyTerm: fundRow.stdEarlyTerm, oneTimeExpenses: fundRow.oneTimeExpenses, replacementReserves: fundRow.replacementReserves });
+          const { noi, detail } = computeNOI(match, fundRow.incomeMonths, fundRow.expenseMonths, fundRow.covenantDate, { actualEarlyTermMonths: fundRow.actualEarlyTermMonths, stdEarlyTerm: fundRow.stdEarlyTerm, oneTimeExpenseMonths: fundRow.oneTimeExpenseMonths, replacementReserves: fundRow.replacementReserves });
           return { ...fp, noi: noi !== null ? Math.round(noi) : fp.noi, noiDetail: detail };
         });
         const totalNOI = updatedFundProps.reduce((s, fp) => s + (fp.noi || 0), 0);
@@ -1391,7 +1409,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           continue;
         }
 
-        const { noi: computedNOI, detail: computedDetail } = computeNOI(bestSheet, prop.incomeMonths, prop.expenseMonths, prop.covenantDate, { actualEarlyTerm: prop.actualEarlyTerm, stdEarlyTerm: prop.stdEarlyTerm, oneTimeExpenses: prop.oneTimeExpenses, replacementReserves: prop.replacementReserves });
+        const { noi: computedNOI, detail: computedDetail } = computeNOI(bestSheet, prop.incomeMonths, prop.expenseMonths, prop.covenantDate, { actualEarlyTermMonths: prop.actualEarlyTermMonths, stdEarlyTerm: prop.stdEarlyTerm, oneTimeExpenseMonths: prop.oneTimeExpenseMonths, replacementReserves: prop.replacementReserves });
         if (computedNOI === null) {
           results.push({ id: prop.id, property: prop.property, status: 'insufficient_data', matchedSheet: bestSheet.propertyTitle, score: bestScore });
           continue;
@@ -1482,9 +1500,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       variableLoan: form.variableLoan || false,
       loanCommitment: form.loanCommitment !== '' ? parseFloat(form.loanCommitment) : null,
       loanSchedule: (form.loanSchedule || []).filter(e => e.month && e.balance !== ''),
-      actualEarlyTerm: form.actualEarlyTerm !== '' ? parseFloat(form.actualEarlyTerm) : null,
+      actualEarlyTermMonths: (form.actualEarlyTermMonths || []).map(v => v !== '' ? parseFloat(v) || 0 : 0),
       stdEarlyTerm: form.stdEarlyTerm !== '' ? parseFloat(form.stdEarlyTerm) : null,
-      oneTimeExpenses: form.oneTimeExpenses !== '' ? parseFloat(form.oneTimeExpenses) : null,
+      oneTimeExpenseMonths: (form.oneTimeExpenseMonths || []).map(v => v !== '' ? parseFloat(v) || 0 : 0),
       replacementReserves: form.replacementReserves !== '' ? parseFloat(form.replacementReserves) : null,
     };
     if (!p.property || isNaN(p.loanAmount) || isNaN(p.noi)) return;
@@ -1518,7 +1536,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   function startEdit(p) {
     const emptySchedule = Array.from({ length: 12 }, () => ({ month: '', balance: '' }));
     const existingSchedule = p.loanSchedule && p.loanSchedule.length > 0 ? [...p.loanSchedule, ...emptySchedule].slice(0, 12) : emptySchedule;
-    setForm({ ...p, spread: String(p.spread), spread10y: p.spread10y != null ? String(p.spread10y) : '', sizingRate: p.sizingRate != null ? String(p.sizingRate) : '', covenantReq: String(p.covenantReq), loanAmount: String(p.loanAmount), noi: String(p.noi), incomeMonths: String(p.incomeMonths), expenseMonths: String(p.expenseMonths), variableLoan: p.variableLoan || false, loanCommitment: p.loanCommitment != null ? String(p.loanCommitment) : '', loanSchedule: existingSchedule, actualEarlyTerm: p.actualEarlyTerm != null ? String(p.actualEarlyTerm) : '', stdEarlyTerm: p.stdEarlyTerm != null ? String(p.stdEarlyTerm) : '', oneTimeExpenses: p.oneTimeExpenses != null ? String(p.oneTimeExpenses) : '', replacementReserves: p.replacementReserves != null ? String(p.replacementReserves) : '' });
+    setForm({ ...p, spread: String(p.spread), spread10y: p.spread10y != null ? String(p.spread10y) : '', sizingRate: p.sizingRate != null ? String(p.sizingRate) : '', covenantReq: String(p.covenantReq), loanAmount: String(p.loanAmount), noi: String(p.noi), incomeMonths: String(p.incomeMonths), expenseMonths: String(p.expenseMonths), variableLoan: p.variableLoan || false, loanCommitment: p.loanCommitment != null ? String(p.loanCommitment) : '', loanSchedule: existingSchedule, actualEarlyTermMonths: (p.actualEarlyTermMonths || []).map(v => v != null ? String(v) : ''), stdEarlyTerm: p.stdEarlyTerm != null ? String(p.stdEarlyTerm) : '', oneTimeExpenseMonths: (p.oneTimeExpenseMonths || []).map(v => v != null ? String(v) : ''), replacementReserves: p.replacementReserves != null ? String(p.replacementReserves) : '' });
     setEditId(p.id);
     setShowForm(true);
   }
@@ -2031,37 +2049,88 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           )}
 
           {/* ── NOI Adjustments (Fund only) ── */}
-          {form.variableLoan && (
-            <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: '#16191f', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #6a9e7f' }}>
-              <div style={{ fontSize: '0.58rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6a9e7f', marginBottom: '0.6rem', fontWeight: 600 }}>NOI Adjustments (Monthly $)</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
-                <div>
-                  <label style={labelStyle}>Less: Actual Early Term</label>
-                  <input type="number" value={form.actualEarlyTerm ?? ''} placeholder="e.g. 32433" min="0"
-                    onChange={e => setF('actualEarlyTerm', e.target.value)} style={inputStyle} />
-                  <div style={{ fontSize: '0.6rem', color: '#4a4f5a', marginTop: '0.2rem' }}>Subtracted from income</div>
+          {form.variableLoan && (() => {
+            const nInc = parseInt(form.incomeMonths) || 1;
+            const nExp = parseInt(form.expenseMonths) || 1;
+            // Helper: get month label for slot idx (0 = most recent before test date)
+            const monthLabel = (idx) => {
+              if (!form.covenantDate) return `Month ${idx + 1}`;
+              const d = new Date(form.covenantDate + 'T00:00:00');
+              d.setMonth(d.getMonth() - 1 - idx);
+              return d.toLocaleString('default', { month: 'short', year: 'numeric' });
+            };
+            const setAETM = (idx, val) => {
+              const arr = [...(form.actualEarlyTermMonths || [])];
+              while (arr.length <= idx) arr.push('');
+              arr[idx] = val;
+              setF('actualEarlyTermMonths', arr);
+            };
+            const setOTEM = (idx, val) => {
+              const arr = [...(form.oneTimeExpenseMonths || [])];
+              while (arr.length <= idx) arr.push('');
+              arr[idx] = val;
+              setF('oneTimeExpenseMonths', arr);
+            };
+            return (
+              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: '#16191f', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #6a9e7f' }}>
+                <div style={{ fontSize: '0.58rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6a9e7f', marginBottom: '0.75rem', fontWeight: 600 }}>NOI Adjustments</div>
+
+                {/* Section: Less Actual Early Term — one per income month */}
+                <div style={{ marginBottom: '0.85rem' }}>
+                  <div style={{ fontSize: '0.62rem', color: '#9aa0aa', fontWeight: 600, marginBottom: '0.35rem' }}>
+                    Less: Actual Early Term Income — per trailing income month ($)
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${nInc}, 1fr)`, gap: '0.5rem' }}>
+                    {Array.from({ length: nInc }, (_, idx) => (
+                      <div key={idx}>
+                        <label style={{ ...labelStyle, color: '#6a7080' }}>{monthLabel(idx)}</label>
+                        <input type="number" min="0"
+                          value={(form.actualEarlyTermMonths || [])[idx] ?? ''}
+                          placeholder="0"
+                          onChange={e => setAETM(idx, e.target.value)}
+                          style={inputStyle} />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <label style={labelStyle}>Add: Std Early Term</label>
-                  <input type="number" value={form.stdEarlyTerm ?? ''} placeholder="e.g. 40250" min="0"
-                    onChange={e => setF('stdEarlyTerm', e.target.value)} style={inputStyle} />
-                  <div style={{ fontSize: '0.6rem', color: '#4a4f5a', marginTop: '0.2rem' }}>T-12 normalized avg added back</div>
+
+                {/* Section: Less One-Time Expenses — one per expense month */}
+                <div style={{ marginBottom: '0.85rem' }}>
+                  <div style={{ fontSize: '0.62rem', color: '#9aa0aa', fontWeight: 600, marginBottom: '0.35rem' }}>
+                    Less: One-Time Expenses — per trailing expense month ($)
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${nExp}, 1fr)`, gap: '0.5rem' }}>
+                    {Array.from({ length: nExp }, (_, idx) => (
+                      <div key={idx}>
+                        <label style={{ ...labelStyle, color: '#6a7080' }}>{monthLabel(idx)}</label>
+                        <input type="number" min="0"
+                          value={(form.oneTimeExpenseMonths || [])[idx] ?? ''}
+                          placeholder="0"
+                          onChange={e => setOTEM(idx, e.target.value)}
+                          style={inputStyle} />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <label style={labelStyle}>Less: One-Time Expenses</label>
-                  <input type="number" value={form.oneTimeExpenses ?? ''} placeholder="e.g. 5000" min="0"
-                    onChange={e => setF('oneTimeExpenses', e.target.value)} style={inputStyle} />
-                  <div style={{ fontSize: '0.6rem', color: '#4a4f5a', marginTop: '0.2rem' }}>Subtracted from expenses</div>
-                </div>
-                <div>
-                  <label style={labelStyle}>Add: Replacement Reserves</label>
-                  <input type="number" value={form.replacementReserves ?? ''} placeholder="e.g. 52979" min="0"
-                    onChange={e => setF('replacementReserves', e.target.value)} style={inputStyle} />
-                  <div style={{ fontSize: '0.6rem', color: '#4a4f5a', marginTop: '0.2rem' }}>Added to expenses</div>
+
+                {/* Fixed fields */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid #2e3340' }}>
+                  <div>
+                    <label style={labelStyle}>Add: Standardized Early Term (monthly $)</label>
+                    <input type="number" value={form.stdEarlyTerm ?? ''} placeholder="e.g. 40250" min="0"
+                      onChange={e => setF('stdEarlyTerm', e.target.value)} style={inputStyle} />
+                    <div style={{ fontSize: '0.6rem', color: '#4a4f5a', marginTop: '0.2rem' }}>T-12 normalized avg — added back to adj income avg</div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Add: Replacement Reserves (monthly $)</label>
+                    <input type="number" value={form.replacementReserves ?? ''} placeholder="e.g. 52979" min="0"
+                      onChange={e => setF('replacementReserves', e.target.value)} style={inputStyle} />
+                    <div style={{ fontSize: '0.6rem', color: '#4a4f5a', marginTop: '0.2rem' }}>Fixed monthly reserve — added to adj expense avg</div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div style={{ marginBottom: '1rem' }}>
             <label style={labelStyle}>Note (optional)</label>
@@ -2410,10 +2479,18 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                                     <div>
                                       <div style={{ fontSize: '0.62rem', color: '#6a9e7f', fontWeight: 600, marginBottom: '0.3rem' }}>Income (T{r.incomeMonths})</div>
                                       {r.noiDetail.incomeRows.map((row, i) => (
-                                        <MathLine key={i} label={row.label} value={formatCurrency(row.value)} />
+                                        <div key={i}>
+                                          <MathLine label={row.label} value={formatCurrency(row.value)} />
+                                          {row.earlyTermAdj > 0 && (
+                                            <MathLine label="  Less: Actual Early Term" value={`(${formatCurrency(row.earlyTermAdj)})`} color="#c47474" />
+                                          )}
+                                          {row.earlyTermAdj > 0 && (
+                                            <MathLine label="  Adj Income" value={formatCurrency(row.adjValue)} color="#9aa0aa" />
+                                          )}
+                                        </div>
                                       ))}
                                       {r.noiDetail.incomeRows.length > 1 && (
-                                        <MathLine label="Average" value={formatCurrency(r.noiDetail.avgIncome)} color="#c8cdd6" />
+                                        <MathLine label={r.noiDetail.hasAdj ? 'Adj Average' : 'Average'} value={formatCurrency(r.noiDetail.avgIncome)} color="#c8cdd6" />
                                       )}
                                       <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgIncome * r.noiDetail.annualizer)} color="#6a9e7f" />
                                     </div>
@@ -2421,28 +2498,36 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                                     <div>
                                       <div style={{ fontSize: '0.62rem', color: '#c47474', fontWeight: 600, marginBottom: '0.3rem' }}>Expenses (T{r.expenseMonths})</div>
                                       {r.noiDetail.expenseRows.map((row, i) => (
-                                        <MathLine key={i} label={row.label} value={formatCurrency(row.value)} />
+                                        <div key={i}>
+                                          <MathLine label={row.label} value={formatCurrency(row.value)} />
+                                          {row.oneTimeAdj > 0 && (
+                                            <MathLine label="  Less: One-Time Expenses" value={`(${formatCurrency(row.oneTimeAdj)})`} color="#c47474" />
+                                          )}
+                                          {row.oneTimeAdj > 0 && (
+                                            <MathLine label="  Adj Expense" value={formatCurrency(row.adjValue)} color="#9aa0aa" />
+                                          )}
+                                        </div>
                                       ))}
                                       {r.noiDetail.expenseRows.length > 1 && (
-                                        <MathLine label="Average" value={formatCurrency(r.noiDetail.avgExpense)} color="#c8cdd6" />
+                                        <MathLine label={r.noiDetail.hasAdj ? 'Adj Average' : 'Average'} value={formatCurrency(r.noiDetail.avgExpense)} color="#c8cdd6" />
                                       )}
                                       <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgExpense * r.noiDetail.annualizer)} color="#c47474" />
                                     </div>
                                   </div>
-                                  {/* NOI Adjustments */}
+                                  {/* NOI Adjustments summary — fixed items */}
                                   {r.noiDetail.hasAdj && (
                                     <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #2e3340', marginTop: '0.5rem', paddingTop: '0.5rem' }}>
-                                      <div style={{ fontSize: '0.62rem', color: '#6a9e7f', fontWeight: 600, marginBottom: '0.3rem' }}>NOI Adjustments (monthly)</div>
+                                      <div style={{ fontSize: '0.62rem', color: '#6a9e7f', fontWeight: 600, marginBottom: '0.3rem' }}>NOI Adjustments</div>
                                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
                                         <div>
-                                          {r.noiDetail.actualEarlyTerm !== 0 && <MathLine label="Less: Actual Early Term" value={`(${formatCurrency(r.noiDetail.actualEarlyTerm)})`} color="#c47474" />}
-                                          {r.noiDetail.stdEarlyTerm    !== 0 && <MathLine label="Add: Std Early Term"    value={formatCurrency(r.noiDetail.stdEarlyTerm)}    color="#6a9e7f" />}
-                                          <MathLine label="Adj Monthly Income" value={formatCurrency(r.noiDetail.adjIncome)} color="#c8cdd6" />
+                                          {/* Per-month early term already shown inline in incomeRows; show avg adj income */}
+                                          {r.noiDetail.stdEarlyTerm !== 0 && <MathLine label="Add: Std Early Term (avg monthly)" value={formatCurrency(r.noiDetail.stdEarlyTerm)} color="#6a9e7f" />}
+                                          <MathLine label="Adj Avg Monthly Income" value={formatCurrency(r.noiDetail.adjIncome)} color="#c8cdd6" />
                                         </div>
                                         <div>
-                                          {r.noiDetail.oneTimeExpenses    !== 0 && <MathLine label="Less: One-Time Expenses"    value={`(${formatCurrency(r.noiDetail.oneTimeExpenses)})`}    color="#c47474" />}
-                                          {r.noiDetail.replacementReserves !== 0 && <MathLine label="Add: Replacement Reserves" value={formatCurrency(r.noiDetail.replacementReserves)} color="#c47474" />}
-                                          <MathLine label="Adj Monthly Expense" value={formatCurrency(r.noiDetail.adjExpense)} color="#c8cdd6" />
+                                          {/* Per-month one-time already shown inline in expenseRows; show reserves */}
+                                          {r.noiDetail.replacementReserves !== 0 && <MathLine label="Add: Replacement Reserves (monthly)" value={formatCurrency(r.noiDetail.replacementReserves)} color="#c47474" />}
+                                          <MathLine label="Adj Avg Monthly Expense" value={formatCurrency(r.noiDetail.adjExpense)} color="#c8cdd6" />
                                         </div>
                                       </div>
                                     </div>
