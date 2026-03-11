@@ -894,15 +894,15 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     { testType: 'Covenant', property: 'St Augustine',  lender: 'Simmons',       loanAmount: 49200000, noi: -398522,  spread: 3.25, amort: 0,  covenantType: 'dscr', covenantReq: 1.25, covenantDate: '2026-12-31', maturityDate: '2028-09-16', incomeMonths: 12, expenseMonths: 12 },
     { testType: 'Covenant', property: 'Port St Lucie', lender: 'Blackstone',    loanAmount: 45000000, noi: 3383400,  spread: 2.50, amort: 30, covenantType: 'dy',   covenantReq: 8.00, covenantDate: '2027-02-14', maturityDate: '2027-09-01', incomeMonths: 1,  expenseMonths: 1,  note: 'NOI: T1 Dec 2026 annualized — 2027 test date uses Dec fallback' },
     { testType: 'Covenant', property: '2022 Fund', lender: 'Barings',  loanAmount: 548500000, noi: 48986656, spread: 2.25, amort: 30, covenantType: 'dscr', covenantReq: 1.05, covenantDate: '2026-05-31', maturityDate: '2028-05-29', incomeMonths: 1, expenseMonths: 3, note: 'Portfolio DSCR: T1 income × 12 minus T3 expenses × 4 across 9 properties', isFund: true, fundProperties: [
-      { name: 'Buckeye',  sheetCode: 'wbuck', noi: 4418153, allocatedLoan: null },
-      { name: 'Daytona',  sheetCode: 'wdwfl', noi: 5637604, allocatedLoan: null },
-      { name: 'Fountain', sheetCode: 'wfoun', noi: 6334628, allocatedLoan: null },
-      { name: 'Greeley',  sheetCode: 'wgrco', noi: 6139373, allocatedLoan: null },
-      { name: 'Monument', sheetCode: 'wmoco', noi: 5329029, allocatedLoan: null },
-      { name: 'Ocala',    sheetCode: 'wocfl', noi: 6072188, allocatedLoan: null },
-      { name: 'Raymore',  sheetCode: 'wraym', noi: 4797631, allocatedLoan: null },
-      { name: 'Woodbury', sheetCode: 'wwood', noi: 2804451, allocatedLoan: null },
-      { name: 'Wyoming',  sheetCode: 'wwymi', noi: 7453599, allocatedLoan: null },
+      { name: 'Buckeye',  sheetCode: 'wbuck', noi: 4418153, allocatedLoan: 52117000 },
+      { name: 'Daytona',  sheetCode: 'wdwfl', noi: 5637604, allocatedLoan: 57114000 },
+      { name: 'Fountain', sheetCode: 'wfoun', noi: 6334628, allocatedLoan: 70832000 },
+      { name: 'Greeley',  sheetCode: 'wgrco', noi: 6139373, allocatedLoan: 78226000 },
+      { name: 'Monument', sheetCode: 'wmoco', noi: 5329029, allocatedLoan: 67415000 },
+      { name: 'Ocala',    sheetCode: 'wocfl', noi: 6072188, allocatedLoan: 57420000 },
+      { name: 'Raymore',  sheetCode: 'wraym', noi: 4797631, allocatedLoan: 56451000 },
+      { name: 'Woodbury', sheetCode: 'wwood', noi: 2804451, allocatedLoan: 33759000 },
+      { name: 'Wyoming',  sheetCode: 'wwymi', noi: 7453599, allocatedLoan: 75166000 },
     ]},
   ];
 
@@ -1087,9 +1087,10 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const fundRow = properties.find(p => p.isFund || p.property === '2022 Fund');
       if (fundRow) {
         // If fundProperties is empty (manually added row), build from FUND_SHEETS constant
+        const FUND_ALLOC = { wbuck: 52117000, wdwfl: 57114000, wfoun: 70832000, wgrco: 78226000, wmoco: 67415000, wocfl: 57420000, wraym: 56451000, wwood: 33759000, wwymi: 75166000 };
         const baseFundProps = (fundRow.fundProperties && fundRow.fundProperties.length > 0)
-          ? fundRow.fundProperties
-          : Object.entries(FUND_SHEETS).map(([code, name]) => ({ name, sheetCode: code, noi: 0, allocatedLoan: null }));
+          ? fundRow.fundProperties.map(fp => ({ ...fp, allocatedLoan: fp.allocatedLoan || FUND_ALLOC[fp.sheetCode] || null }))
+          : Object.entries(FUND_SHEETS).map(([code, name]) => ({ name, sheetCode: code, noi: 0, allocatedLoan: FUND_ALLOC[code] || null }));
 
         const updatedFundProps = baseFundProps.map(fp => {
           const match = sheets.find(s => s.sheetName.toLowerCase().startsWith(fp.sheetCode));
@@ -1841,35 +1842,98 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                   </tr>
 
                   {/* ── Fund sub-rows ── */}
-                  {isFundRow && expandedFund && fundProps.map((fp, fi) => (
-                    <tr key={`fund-${fi}`} style={{ background: '#13151a', borderBottom: fi === fundProps.length - 1 ? '2px solid #2e3340' : '1px solid #16191f' }}>
+                  {isFundRow && expandedFund && fundProps.map((fp, fi) => {
+                    const fpLoan = fp.allocatedLoan;
+                    const fpNOI = fp.noi || 0;
+                    const fpSofr = getSofr(r.covenantDate);
+                    const fpRate = fpSofr + parseFloat(r.spread) / 100;
+                    const fpADS = fpLoan ? calcADS(fpLoan, fpRate, r.amort) : null;
+                    const fpDSCR = fpADS && fpADS > 0 ? fpNOI / fpADS : null;
+                    const fpPassing = fpDSCR !== null ? fpDSCR >= r.covenantReq : null;
+                    const fpColor = fpDSCR === null ? '#4a4f5a' : fpPassing ? '#6a9e7f' : '#c47474';
+                    const fpDelta = fpDSCR !== null ? fpDSCR - r.covenantReq : null;
+                    const fpRequiredNOI = fpADS ? r.covenantReq * fpADS : null;
+                    const fpVariance = fpRequiredNOI !== null ? fpNOI - fpRequiredNOI : null;
+                    return (
+                    <tr key={`fund-${fi}`} style={{ background: '#13151a', borderBottom: fi === fundProps.length - 1 ? '2px solid #2e3340' : '1px solid #1e2128' }}>
+
+                      {/* Date cell — empty */}
                       <td style={{ padding: '0.4rem 0.75rem', borderRight: '1px solid #2e3340' }}></td>
+
+                      {/* Type — empty */}
                       {col('testType') && <td></td>}
+
+                      {/* Property name + allocated loan */}
                       {col('property') && (
-                        <td style={{ padding: '0.4rem 0.75rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: '1.1rem' }}>
-                            <div style={{ width: 1, height: 16, background: '#2e3340' }}></div>
-                            <div style={{ fontSize: '0.8rem', color: '#c8cdd6', fontWeight: 600 }}>{fp.name}</div>
+                        <td style={{ padding: '0.5rem 0.75rem 0.5rem 1.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div style={{ width: 1, height: 28, background: '#2e3340', flexShrink: 0 }}></div>
+                            <div>
+                              <div style={{ fontSize: '0.8rem', color: '#c8cdd6', fontWeight: 600 }}>{fp.name}</div>
+                              <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>{fpLoan ? formatCurrency(fpLoan) : 'Loan TBD'}</div>
+                            </div>
                           </div>
-                          {fp.allocatedLoan != null && <div style={{ fontSize: '0.68rem', color: '#4a4f5a', paddingLeft: '2.1rem' }}>{formatCurrency(fp.allocatedLoan)}</div>}
-                          {fp.allocatedLoan == null && <div style={{ fontSize: '0.68rem', color: '#4a4f5a', paddingLeft: '2.1rem' }}>Allocated loan TBD</div>}
                         </td>
                       )}
-                      {col('covenant') && <td></td>}
+
+                      {/* Requirement + individual pass/fail */}
+                      {col('covenant') && (
+                        <td style={{ padding: '0.5rem 0.75rem' }}>
+                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: fpPassing === null ? 'rgba(74,79,90,0.2)' : fpPassing ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: fpPassing === null ? '#4a4f5a' : fpPassing ? '#6a9e7f' : '#c47474' }}>
+                            {fpPassing === null ? '—' : fpPassing ? '✓ PASS' : '✗ FAIL'}
+                          </span>
+                        </td>
+                      )}
+
+                      {/* NOI periods — inherited */}
                       {col('noiPeriods') && <td></td>}
+
+                      {/* Rate — inherited */}
                       {col('rate') && <td></td>}
-                      {col('result') && <td></td>}
-                      {col('noi') && (
-                        <td style={{ padding: '0.4rem 0.75rem' }}>
-                          <div style={{ fontSize: '0.78rem', color: '#9aa0aa' }}>{fp.noi != null ? formatCurrency(fp.noi) : '—'}</div>
+
+                      {/* Individual DSCR vs req */}
+                      {col('result') && (
+                        <td style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap' }}>
+                          {fpDSCR !== null ? (
+                            <>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ fontSize: '0.95rem', fontWeight: 700, color: fpColor }}>{fpDSCR.toFixed(3)}x</span>
+                                <span style={{ fontSize: '0.65rem', color: '#4a4f5a' }}>vs</span>
+                                <span style={{ fontSize: '0.78rem', color: '#9aa0aa' }}>{r.covenantReq.toFixed(2)}x</span>
+                              </div>
+                              <span style={{ display: 'inline-block', marginTop: '0.15rem', padding: '1px 6px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 600, background: fpDelta >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: fpDelta >= 0 ? '#6a9e7f' : '#c47474' }}>
+                                {fpDelta >= 0 ? '+' : ''}{fpDelta.toFixed(3)}x
+                              </span>
+                            </>
+                          ) : <span style={{ color: '#4a4f5a', fontSize: '0.75rem' }}>—</span>}
                         </td>
                       )}
-                      {col('noiVariance') && <td></td>}
+
+                      {/* Individual NOI */}
+                      {col('noi') && (
+                        <td style={{ padding: '0.5rem 0.75rem' }}>
+                          <div style={{ fontSize: '0.78rem', color: '#c8cdd6', fontWeight: 600 }}>{fpNOI ? formatCurrency(fpNOI) : '—'}</div>
+                          {fpRequiredNOI && <div style={{ fontSize: '0.65rem', color: '#4a4f5a' }}>Req: {formatCurrency(fpRequiredNOI)}</div>}
+                        </td>
+                      )}
+
+                      {/* NOI variance */}
+                      {col('noiVariance') && (
+                        <td style={{ padding: '0.5rem 0.75rem' }}>
+                          {fpVariance !== null ? (
+                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.72rem', fontWeight: 600, background: fpVariance >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: fpVariance >= 0 ? '#6a9e7f' : '#c47474' }}>
+                              {fpVariance >= 0 ? '+' : ''}{formatCurrency(fpVariance)}
+                            </span>
+                          ) : <span style={{ color: '#4a4f5a' }}>—</span>}
+                        </td>
+                      )}
+
                       {col('paydown') && <td></td>}
                       {col('debtFund') && <td></td>}
                       <td></td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   </React.Fragment>
                 );
               })}
