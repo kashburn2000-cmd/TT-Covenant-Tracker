@@ -1156,6 +1156,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     { key: 'noiPeriods',  label: 'NOI Periods' },
     { key: 'rate',        label: 'Rate' },
     { key: 'result',      label: 'Our Calc vs. Req' },
+    { key: 'priorResult',  label: 'Prior Test' },
     { key: 'noi',         label: 'Annual NOI' },
     { key: 'noiVariance', label: 'NOI Variance' },
     { key: 'paydown',     label: 'Paydown' },
@@ -1471,11 +1472,17 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         body: JSON.stringify(patch),
       });
     })).then(() => {
-      setProperties(ps => ps.map(p => {
-        const match = matched.find(r => r.id === p.id);
-        if (!match) return p;
-        return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
-      }));
+      setProperties(ps => {
+        const next = ps.map(p => {
+          const match = matched.find(r => r.id === p.id);
+          if (!match) return p;
+          return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
+        });
+        next.forEach(p => {
+          if (matched.find(r => r.id === p.id)) saveSnapshot(p.id, calcRow(p));
+        });
+        return next;
+      });
       setShowUploadResults(false);
       const now = new Date();
       setLastUpdated(now);
@@ -2249,6 +2256,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                 {col('noiPeriods') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Periods</th>}
                 {col('rate')       && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Rate</th>}
                 {col('result')     && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Our Calc → Req</th>}
+                {col('priorResult') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Prior Test</th>}
                 {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Annual NOI</th>}
                 {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Variance</th>}
                 {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Paydown</th>}
@@ -2367,6 +2375,45 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                       </td>
                     )}
 
+                    {/* ── Prior Test ── */}
+                    {col('priorResult') && (() => {
+                      // Find most recent snapshot from propertyEvents (already loaded if history is open)
+                      // Otherwise try to pull from events cache; show placeholder if not loaded
+                      const events = propertyEvents[r.id];
+                      const prior = events ? events.find(e => e.type === 'snapshot') : null;
+                      if (!events) {
+                        // Lazy-load if column is visible but history panel hasn't been opened
+                        if (!propertyEvents[r.id]) fetchEvents(r.id);
+                      }
+                      if (!prior) return (
+                        <td style={{ padding: '0.65rem 0.75rem' }}>
+                          <span style={{ fontSize: '0.7rem', color: '#2e3340' }}>—</span>
+                        </td>
+                      );
+                      const priorVal = parseFloat(prior.result);
+                      const priorReq = parseFloat(prior.covenant_req);
+                      const priorDelta = priorVal - priorReq;
+                      const priorPass = prior.satisfied;
+                      const priorDate = new Date(prior.created_at);
+                      const priorLabel = priorDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
+                      const trend = priorVal !== 0 ? r.currentVal - priorVal : null;
+                      return (
+                        <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: priorPass ? '#6a9e7f' : '#c47474' }}>
+                              {r.covenantType === 'dscr' ? priorVal.toFixed(3)+'x' : priorVal.toFixed(2)+'%'}
+                            </span>
+                            {trend !== null && (
+                              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: trend >= 0 ? '#6a9e7f' : '#c47474' }}>
+                                {trend >= 0 ? '▲' : '▼'}{r.covenantType === 'dscr' ? Math.abs(trend).toFixed(3)+'x' : Math.abs(trend).toFixed(2)+'%'}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginTop: '0.15rem' }}>{priorLabel}</div>
+                        </td>
+                      );
+                    })()}
+
                     {/* ── Annual NOI ── */}
                     {col('noi') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
@@ -2444,7 +2491,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
 
                   {/* ── Math transparency panel ── */}
                   {expandedMath.has(r.id) && (() => {
-                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','noi','noiVariance','paydown','debtFund'].filter(col).length + 2;
+                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','priorResult','noi','noiVariance','paydown','debtFund'].filter(col).length + 2;
                     const monthlyPayment = r.amort === 0 ? null : (r.loanAmount * (r.rate/12) * Math.pow(1+r.rate/12, r.amort*12)) / (Math.pow(1+r.rate/12, r.amort*12) - 1);
                     const dyActual = (r.noi / (r.effectiveLoan || r.loanAmount)) * 100;
                     return (
@@ -2710,7 +2757,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
 
                   {/* ── History & Comments panel ── */}
                   {expandedHistory.has(r.id) && (() => {
-                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','noi','noiVariance','paydown','debtFund'].filter(col).length + 2;
+                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','priorResult','noi','noiVariance','paydown','debtFund'].filter(col).length + 2;
                     const events = propertyEvents[r.id] || null;
                     const fmtEvent = (iso) => {
                       const d = new Date(iso);
