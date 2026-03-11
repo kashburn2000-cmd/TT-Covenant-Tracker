@@ -1665,6 +1665,273 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     setTimeout(() => setExportMsg(''), 2500);
   }
 
+  async function loadJsPDF() {
+    if (window.jspdf) return window.jspdf;
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    return window.jspdf;
+  }
+
+  async function exportPDF() {
+    setExportMsg('Generating PDF...');
+    try {
+      const { jsPDF } = await loadJsPDF();
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const TT_ORANGE = [200, 121, 65];
+      const TT_DARK   = [22, 25, 31];
+      const TT_LIGHT  = [200, 205, 214];
+      const TT_GRAY   = [74, 79, 90];
+
+      // ── Header bar ──────────────────────────────────────────────────────────
+      doc.setFillColor(...TT_DARK);
+      doc.rect(0, 0, pageW, 52, 'F');
+
+      // Report title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(...TT_ORANGE);
+      doc.text('Covenant Compliance Dashboard', 28, 20);
+
+      // Date
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...TT_LIGHT);
+      doc.text(dateStr, 28, 33);
+
+      // Prepared by line
+      doc.setFontSize(7.5);
+      doc.setTextColor(...TT_GRAY);
+      doc.text('Prepared by Kevin Ashburn  //  Updated Monthly', 28, 44);
+
+      // Summary pills — top right
+      const passing = rows.filter(r => r.satisfied).length;
+      const failing = rows.filter(r => !r.satisfied).length;
+      const pillY = 14;
+      let pillX = pageW - 28;
+
+      const drawPill = (label, val, color) => {
+        const text = `${label}: ${val}`;
+        const tw = doc.getTextWidth(text) + 14;
+        pillX -= tw + 6;
+        doc.setFillColor(...color, 0.18);
+        doc.roundedRect(pillX, pillY - 9, tw, 13, 2, 2, 'F');
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...color);
+        doc.text(text, pillX + 7, pillY + 1);
+      };
+
+      doc.setFillColor(200, 121, 65);
+      // Draw pills right to left
+      const totalPaydown = rows.reduce((s, r) => s + r.paydown, 0);
+      // Failing pill
+      if (failing > 0) {
+        const label = `Failing: ${failing}`;
+        const tw = doc.getTextWidth(label) + 14;
+        pillX -= tw + 6;
+        doc.setFillColor(196, 116, 116, 0.25);
+        doc.roundedRect(pillX, pillY - 9, tw, 13, 2, 2, 'F');
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(196, 116, 116);
+        doc.text(label, pillX + 7, pillY + 1);
+      }
+      // Passing pill
+      {
+        const label = `Passing: ${passing}`;
+        const tw = doc.getTextWidth(label) + 14;
+        pillX -= tw + 6;
+        doc.setFillColor(106, 158, 127, 0.25);
+        doc.roundedRect(pillX, pillY - 9, tw, 13, 2, 2, 'F');
+        doc.setFontSize(7.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(106, 158, 127);
+        doc.text(label, pillX + 7, pillY + 1);
+      }
+
+      // ── Build visible columns ─────────────────────────────────────────────
+      const COL_DEFS = [
+        {
+          key: 'covenantDate',
+          head: 'Test Date',
+          always: true,
+          cell: r => fmtDate(r.covenantDate),
+        },
+        {
+          key: 'testType',
+          head: 'Type',
+          cell: r => r.testType || 'Covenant',
+        },
+        {
+          key: 'property',
+          head: 'Property / Lender',
+          always: true,
+          cell: r => `${r.property}
+${r.lender}
+${formatCurrency(r.loanAmount)}`,
+        },
+        {
+          key: 'covenant',
+          head: 'Requirement',
+          cell: r => r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x DSCR` : `${r.covenantReq.toFixed(2)}% DY`,
+        },
+        {
+          key: 'noiPeriods',
+          head: 'NOI Periods',
+          cell: r => `T${r.incomeMonths} Inc / T${r.expenseMonths} Exp`,
+        },
+        {
+          key: 'rate',
+          head: 'Rate',
+          cell: r => `${(r.rate * 100).toFixed(3)}%
+${r.rateWinner ? r.rateWinner.label : ''}`,
+        },
+        {
+          key: 'result',
+          head: 'Our Calc vs Req',
+          cell: r => {
+            const val = r.covenantType === 'dscr' ? r.currentVal.toFixed(3)+'x' : r.currentVal.toFixed(2)+'%';
+            const req = r.covenantType === 'dscr' ? r.covenantReq.toFixed(2)+'x' : r.covenantReq.toFixed(2)+'%';
+            const delta = r.currentVal - r.covenantReq;
+            const sign = delta >= 0 ? '+' : '';
+            const dStr = r.covenantType === 'dscr' ? delta.toFixed(3)+'x' : delta.toFixed(2)+'%';
+            return `${val} vs ${req}
+(${sign}${dStr})`;
+          },
+        },
+        {
+          key: 'priorResult',
+          head: 'Prior Test',
+          cell: r => {
+            const events = propertyEvents[r.id];
+            const prior = events ? events.find(e => e.type === 'snapshot') : null;
+            if (!prior) return '—';
+            const val = parseFloat(prior.result);
+            const trend = r.currentVal - val;
+            const sign = trend >= 0 ? '▲' : '▼';
+            return `${r.covenantType === 'dscr' ? val.toFixed(3)+'x' : val.toFixed(2)+'%'}
+${sign}${Math.abs(trend).toFixed(3)}`;
+          },
+        },
+        {
+          key: 'noi',
+          head: 'Annual NOI',
+          cell: r => `${formatCurrency(r.noi)}
+Req: ${formatCurrency(r.requiredNOI)}`,
+        },
+        {
+          key: 'noiVariance',
+          head: 'NOI Variance',
+          cell: r => {
+            const sign = r.noiVariance >= 0 ? '+' : '';
+            return `${sign}${formatCurrency(r.noiVariance)}`;
+          },
+        },
+        {
+          key: 'paydown',
+          head: 'Paydown',
+          cell: r => r.paydown > 0 ? formatCurrency(r.paydown) : 'None',
+        },
+      ];
+
+      const visibleDefs = COL_DEFS.filter(c => c.always || visibleCols[c.key]);
+
+      // ── Table ─────────────────────────────────────────────────────────────
+      const head = [visibleDefs.map(c => c.head)];
+      const body = rows.map(r => visibleDefs.map(c => c.cell(r)));
+
+      // Per-row style — color result cell text by pass/fail
+      const resultColIdx = visibleDefs.findIndex(c => c.key === 'result');
+
+      doc.autoTable({
+        head,
+        body,
+        startY: 58,
+        margin: { left: 28, right: 28 },
+        styles: {
+          font: 'helvetica',
+          fontSize: 7.5,
+          cellPadding: { top: 5, right: 6, bottom: 5, left: 6 },
+          textColor: [200, 205, 214],
+          fillColor: [30, 33, 40],
+          lineColor: [22, 25, 31],
+          lineWidth: 0.5,
+          overflow: 'linebreak',
+          valign: 'top',
+        },
+        headStyles: {
+          fillColor: [19, 21, 26],
+          textColor: [154, 160, 170],
+          fontStyle: 'normal',
+          fontSize: 6.5,
+          cellPadding: { top: 5, right: 6, bottom: 5, left: 6 },
+        },
+        alternateRowStyles: {
+          fillColor: [19, 21, 26],
+        },
+        columnStyles: {
+          0: { cellWidth: 54 }, // Test Date
+        },
+        didParseCell: (data) => {
+          if (data.section === 'body') {
+            const row = rows[data.row.index];
+            if (!row) return;
+            // Result column — color by pass/fail
+            if (resultColIdx !== -1 && data.column.index === resultColIdx) {
+              data.cell.styles.textColor = row.satisfied ? [106, 158, 127] : [196, 116, 116];
+              data.cell.styles.fontStyle = 'bold';
+            }
+            // NOI Variance — color by positive/negative
+            const noivIdx = visibleDefs.findIndex(c => c.key === 'noiVariance');
+            if (noivIdx !== -1 && data.column.index === noivIdx) {
+              data.cell.styles.textColor = row.noiVariance >= 0 ? [106, 158, 127] : [196, 116, 116];
+            }
+            // Paydown — amber if needed
+            const pdIdx = visibleDefs.findIndex(c => c.key === 'paydown');
+            if (pdIdx !== -1 && data.column.index === pdIdx && row.paydown > 0) {
+              data.cell.styles.textColor = [200, 121, 65];
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        },
+        didDrawPage: (data) => {
+          // Footer on each page
+          const pg = doc.internal.getCurrentPageInfo().pageNumber;
+          const total = doc.internal.getNumberOfPages();
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(6.5);
+          doc.setTextColor(...TT_GRAY);
+          doc.text(`Page ${pg} of ${total}`, pageW - 28, pageH - 14, { align: 'right' });
+          doc.text('Thompson Thrift  ·  Covenant Compliance Dashboard  ·  Confidential', 28, pageH - 14);
+        },
+      });
+
+      const filename = `TT_Covenant_Dashboard_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.pdf`;
+      doc.save(filename);
+      setExportMsg('PDF exported!');
+      setTimeout(() => setExportMsg(''), 3000);
+    } catch (err) {
+      console.error(err);
+      setExportMsg('PDF error: ' + err.message);
+      setTimeout(() => setExportMsg(''), 4000);
+    }
+  }
+
   const fmtDate = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
   const daysUntil = d => { try { return Math.ceil((new Date(d + 'T00:00:00') - new Date()) / 86400000); } catch { return null; } };
 
@@ -1890,6 +2157,10 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
             padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '0.72rem', fontWeight: 600, background: 'rgba(106,158,127,0.15)', color: '#6a9e7f', outline: '1px solid #6a9e7f44',
           }}>↓ Export CSV</button>
+          <button onClick={exportPDF} style={{
+            padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,121,65,0.15)', color: '#c87941', outline: '1px solid #c8794144',
+          }}>↓ Export PDF</button>
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowColPicker(v => !v)} style={{
               padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
