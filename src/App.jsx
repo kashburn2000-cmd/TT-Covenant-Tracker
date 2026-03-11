@@ -2662,7 +2662,7 @@ export default function App() {
               {pinUnlocked ? '🔓 Editing unlocked' : '🔒 View only'}
             </button>
             <span style={{ fontSize: "0.85rem", color: "#c8cdd6", fontWeight: 700, letterSpacing: "0.06em" }}>
-              Kevin Ashburn · <span style={{ color: TT_ORANGE }}>Thompson Thrift</span>
+              Kevin Ashburn & Kenneth Thurman & Mo & Wes · <span style={{ color: TT_ORANGE }}>Thompson Thrift</span>
             </span>
           </div>
         </div>
