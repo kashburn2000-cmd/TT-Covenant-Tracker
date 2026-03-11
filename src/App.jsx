@@ -1003,7 +1003,7 @@ function CovenantTab({ thresholds }) {
           continue;
         }
 
-        // Always compute T1 NOI (most recent single month annualized) for debt fund sizing
+        // T1 NOI (most recent single month annualized) for debt fund sizing
         const computedT1 = computeNOI(bestSheet, 1, 1, prop.covenantDate);
 
         results.push({
@@ -1619,11 +1619,10 @@ function CovenantTab({ thresholds }) {
                     )}
 
                     {col('debtFund') && (() => {
-                      // Debt fund: use T1 NOI when available, fall back to covenant NOI
+                      // Debt fund: T1 NOI when available, else covenant NOI
                       const dfNOI = r.noiT1 != null ? r.noiT1 : r.noi;
                       const dfRate = getSofr(r.covenantDate) + parseFloat(dfSpread) / 100;
                       const dfDSCRVal = parseFloat(dfDSCR);
-                      // ADS per dollar of loan (I/O = rate, amort = mortgage constant)
                       let adsPerDollar;
                       if (dfIO) {
                         adsPerDollar = dfRate;
@@ -1633,7 +1632,6 @@ function CovenantTab({ thresholds }) {
                       }
                       const maxDFLoan = dfNOI > 0 ? dfNOI / (dfDSCRVal * adsPerDollar) : 0;
                       const dfPaydown = Math.max(0, r.loanAmount - maxDFLoan);
-                      const usingT1 = r.noiT1 != null;
                       return (
                         <td style={{ padding: '0.65rem 0.75rem' }}>
                           {dfNOI <= 0
@@ -1643,12 +1641,9 @@ function CovenantTab({ thresholds }) {
                               : dfPaydown > 0
                                 ? <div>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#a78bfa' }}>{formatCurrency(dfPaydown)}</div>
-                                    <div style={{ fontSize: '0.65rem', color: '#5a4a8a', marginTop: 2 }}>{(dfRate * 100).toFixed(2)}% {dfIO ? 'I/O' : `${dfAmort}yr`} · {usingT1 ? 'T1 NOI' : 'covenant NOI'}</div>
+                                    <div style={{ fontSize: '0.65rem', color: '#5a4a8a', marginTop: 2 }}>{(dfRate * 100).toFixed(2)}% {dfIO ? 'I/O' : `${dfAmort}yr`}</div>
                                   </div>
-                                : <div>
-                                    <span style={{ fontSize: '0.75rem', color: '#00d4b4' }}>None</span>
-                                    <div style={{ fontSize: '0.65rem', color: '#5a4a8a', marginTop: 2 }}>{usingT1 ? 'T1 NOI' : 'covenant NOI'}</div>
-                                  </div>}
+                                : <span style={{ fontSize: '0.75rem', color: '#00d4b4' }}>None</span>}
                         </td>
                       );
                     })()}
@@ -1727,11 +1722,80 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
     try {
-      // Parse CSV or XLSX
-      const text = await file.text();
       let points = [];
-      if (file.name.endsWith('.csv') || file.name.endsWith('.txt')) {
-        // Expect rows like: 2026-03-09,0.036649 or date,sofr header
+
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        // Parse Chatham xlsx format using SheetJS
+        if (!window.XLSX) {
+          alert('SheetJS not yet loaded — please try again in a moment.');
+          e.target.value = '';
+          return;
+        }
+        const buf = await file.arrayBuffer();
+        const wb = window.XLSX.read(buf, { type: 'array', cellDates: true });
+
+        // Try preferred sheet names in order
+        const preferredSheets = ['SOFR', '1-month Term SOFR', '1-Month Term SOFR'];
+        let ws = null;
+        for (const name of preferredSheets) {
+          if (wb.SheetNames.includes(name)) { ws = wb.Sheets[name]; break; }
+        }
+        if (!ws) ws = wb.Sheets[wb.SheetNames[0]]; // fallback to first sheet
+
+        const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+        // Find the header row containing "Date" and "1-month Term SOFR"
+        let dateCol = -1, sofrCol = -1, dataStartRow = -1;
+        for (let r = 0; r < rows.length; r++) {
+          const row = rows[r];
+          for (let c = 0; c < row.length; c++) {
+            const val = String(row[c] || '').toLowerCase().trim();
+            if (val === 'date') dateCol = c;
+            if (val.includes('1-month term sofr') || val === '1-month term sofr') sofrCol = c;
+          }
+          if (dateCol >= 0 && sofrCol >= 0) { dataStartRow = r + 1; break; }
+        }
+
+        if (dataStartRow < 0) {
+          alert('Could not find Date / 1-month Term SOFR columns in this file. Please check it is the standard Chatham forward curve export.');
+          e.target.value = '';
+          return;
+        }
+
+        for (let r = dataStartRow; r < rows.length; r++) {
+          const row = rows[r];
+          if (!row[dateCol] || row[sofrCol] == null) continue;
+          const sofrVal = parseFloat(row[sofrCol]);
+          if (isNaN(sofrVal)) continue;
+
+          // Date may come in as a JS Date object or a string
+          let dateStr;
+          const raw = row[dateCol];
+          if (raw instanceof Date) {
+            const y = raw.getFullYear();
+            const m = String(raw.getMonth() + 1).padStart(2, '0');
+            const d = String(raw.getDate()).padStart(2, '0');
+            dateStr = `${y}-${m}-${d}`;
+          } else {
+            // Try to parse string dates like "3/9/2026" or "2026-03-09"
+            const asDate = new Date(raw);
+            if (!isNaN(asDate.getTime())) {
+              const y = asDate.getFullYear();
+              const m = String(asDate.getMonth() + 1).padStart(2, '0');
+              const d = String(asDate.getDate()).padStart(2, '0');
+              dateStr = `${y}-${m}-${d}`;
+            } else {
+              dateStr = String(raw).trim();
+            }
+          }
+          if (dateStr && dateStr.match(/\d{4}-\d{2}-\d{2}/)) {
+            points.push({ date: dateStr, sofr: sofrVal });
+          }
+        }
+
+      } else {
+        // CSV / TXT fallback
+        const text = await file.text();
         const lines = text.trim().split('\n');
         for (const line of lines) {
           const [d, s] = line.split(',').map(x => x.trim());
@@ -1741,8 +1805,9 @@ export default function App() {
           }
         }
       }
+
       if (points.length < 2) {
-        alert('Could not parse file. Please upload a CSV with two columns: date (YYYY-MM-DD) and SOFR rate (decimal, e.g. 0.0366)');
+        alert('Could not parse file. For xlsx, use the standard Chatham forward curve export. For CSV, use two columns: date (YYYY-MM-DD) and rate (decimal).');
         return;
       }
       points.sort((a, b) => a.date.localeCompare(b.date));
@@ -1768,7 +1833,7 @@ export default function App() {
         method: 'POST', headers: SB_HEADERS,
         body: JSON.stringify({ key: 'sofrUpdated', value: JSON.stringify(now.toISOString()) }),
       });
-      alert(`✓ SOFR curve updated — ${points.length} data points loaded`);
+      alert(`✓ SOFR curve updated — ${points.length} data points loaded from ${file.name}`);
     } catch (err) {
       alert('Error uploading SOFR curve: ' + err.message);
     }
@@ -1846,7 +1911,7 @@ export default function App() {
           </div>
           <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(96,165,250,0.12)', color: '#60a5fa', outline: '1px solid #60a5fa33' }}>
             ↑ Update Curve
-            <input type="file" accept=".csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
+            <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
           </label>
         </div>
       </div>
