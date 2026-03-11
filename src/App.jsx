@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 
 // ─── Chatham 1-Month Term SOFR Forward Curve (as of 03 Mar 2026) ───────────
 const SOFR_CURVE = [
@@ -809,6 +809,19 @@ function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate) {
   return (avgIncome - avgExpense) * 12;
 }
 
+// ── 2022 Fund — hardcoded sheet codes → display names ────────────────────────
+const FUND_SHEETS = {
+  wbuck: 'Buckeye',
+  wdwfl: 'Daytona',
+  wfoun: 'Fountain',
+  wgrco: 'Greeley',
+  wmoco: 'Monument',
+  wocfl: 'Ocala',
+  wraym: 'Raymore',
+  wwood: 'Woodbury',
+  wwymi: 'Wyoming',
+};
+
 function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn() }) {
   const SOFR_MIN = ACTIVE_SOFR_CURVE[0].date;
   const SOFR_MAX = ACTIVE_SOFR_CURVE[ACTIVE_SOFR_CURVE.length - 1].date;
@@ -849,6 +862,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       covenant_date: p.covenantDate, maturity_date: p.maturityDate || null,
       income_months: p.incomeMonths, expense_months: p.expenseMonths,
       note: p.note || null,
+      is_fund: p.isFund || false,
+      fund_properties: p.fundProperties ? JSON.stringify(p.fundProperties) : null,
     };
   }
   function fromDb(r) {
@@ -861,6 +876,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       covenantDate: r.covenant_date, maturityDate: r.maturity_date || '',
       incomeMonths: parseInt(r.income_months), expenseMonths: parseInt(r.expense_months),
       note: r.note || '',
+      isFund: r.is_fund || false,
+      fundProperties: r.fund_properties ? (typeof r.fund_properties === 'string' ? JSON.parse(r.fund_properties) : r.fund_properties) : [],
       updatedAt: r.updated_at,
     };
   }
@@ -876,6 +893,17 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     { testType: 'Covenant', property: 'North Port',    lender: 'Simmons',       loanAmount: 56813403, noi: -427412,  spread: 3.35, amort: 0,  covenantType: 'dscr', covenantReq: 1.25, covenantDate: '2026-12-31', maturityDate: '2027-03-15', incomeMonths: 12, expenseMonths: 12 },
     { testType: 'Covenant', property: 'St Augustine',  lender: 'Simmons',       loanAmount: 49200000, noi: -398522,  spread: 3.25, amort: 0,  covenantType: 'dscr', covenantReq: 1.25, covenantDate: '2026-12-31', maturityDate: '2028-09-16', incomeMonths: 12, expenseMonths: 12 },
     { testType: 'Covenant', property: 'Port St Lucie', lender: 'Blackstone',    loanAmount: 45000000, noi: 3383400,  spread: 2.50, amort: 30, covenantType: 'dy',   covenantReq: 8.00, covenantDate: '2027-02-14', maturityDate: '2027-09-01', incomeMonths: 1,  expenseMonths: 1,  note: 'NOI: T1 Dec 2026 annualized — 2027 test date uses Dec fallback' },
+    { testType: 'Covenant', property: '2022 Fund', lender: 'Arbor',  loanAmount: 548500000, noi: 48986656, spread: 2.25, amort: 30, covenantType: 'dscr', covenantReq: 1.05, covenantDate: '2026-05-31', maturityDate: '2028-05-29', incomeMonths: 1, expenseMonths: 3, note: 'Portfolio DSCR: T1 income × 12 minus T3 expenses × 4 across 9 properties', isFund: true, fundProperties: [
+      { name: 'Buckeye',  sheetCode: 'wbuck', noi: 4418153, allocatedLoan: null },
+      { name: 'Daytona',  sheetCode: 'wdwfl', noi: 5637604, allocatedLoan: null },
+      { name: 'Fountain', sheetCode: 'wfoun', noi: 6334628, allocatedLoan: null },
+      { name: 'Greeley',  sheetCode: 'wgrco', noi: 6139373, allocatedLoan: null },
+      { name: 'Monument', sheetCode: 'wmoco', noi: 5329029, allocatedLoan: null },
+      { name: 'Ocala',    sheetCode: 'wocfl', noi: 6072188, allocatedLoan: null },
+      { name: 'Raymore',  sheetCode: 'wraym', noi: 4797631, allocatedLoan: null },
+      { name: 'Woodbury', sheetCode: 'wwood', noi: 2804451, allocatedLoan: null },
+      { name: 'Wyoming',  sheetCode: 'wwymi', noi: 7453599, allocatedLoan: null },
+    ]},
   ];
 
   const [properties, setProperties] = useState([]);
@@ -888,6 +916,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [exportMsg, setExportMsg] = useState('');
   const [uploadStatus, setUploadStatus] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [expandedFund, setExpandedFund] = useState(false);
   const [forecastMonth, setForecastMonth] = useState(null); // e.g. "February 2026"
   const [forecastMonthInput, setForecastMonthInput] = useState(''); // user-typed label before upload
   const [uploadResults, setUploadResults] = useState([]);
@@ -1054,7 +1083,28 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const sheets = await parseForecasts(file);
       const results = [];
 
+      // ── Process 2022 Fund separately ──────────────────────────────────────
+      const fundRow = properties.find(p => p.isFund);
+      if (fundRow) {
+        const updatedFundProps = (fundRow.fundProperties || []).map(fp => {
+          const match = sheets.find(s => s.sheetName.toLowerCase().startsWith(fp.sheetCode));
+          if (!match) return fp;
+          const noi = computeNOI(match, fundRow.incomeMonths, fundRow.expenseMonths, fundRow.covenantDate);
+          return { ...fp, noi: noi !== null ? Math.round(noi) : fp.noi };
+        });
+        const totalNOI = updatedFundProps.reduce((s, fp) => s + (fp.noi || 0), 0);
+        results.push({
+          id: fundRow.id, property: fundRow.property, status: 'matched',
+          matchedSheet: '9-property portfolio roll-up', score: 1,
+          oldNOI: fundRow.noi, newNOI: totalNOI, newNOIT1: null,
+          incomeMonths: fundRow.incomeMonths, expenseMonths: fundRow.expenseMonths,
+          isFund: true, fundProperties: updatedFundProps,
+        });
+      }
+
+      // ── Process individual properties ─────────────────────────────────────
       for (const prop of properties) {
+        if (prop.isFund) continue; // already handled above
         // Find best matching sheet
         let bestSheet = null, bestScore = 0;
         for (const sheet of sheets) {
@@ -1115,15 +1165,18 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     Promise.all(matched.map(async m => {
       const prop = properties.find(p => p.id === m.id);
       if (!prop) return;
+      const patch = { noi: m.newNOI, noi_t1: m.newNOIT1 ?? null, updated_at: new Date().toISOString() };
+      if (m.isFund && m.fundProperties) patch.fund_properties = JSON.stringify(m.fundProperties);
       await fetch(`${SB_URL}/rest/v1/properties?id=eq.${m.id}`, {
         method: 'PATCH',
         headers: SB_HEADERS,
-        body: JSON.stringify({ noi: m.newNOI, noi_t1: m.newNOIT1 ?? null, updated_at: new Date().toISOString() }),
+        body: JSON.stringify(patch),
       });
     })).then(() => {
       setProperties(ps => ps.map(p => {
         const match = matched.find(r => r.id === p.id);
-        return match ? { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null } : p;
+        if (!match) return p;
+        return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
       }));
       setShowUploadResults(false);
       const now = new Date();
@@ -1620,8 +1673,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                   : (r.satisfied ? '#6a9e7f' : '#c47474');
                 const dateColor = isUrgent ? '#8a7a42' : isPast ? '#c47474' : '#c8cdd6';
                 const delta = r.currentVal - r.covenantReq;
+                const isFundRow = r.isFund;
+                const fundProps = r.fundProperties || [];
                 return (
-                  <tr key={r.id} style={{ background: i % 2 === 0 ? 'transparent' : '#13151a', borderBottom: '1px solid #16191f' }}>
+                  <React.Fragment key={r.id}>
+                  <tr style={{ background: i % 2 === 0 ? 'transparent' : '#13151a', borderBottom: isFundRow && expandedFund ? 'none' : '1px solid #16191f' }}>
 
                     {/* ── Test Date — always first ── */}
                     <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap', borderRight: '1px solid #2e3340' }}>
@@ -1651,10 +1707,17 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                     {/* ── Property / Lender ── */}
                     {col('property') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.85rem' }}>{r.property}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#9aa0aa' }}>{r.lender}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>{formatCurrency(r.loanAmount)}</div>
-                        {r.note && <div style={{ fontSize: '0.63rem', color: '#8a7a42', marginTop: '0.2rem' }}>{r.note}</div>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          {isFundRow && (
+                            <button onClick={() => setExpandedFund(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c87941', fontSize: '0.7rem', padding: '0 2px', lineHeight: 1 }} title="Expand properties">
+                              {expandedFund ? '▼' : '▶'}
+                            </button>
+                          )}
+                          <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.85rem' }}>{r.property}</div>
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#9aa0aa', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.lender}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#4a4f5a', marginLeft: isFundRow ? '1.1rem' : 0 }}>{formatCurrency(r.loanAmount)}</div>
+                        {r.note && <div style={{ fontSize: '0.63rem', color: '#8a7a42', marginTop: '0.2rem', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.note}</div>}
                       </td>
                     )}
 
@@ -1771,6 +1834,38 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
                       <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#c4747444' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
                     </td>
                   </tr>
+
+                  {/* ── Fund sub-rows ── */}
+                  {isFundRow && expandedFund && fundProps.map((fp, fi) => (
+                    <tr key={`fund-${fi}`} style={{ background: '#13151a', borderBottom: fi === fundProps.length - 1 ? '2px solid #2e3340' : '1px solid #16191f' }}>
+                      <td style={{ padding: '0.4rem 0.75rem', borderRight: '1px solid #2e3340' }}></td>
+                      {col('testType') && <td></td>}
+                      {col('property') && (
+                        <td style={{ padding: '0.4rem 0.75rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: '1.1rem' }}>
+                            <div style={{ width: 1, height: 16, background: '#2e3340' }}></div>
+                            <div style={{ fontSize: '0.8rem', color: '#c8cdd6', fontWeight: 600 }}>{fp.name}</div>
+                          </div>
+                          {fp.allocatedLoan != null && <div style={{ fontSize: '0.68rem', color: '#4a4f5a', paddingLeft: '2.1rem' }}>{formatCurrency(fp.allocatedLoan)}</div>}
+                          {fp.allocatedLoan == null && <div style={{ fontSize: '0.68rem', color: '#4a4f5a', paddingLeft: '2.1rem' }}>Allocated loan TBD</div>}
+                        </td>
+                      )}
+                      {col('covenant') && <td></td>}
+                      {col('noiPeriods') && <td></td>}
+                      {col('rate') && <td></td>}
+                      {col('result') && <td></td>}
+                      {col('noi') && (
+                        <td style={{ padding: '0.4rem 0.75rem' }}>
+                          <div style={{ fontSize: '0.78rem', color: '#9aa0aa' }}>{fp.noi != null ? formatCurrency(fp.noi) : '—'}</div>
+                        </td>
+                      )}
+                      {col('noiVariance') && <td></td>}
+                      {col('paydown') && <td></td>}
+                      {col('debtFund') && <td></td>}
+                      <td></td>
+                    </tr>
+                  ))}
+                  </React.Fragment>
                 );
               })}
             </tbody>
