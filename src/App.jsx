@@ -3261,21 +3261,56 @@ function PipelineTab() {
   // ── Seed from static data (first time, if table empty) ────────────────────
   async function seedFromBook() {
     setSaving(true);
-    const rows = PIPELINE_STATIC_DATA.map((d, i) => ({ ...d, sort_order: i }));
+    // Strip any fields not in the DB schema to avoid column errors
+    const rows = PIPELINE_STATIC_DATA.map((d, i) => ({
+      id: d.id, name: d.name, division: d.division, state: d.state,
+      type: d.type, status: d.status,
+      closing_date: d.closing_date || null,
+      action: d.action || null,
+      primary_lender: d.primary_lender || null,
+      secondary_lender: d.secondary_lender || null,
+      book_published: d.book_published || false,
+      committed: d.committed || false,
+      units: d.units || null,
+      avg_rent: d.avg_rent || null,
+      avg_sf: d.avg_sf || null,
+      gpr: d.gpr || null,
+      gpi: d.gpi || null,
+      egi: d.egi || null,
+      noi: d.noi || null,
+      cap_rate: d.cap_rate || null,
+      dev_yield: d.dev_yield || null,
+      breakeven_occ: d.breakeven_occ || null,
+      ltv: d.ltv || null,
+      unit_mix: d.unit_mix || [],
+      total_budget: d.total_budget || null,
+      cost_per_unit: d.cost_per_unit || null,
+      cost_per_sf: d.cost_per_sf || null,
+      hard_cost_per_unit: d.hard_cost_per_unit || null,
+      land_cost: d.land_cost || null,
+      soft_cost: d.soft_cost || null,
+      hard_cost: d.hard_cost || null,
+      highlights: d.highlights || null,
+      sort_order: i,
+    }));
     try {
       const res = await fetch(`${SB_URL}/rest/v1/pipeline_deals`, {
-        method: 'POST', headers: { ...SB_HEADERS, 'Prefer': 'resolution=ignore-duplicates,return=representation' },
+        method: 'POST',
+        headers: { ...SB_HEADERS, 'Prefer': 'resolution=ignore-duplicates,return=representation' },
         body: JSON.stringify(rows),
       });
+      const body = await res.json();
       if (res.ok) {
-        const saved = await res.json();
-        setDeals(saved);
-        flash('✓ Seeded ' + saved.length + ' deals from pipeline book');
+        setDeals(Array.isArray(body) ? body : rows);
+        flash('✓ Seeded ' + (Array.isArray(body) ? body.length : rows.length) + ' deals from pipeline book');
       } else {
-        const err = await res.json();
-        flash('Seed error: ' + (err.message || JSON.stringify(err)), true);
+        console.error('Seed error response:', body);
+        flash('Seed error: ' + (body.message || body.details || body.hint || JSON.stringify(body)), true);
       }
-    } catch (err) { flash('Seed error: ' + err.message, true); }
+    } catch (err) {
+      console.error('Seed fetch error:', err);
+      flash('Seed error: ' + err.message, true);
+    }
     setSaving(false);
   }
 
