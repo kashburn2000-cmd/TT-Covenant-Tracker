@@ -4186,7 +4186,24 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           doc.line(ptCoords[i].x, ptCoords[i].y, ptCoords[i+1].x, ptCoords[i+1].y);
         }
 
+        // Delta labels — only at points where balance changed
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(5.5);
+        timelineData.forEach((p, i) => {
+          if (i === 0) return;
+          const delta = p.balance - timelineData[i - 1].balance;
+          if (delta === 0) return;
+          const isPos = delta > 0;
+          const label = (isPos ? '+' : '\u2212') + '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M';
+          const px = xOff + (i / (timelineData.length - 1)) * cW;
+          const py = chartBottom - (p.balance / FACILITY_MAX) * cH;
+          const labelY = isPos ? py - 5 : py + 10;
+          doc.setTextColor(...(isPos ? [196, 116, 116] : [106, 158, 127]));
+          doc.text(label, px, labelY, { align: 'center' });
+        });
+
         // X-axis month labels — every other
+        doc.setFont('helvetica', 'normal');
         doc.setTextColor(...C_GRAY);
         doc.setFontSize(6);
         timelineData.forEach((p, i) => {
@@ -4219,7 +4236,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
 
   // ── 12-month timeline — fixed Y axis 0 to $45M ────────────────────────────
   const today = new Date();
-  const CHART_H  = 180;
+  const CHART_H  = 200;
   const Y_MAX    = FACILITY_MAX;
   const LABEL_W  = 46;
   const LABEL_H  = 18;
@@ -4515,6 +4532,24 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
                 <circle cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={3.5}
                   fill={over ? '#c47474' : '#4a7a9e'} stroke="#13151a" strokeWidth={1.5} />
               </g>
+            );
+          })}
+
+          {/* Delta labels — only at points where balance changed from prior month */}
+          {pts.map((p, i) => {
+            if (i === 0) return null;
+            const delta = p.balance - pts[i - 1].balance;
+            if (delta === 0) return null;
+            const isPos = delta > 0;
+            const label = (isPos ? '+' : '−') + '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M';
+            // Position above dot for increases, below for decreases
+            const labelY = isPos ? p.y - 10 : p.y + 19;
+            const color  = isPos ? '#c47474' : '#6a9e7f';
+            return (
+              <text key={i} x={p.x.toFixed(1)} y={labelY.toFixed(1)}
+                textAnchor="middle" fontSize="8" fill={color} fontFamily="inherit" fontWeight="600">
+                {label}
+              </text>
             );
           })}
 
