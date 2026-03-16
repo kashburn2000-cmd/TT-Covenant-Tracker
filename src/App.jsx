@@ -4040,23 +4040,56 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       doc.setTextColor(...C_GRAY);
       doc.text('Prepared monthly by Kevin Ashburn', 28, 46);
 
-      // ── Summary stats — top right ──────────────────────────────────────
+      // ── 12-Month Peak Exposure — large block on right side of header ───
       const peak = Math.max(...timelineData.map(t => t.balance), 0);
       const fmtPt = v => v == null ? '—' : '$' + (v / 1e6).toFixed(2) + 'M';
-      const stats = [
-        `Outstanding: ${fmtPt(totalOutstanding)}`,
-        `Facility: ${fmtPt(FACILITY_MAX)}`,
-        ...(threshold ? [`TT Internal Threshold: ${fmtPt(threshold)}`] : []),
-        `12-Mo Peak Exposure: ${fmtPt(peak)}`,
-      ];
+      const peakMonth = timelineData.find(t => t.balance === peak);
+      const peakOverThreshold = threshold && peak > threshold;
+      const peakColor = peakOverThreshold ? [196, 116, 116] : C_LIGHT;
+
+      // Label
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(...C_MID);
-      let rx = pageW - 28;
-      stats.reverse().forEach(s => {
-        const w = doc.getTextWidth(s);
-        doc.text(s, rx - w, 34);
-        rx -= w + 18;
+      doc.setFontSize(6.5);
+      doc.setTextColor(...C_ORANGE);
+      doc.text('12-MONTH PEAK EXPOSURE', pageW - 28, 16, { align: 'right' });
+
+      // Big number
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(...peakColor);
+      doc.text(fmtPt(peak), pageW - 28, 36, { align: 'right' });
+
+      // Sub-label: month + threshold warning
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(...C_GRAY);
+      const peakSub = peakMonth && peak > 0 ? `projected high — ${peakMonth.label}` : 'no projected draws';
+      doc.text(peakSub, pageW - 28, 46, { align: 'right' });
+      if (peakOverThreshold) {
+        doc.setTextColor(196, 116, 116);
+        doc.text(`exceeds TT Internal Threshold (${fmtPt(threshold)})`, pageW - 28, 53, { align: 'right' });
+      }
+
+      // ── Secondary stats row — sits just below the header bar ──────────
+      doc.setFillColor(13, 15, 20);
+      doc.rect(0, 56, pageW, 18, 'F');
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(...C_GRAY);
+      const secStats = [
+        `Outstanding: ${fmtPt(totalOutstanding)}`,
+        `Facility Capacity: ${fmtPt(FACILITY_MAX)}  (${fmtPt(FACILITY_MAX - totalOutstanding)} remaining)`,
+        ...(threshold ? [`TT Internal Threshold: ${fmtPt(threshold)}`] : []),
+      ];
+      let sx = 28;
+      secStats.forEach((s, i) => {
+        doc.text(s, sx, 67);
+        sx += doc.getTextWidth(s) + 20;
+        if (i < secStats.length - 1) {
+          doc.setTextColor(40, 46, 58);
+          doc.text('|', sx - 11, 67);
+          doc.setTextColor(...C_GRAY);
+        }
       });
 
       // ── Draws table ────────────────────────────────────────────────────
@@ -4079,7 +4112,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       doc.autoTable({
         head,
         body,
-        startY: 72,
+        startY: 86,
         margin: { left: 28, right: 28 },
         styles: {
           font: 'helvetica', fontSize: 8, cellPadding: 5,
