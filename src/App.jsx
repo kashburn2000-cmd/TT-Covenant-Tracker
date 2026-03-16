@@ -4000,31 +4000,60 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
   }
 
   // ── Derived numbers ─────────────────────────────────────────────────────────
-  const outstanding = draws.filter(d => d.status !== 'paid_off');
+  const outstanding = draws.filter(d => d.status === 'outstanding');
+  const proposed    = draws.filter(d => d.status === 'proposed');
   const paidOff     = draws.filter(d => d.status === 'paid_off');
   const totalOutstanding = outstanding.reduce((s, d) => s + (d.draw_amount || 0), 0);
-  const totalCommitment  = draws.reduce((s, d) => s + (d.draw_amount || 0), 0);
+  const totalProposed    = proposed.reduce((s, d) => s + (d.draw_amount || 0), 0);
   const facilityUsedPct  = totalOutstanding / FACILITY_MAX;
   const thresholdPct     = threshold ? totalOutstanding / threshold : null;
 
-  // ── 12-month timeline ───────────────────────────────────────────────────────
+  // ── 12-month timeline — fixed Y axis 0 to $45M ────────────────────────────
   const today = new Date();
+  const CHART_H  = 180;
+  const Y_MAX    = FACILITY_MAX;
+  const LABEL_W  = 46;
+  const LABEL_H  = 18;
+  const SVG_VW   = 660;
+  const PLOT_W   = SVG_VW - LABEL_W - 6;
+
   const months = Array.from({ length: 13 }, (_, i) => {
     const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
     return { label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), date: d };
   });
 
-  // For each month boundary compute projected outstanding balance
+  // Include outstanding + proposed; paid_off never contribute
   const timelineData = months.map(({ label, date }) => {
     const balance = draws.reduce((sum, d) => {
-      const taken = d.takedown_date ? new Date(d.takedown_date) : null;
-      const paid  = d.payoff_date  ? new Date(d.payoff_date)  : null;
-      // Count draw if taken before this month and not yet paid off by this month
-      if (taken && taken <= date && (!paid || paid > date)) return sum + (d.draw_amount || 0);
+      if (d.status === 'paid_off') return sum;
+      const taken = d.takedown_date ? new Date(d.takedown_date + 'T12:00:00') : null;
+      const paid  = d.payoff_date   ? new Date(d.payoff_date   + 'T12:00:00') : null;
+      if (d.status === 'outstanding') {
+        // No takedown date = already on books from day one
+        if (!taken || taken <= date) {
+          if (!paid || paid > date) return sum + (d.draw_amount || 0);
+        }
+        return sum;
+      }
+      if (d.status === 'proposed') {
+        if (taken && taken <= date && (!paid || paid > date)) return sum + (d.draw_amount || 0);
+        return sum;
+      }
       return sum;
     }, 0);
     return { label, balance };
   });
+
+  // SVG coordinate helpers — Y inverted (0 at bottom)
+  const toY = val => CHART_H - (val / Y_MAX) * CHART_H;
+  const toX = i => LABEL_W + 6 + (i / (timelineData.length - 1)) * PLOT_W;
+
+  const pts = timelineData.map((p, i) => ({ x: toX(i), y: toY(p.balance), balance: p.balance, label: p.label }));
+  const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const areaPath = `M${pts[0].x.toFixed(1)},${CHART_H} ` +
+    pts.map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
+    ` L${pts[pts.length-1].x.toFixed(1)},${CHART_H} Z`;
+  const thresholdY = threshold ? toY(threshold) : null;
 
   // ── Formatters ──────────────────────────────────────────────────────────────
   const fmtM  = v => v == null ? '—' : '$' + (v / 1e6).toFixed(2) + 'M';
@@ -4034,15 +4063,13 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       <div style={{ height: '100%', width: `${Math.min(pct * 100, 100)}%`, background: color, borderRadius: 3, transition: 'width 0.4s' }} />
     </div>
   );
-  const statusColor = s => s === 'paid_off' ? '#6a9e7f' : '#c87941';
-  const statusLabel = s => s === 'paid_off' ? 'Paid Off' : 'Outstanding';
+  const statusColor = s => s === 'paid_off' ? '#6a9e7f' : s === 'proposed' ? '#4a9acf' : '#c87941';
+  const statusLabel = s => s === 'paid_off' ? 'Paid Off' : s === 'proposed' ? 'Proposed' : 'Outstanding';
+  const statusBg    = s => s === 'paid_off' ? 'rgba(106,158,127,0.1)' : s === 'proposed' ? 'rgba(74,154,207,0.12)' : 'rgba(200,121,65,0.12)';
 
   const inputSt = { background: '#1a1d24', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', padding: '6px 10px', fontFamily: 'inherit', fontSize: '0.8rem', width: '100%', boxSizing: 'border-box' };
   const labelSt = { fontSize: '0.6rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 3 };
   const fieldSt = { marginBottom: '0.75rem' };
-
-  // max timeline bar
-  const maxTimeline = Math.max(...timelineData.map(t => t.balance), threshold || 0, 1);
 
   if (loading) return <div style={{ padding: '3rem', textAlign: 'center', color: '#4a4f5a' }}>Loading land facility data…</div>;
 
@@ -4055,9 +4082,9 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
         {[
           { label: 'Outstanding Balance', value: fmtM(totalOutstanding), sub: `${outstanding.length} active draw${outstanding.length !== 1 ? 's' : ''}`, color: totalOutstanding > (threshold || Infinity) ? '#c47474' : '#e8eaed' },
+          { label: 'Proposed Exposure', value: fmtM(totalProposed), sub: `${proposed.length} proposed draw${proposed.length !== 1 ? 's' : ''}`, color: '#4a9acf' },
           { label: 'Facility Capacity', value: fmtM(FACILITY_MAX), sub: `${fmtM(FACILITY_MAX - totalOutstanding)} remaining`, color: '#e8eaed' },
           { label: 'Internal Threshold', value: threshold ? fmtM(threshold) : 'Not set', sub: threshold ? (totalOutstanding > threshold ? '⚠ Over threshold' : `${fmtM(threshold - totalOutstanding)} headroom`) : 'Set below', color: threshold && totalOutstanding > threshold ? '#c47474' : '#e8eaed' },
-          { label: 'Total Committed', value: fmtM(totalCommitment), sub: `${paidOff.length} paid off`, color: '#e8eaed' },
         ].map(({ label, value, sub, color }) => (
           <div key={label} style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
             <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
@@ -4138,6 +4165,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
                 <label style={labelSt}>Status</label>
                 <select style={inputSt} value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))}>
                   <option value="outstanding">Outstanding</option>
+                  <option value="proposed">Proposed</option>
                   <option value="paid_off">Paid Off</option>
                 </select>
               </div>
@@ -4169,8 +4197,8 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #1e2330' }}>
-                {['Property', 'Commitment', 'Funded', 'Takedown', 'Expected Payoff', 'Status', 'Note', ''].map(h => (
-                  <th key={h} style={{ padding: '0.55rem 1rem', textAlign: h === 'Commitment' || h === 'Funded' ? 'right' : 'left', fontSize: '0.6rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 400, whiteSpace: 'nowrap' }}>{h}</th>
+                {['Property', 'Amount', 'Currently Funded', 'Takedown', 'Expected Payoff', 'Status', 'Note', ''].map(h => (
+                  <th key={h} style={{ padding: '0.55rem 1rem', textAlign: h === 'Amount' || h === 'Currently Funded' ? 'right' : 'left', fontSize: '0.6rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 400, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -4179,13 +4207,13 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
                 <tr key={d.id} style={{ borderBottom: '1px solid #1a1d24', opacity: d.status === 'paid_off' ? 0.55 : 1 }}>
                   <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#c8cdd6', fontWeight: 600 }}>{d.name}</td>
                   <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#9aa0aa', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(d.draw_amount)}</td>
-                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: d.status === 'paid_off' ? '#4a4f5a' : '#e8eaed', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
-                    {d.status === 'paid_off' ? '—' : fmtM(d.draw_amount)}
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: d.status === 'outstanding' ? '#e8eaed' : '#4a4f5a' }}>
+                    {d.status === 'outstanding' ? fmtM(d.draw_amount) : '—'}
                   </td>
                   <td style={{ padding: '0.7rem 1rem', fontSize: '0.75rem', color: '#9aa0aa' }}>{fmtD(d.takedown_date)}</td>
                   <td style={{ padding: '0.7rem 1rem', fontSize: '0.75rem', color: '#9aa0aa' }}>{fmtD(d.payoff_date)}</td>
                   <td style={{ padding: '0.7rem 1rem' }}>
-                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: statusColor(d.status), background: d.status === 'paid_off' ? 'rgba(106,158,127,0.1)' : 'rgba(200,121,65,0.12)', padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: statusColor(d.status), background: statusBg(d.status), padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
                       {statusLabel(d.status)}
                     </span>
                   </td>
@@ -4202,10 +4230,10 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
                   </td>
                 </tr>
               ))}
-              {/* Totals row */}
+              {/* Totals row — outstanding funded only, no commitment sum */}
               <tr style={{ borderTop: '2px solid #2e3340', background: '#0f1117' }}>
-                <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: '#4a4f5a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total</td>
-                <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#9aa0aa', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{fmtM(totalCommitment)}</td>
+                <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: '#4a4f5a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Currently Funded</td>
+                <td />
                 <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#e8eaed', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{fmtM(totalOutstanding)}</td>
                 <td colSpan={5} />
               </tr>
@@ -4214,44 +4242,83 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
         )}
       </div>
 
-      {/* ── 12-month exposure timeline ── */}
+      {/* ── 12-month exposure line chart ── */}
       <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1.25rem 1.5rem' }}>
-        <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: '1.25rem' }}>
-          12-Month Exposure Forecast
-        </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 140, position: 'relative' }}>
-          {/* Y-axis labels */}
-          {[0, 0.25, 0.5, 0.75, 1].map(frac => {
-            const val = maxTimeline * frac;
-            return (
-              <div key={frac} style={{ position: 'absolute', left: 0, bottom: frac * 140 - 8, fontSize: '0.55rem', color: '#4a4f5a', width: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                {fmtM(val)}
-              </div>
-            );
-          })}
-          {/* Threshold line */}
-          {threshold && (
-            <div style={{ position: 'absolute', left: 40, right: 0, bottom: (threshold / maxTimeline) * 140, borderTop: '1px dashed #c87941', zIndex: 2 }}>
-              <span style={{ position: 'absolute', right: 0, top: -14, fontSize: '0.55rem', color: '#c87941' }}>threshold</span>
-            </div>
-          )}
-          {/* Bars */}
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, flex: 1, marginLeft: 40, height: '100%' }}>
-            {timelineData.map(({ label, balance }) => {
-              const h = maxTimeline > 0 ? (balance / maxTimeline) * 140 : 0;
-              const overThreshold = threshold && balance > threshold;
-              const barColor = overThreshold ? '#c47474' : balance > 0 ? '#4a7a9e' : '#1e2330';
-              return (
-                <div key={label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
-                  <div title={fmtM(balance)} style={{ width: '100%', height: Math.max(h, balance > 0 ? 2 : 0), background: barColor, borderRadius: '2px 2px 0 0', transition: 'height 0.3s', minWidth: 0 }} />
-                  <div style={{ fontSize: '0.5rem', color: '#4a4f5a', marginTop: 4, textAlign: 'center', whiteSpace: 'nowrap' }}>{label}</div>
-                </div>
-              );
-            })}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>12-Month Exposure Forecast</div>
+          <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.6rem', color: '#4a7a9e', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 2, background: '#4a7a9e', borderRadius: 1 }} />Projected exposure</span>
+            {threshold && <span style={{ fontSize: '0.6rem', color: '#c87941', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed #c87941' }} />Threshold {fmtM(threshold)}</span>}
+            <span style={{ fontSize: '0.6rem', color: '#3a4050', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '1px dashed #3a4050' }} />$45M cap</span>
           </div>
         </div>
-        <div style={{ marginTop: '0.75rem', fontSize: '0.62rem', color: '#4a4f5a' }}>
-          Bars represent projected outstanding balance at the start of each month based on takedown and payoff dates. Draws without dates are excluded.
+        <svg viewBox={`0 0 ${SVG_VW} ${CHART_H + LABEL_H}`} style={{ width: '100%', display: 'block', overflow: 'visible' }}>
+          {/* Horizontal grid lines at 0%, 25%, 50%, 75%, 100% of $45M */}
+          {[0, 0.25, 0.5, 0.75, 1].map(frac => {
+            const y = toY(frac * Y_MAX);
+            const isTop = frac === 1;
+            return (
+              <g key={frac}>
+                <line x1={LABEL_W + 2} x2={SVG_VW} y1={y} y2={y}
+                  stroke={isTop ? '#3a4555' : '#1e2330'}
+                  strokeWidth={isTop ? 1.5 : 1}
+                  strokeDasharray={isTop ? '5 4' : undefined} />
+                <text x={LABEL_W - 2} y={y + 4} textAnchor="end" fontSize="9" fill="#4a4f5a" fontFamily="inherit">
+                  {fmtM(frac * Y_MAX)}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Internal threshold line */}
+          {threshold && thresholdY != null && (
+            <g>
+              <line x1={LABEL_W + 2} x2={SVG_VW} y1={thresholdY} y2={thresholdY}
+                stroke="#c87941" strokeWidth={1.5} strokeDasharray="6 3" opacity="0.85" />
+              <text x={SVG_VW - 3} y={thresholdY - 5} textAnchor="end" fontSize="8.5" fill="#c87941" fontFamily="inherit" opacity="0.9">
+                {fmtM(threshold)}
+              </text>
+            </g>
+          )}
+
+          {/* Filled area under line */}
+          <path d={areaPath} fill="rgba(74,122,158,0.10)" />
+
+          {/* Line segments — red where over threshold */}
+          {pts.slice(0, -1).map((p, i) => {
+            const next = pts[i + 1];
+            const over = threshold && (p.balance > threshold || next.balance > threshold);
+            return (
+              <line key={i}
+                x1={p.x.toFixed(1)} y1={p.y.toFixed(1)}
+                x2={next.x.toFixed(1)} y2={next.y.toFixed(1)}
+                stroke={over ? '#c47474' : '#4a7a9e'}
+                strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+            );
+          })}
+
+          {/* Dots */}
+          {pts.map((p, i) => {
+            const over = threshold && p.balance > threshold;
+            return (
+              <g key={i}>
+                <title>{p.label}: {fmtM(p.balance)}</title>
+                <circle cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={3.5}
+                  fill={over ? '#c47474' : '#4a7a9e'} stroke="#13151a" strokeWidth={1.5} />
+              </g>
+            );
+          })}
+
+          {/* X-axis labels — every other month to avoid crowding */}
+          {pts.map((p, i) => i % 2 === 0 && (
+            <text key={i} x={p.x.toFixed(1)} y={CHART_H + 14}
+              textAnchor="middle" fontSize="9" fill="#4a4f5a" fontFamily="inherit">
+              {p.label}
+            </text>
+          ))}
+        </svg>
+        <div style={{ marginTop: '0.5rem', fontSize: '0.6rem', color: '#4a4f5a' }}>
+          Includes outstanding and proposed draws based on takedown and payoff dates. Outstanding draws without a takedown date are counted from today. Proposed draws without a takedown date are excluded. Y-axis fixed at $45M facility maximum.
         </div>
       </div>
     </div>
@@ -4746,6 +4813,7 @@ export default function App() {
     if (!file) return;
     try {
       let points = [];
+      let tenYPoints = [];
 
       if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
         // Parse Chatham xlsx format using SheetJS
@@ -4786,7 +4854,6 @@ export default function App() {
           return;
         }
 
-        let tenYPoints = [];
         for (let r = dataStartRow; r < rows.length; r++) {
           const row = rows[r];
           if (!row[dateCol] || row[sofrCol] == null) continue;
