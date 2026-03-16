@@ -3902,6 +3902,362 @@ const PIPELINE_STATIC_DATA = [
 ];
 
 
+// ── Land Facility Tab ─────────────────────────────────────────────────────────
+// Tracks the Simmons Bank $45M guidance line — individual draws, payoff status,
+// utilization vs. internal threshold, and a 12-month exposure planning timeline.
+function LandFacilityTab({ pinUnlocked, requirePin }) {
+  const SB_URL     = 'https://ngflppgqohmkkfiljqma.supabase.co';
+  const SB_KEY     = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
+  const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+
+  const FACILITY_MAX = 45000000; // $45M hard cap from agreement
+
+  const EMPTY_DRAW = { name: '', draw_amount: '', takedown_date: '', payoff_date: '', status: 'outstanding', note: '' };
+
+  const [draws, setDraws]             = useState([]);
+  const [threshold, setThreshold]     = useState('');
+  const [thresholdInput, setThresholdInput] = useState('');
+  const [loading, setLoading]         = useState(true);
+  const [msg, setMsg]                 = useState('');
+  const [msgErr, setMsgErr]           = useState(false);
+  const [showForm, setShowForm]       = useState(false);
+  const [editId, setEditId]           = useState(null);
+  const [form, setForm]               = useState(EMPTY_DRAW);
+  const [deleteId, setDeleteId]       = useState(null);
+
+  const flash = (text, isErr = false) => {
+    setMsg(text); setMsgErr(isErr);
+    setTimeout(() => setMsg(''), 4000);
+  };
+
+  // ── Supabase helpers ────────────────────────────────────────────────────────
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const [drawRes, settRes] = await Promise.all([
+        fetch(`${SB_URL}/rest/v1/land_draws?order=takedown_date.asc`, { headers: SB_HEADERS }),
+        fetch(`${SB_URL}/rest/v1/settings?key=eq.landThreshold`, { headers: SB_HEADERS }),
+      ]);
+      if (drawRes.ok) { const d = await drawRes.json(); setDraws(Array.isArray(d) ? d : []); }
+      if (settRes.ok) {
+        const s = await settRes.json();
+        if (s.length > 0) { const v = JSON.parse(s[0].value); setThreshold(v); setThresholdInput(String(v / 1e6)); }
+      }
+    } catch(e) { console.error('Land load error:', e); }
+    setLoading(false);
+  }
+
+  React.useEffect(() => { loadAll(); }, []);
+
+  async function saveSetting(key, value) {
+    await fetch(`${SB_URL}/rest/v1/settings?key=eq.${key}`, { method: 'DELETE', headers: SB_HEADERS });
+    await fetch(`${SB_URL}/rest/v1/settings`, { method: 'POST', headers: SB_HEADERS, body: JSON.stringify({ key, value: JSON.stringify(value) }) });
+  }
+
+  async function saveDraw() {
+    if (!form.name) { flash('Name is required', true); return; }
+    if (!form.draw_amount || isNaN(Number(form.draw_amount))) { flash('Valid draw amount required', true); return; }
+    const body = {
+      name: form.name.trim(),
+      draw_amount: Number(form.draw_amount),
+      takedown_date: form.takedown_date || null,
+      payoff_date: form.payoff_date || null,
+      status: form.status || 'outstanding',
+      note: form.note || null,
+    };
+    try {
+      let res;
+      if (editId === 'new') {
+        res = await fetch(`${SB_URL}/rest/v1/land_draws`, { method: 'POST', headers: SB_HEADERS, body: JSON.stringify(body) });
+      } else {
+        res = await fetch(`${SB_URL}/rest/v1/land_draws?id=eq.${editId}`, { method: 'PATCH', headers: { ...SB_HEADERS, 'Prefer': 'return=representation' }, body: JSON.stringify(body) });
+      }
+      if (res.ok) { flash(editId === 'new' ? '✓ Draw added' : '✓ Saved'); await loadAll(); setShowForm(false); setEditId(null); }
+      else { const e = await res.json(); flash('Save error: ' + (e.message || JSON.stringify(e)), true); }
+    } catch(e) { flash('Save error: ' + e.message, true); }
+  }
+
+  async function deleteDraw(id) {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/land_draws?id=eq.${id}`, { method: 'DELETE', headers: SB_HEADERS });
+      if (res.ok) { flash('Draw deleted'); await loadAll(); }
+      else flash('Delete error', true);
+    } catch(e) { flash('Delete error', true); }
+    setDeleteId(null);
+  }
+
+  async function saveThreshold() {
+    const val = parseFloat(thresholdInput) * 1e6;
+    if (isNaN(val) || val <= 0) { flash('Enter a valid threshold in $M', true); return; }
+    setThreshold(val);
+    await saveSetting('landThreshold', val);
+    flash('✓ Threshold saved');
+  }
+
+  function startEdit(d) {
+    setForm({ name: d.name, draw_amount: d.draw_amount, takedown_date: d.takedown_date || '', payoff_date: d.payoff_date || '', status: d.status || 'outstanding', note: d.note || '' });
+    setEditId(d.id); setShowForm(true);
+  }
+
+  // ── Derived numbers ─────────────────────────────────────────────────────────
+  const outstanding = draws.filter(d => d.status !== 'paid_off');
+  const paidOff     = draws.filter(d => d.status === 'paid_off');
+  const totalOutstanding = outstanding.reduce((s, d) => s + (d.draw_amount || 0), 0);
+  const totalCommitment  = draws.reduce((s, d) => s + (d.draw_amount || 0), 0);
+  const facilityUsedPct  = totalOutstanding / FACILITY_MAX;
+  const thresholdPct     = threshold ? totalOutstanding / threshold : null;
+
+  // ── 12-month timeline ───────────────────────────────────────────────────────
+  const today = new Date();
+  const months = Array.from({ length: 13 }, (_, i) => {
+    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    return { label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }), date: d };
+  });
+
+  // For each month boundary compute projected outstanding balance
+  const timelineData = months.map(({ label, date }) => {
+    const balance = draws.reduce((sum, d) => {
+      const taken = d.takedown_date ? new Date(d.takedown_date) : null;
+      const paid  = d.payoff_date  ? new Date(d.payoff_date)  : null;
+      // Count draw if taken before this month and not yet paid off by this month
+      if (taken && taken <= date && (!paid || paid > date)) return sum + (d.draw_amount || 0);
+      return sum;
+    }, 0);
+    return { label, balance };
+  });
+
+  // ── Formatters ──────────────────────────────────────────────────────────────
+  const fmtM  = v => v == null ? '—' : '$' + (v / 1e6).toFixed(2) + 'M';
+  const fmtD  = s => { if (!s) return '—'; try { return new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return s; } };
+  const pctBar = (pct, color) => (
+    <div style={{ height: 6, background: '#1e2330', borderRadius: 3, overflow: 'hidden', marginTop: 4 }}>
+      <div style={{ height: '100%', width: `${Math.min(pct * 100, 100)}%`, background: color, borderRadius: 3, transition: 'width 0.4s' }} />
+    </div>
+  );
+  const statusColor = s => s === 'paid_off' ? '#6a9e7f' : '#c87941';
+  const statusLabel = s => s === 'paid_off' ? 'Paid Off' : 'Outstanding';
+
+  const inputSt = { background: '#1a1d24', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', padding: '6px 10px', fontFamily: 'inherit', fontSize: '0.8rem', width: '100%', boxSizing: 'border-box' };
+  const labelSt = { fontSize: '0.6rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 3 };
+  const fieldSt = { marginBottom: '0.75rem' };
+
+  // max timeline bar
+  const maxTimeline = Math.max(...timelineData.map(t => t.balance), threshold || 0, 1);
+
+  if (loading) return <div style={{ padding: '3rem', textAlign: 'center', color: '#4a4f5a' }}>Loading land facility data…</div>;
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {/* Flash message */}
+      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msgErr ? '#4a1a1a' : '#1a3a2a', border: `1px solid ${msgErr ? '#c47474' : '#6a9e7f'}`, color: msgErr ? '#c47474' : '#6a9e7f', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem' }}>{msg}</div>}
+
+      {/* ── Summary cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+        {[
+          { label: 'Outstanding Balance', value: fmtM(totalOutstanding), sub: `${outstanding.length} active draw${outstanding.length !== 1 ? 's' : ''}`, color: totalOutstanding > (threshold || Infinity) ? '#c47474' : '#e8eaed' },
+          { label: 'Facility Capacity', value: fmtM(FACILITY_MAX), sub: `${fmtM(FACILITY_MAX - totalOutstanding)} remaining`, color: '#e8eaed' },
+          { label: 'Internal Threshold', value: threshold ? fmtM(threshold) : 'Not set', sub: threshold ? (totalOutstanding > threshold ? '⚠ Over threshold' : `${fmtM(threshold - totalOutstanding)} headroom`) : 'Set below', color: threshold && totalOutstanding > threshold ? '#c47474' : '#e8eaed' },
+          { label: 'Total Committed', value: fmtM(totalCommitment), sub: `${paidOff.length} paid off`, color: '#e8eaed' },
+        ].map(({ label, value, sub, color }) => (
+          <div key={label} style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
+            <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+            <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 2 }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Utilization bars ── */}
+      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.67rem', color: '#9aa0aa' }}>
+              <span>Facility utilization</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{(facilityUsedPct * 100).toFixed(1)}% of $45M</span>
+            </div>
+            {pctBar(facilityUsedPct, facilityUsedPct > 0.9 ? '#c47474' : facilityUsedPct > 0.7 ? '#c87941' : '#6a9e7f')}
+          </div>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.67rem', color: '#9aa0aa' }}>
+              <span>vs. internal threshold</span>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {threshold ? `${(thresholdPct * 100).toFixed(1)}% of ${fmtM(threshold)}` : 'No threshold set'}
+              </span>
+            </div>
+            {threshold ? pctBar(thresholdPct, thresholdPct > 1 ? '#c47474' : thresholdPct > 0.85 ? '#c87941' : '#6a9e7f') : <div style={{ height: 6, background: '#1e2330', borderRadius: 3, marginTop: 4 }} />}
+          </div>
+        </div>
+
+        {/* Threshold input */}
+        <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ fontSize: '0.62rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>Internal Threshold ($M)</div>
+          <input
+            type="number" step="0.1" min="0" max="45"
+            value={thresholdInput}
+            onChange={e => setThresholdInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && requirePin(saveThreshold)}
+            placeholder="e.g. 30"
+            style={{ ...inputSt, width: 100 }}
+            disabled={!pinUnlocked}
+          />
+          <button onClick={() => requirePin(saveThreshold)} style={{ padding: '5px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
+            {pinUnlocked ? 'Save' : '🔒 Save'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Draws table ── */}
+      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, marginBottom: '1.5rem', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.25rem', borderBottom: '1px solid #1e2330' }}>
+          <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>Simmons Bank — Land Draws</div>
+          <button onClick={() => requirePin(() => { setForm(EMPTY_DRAW); setEditId('new'); setShowForm(true); })} style={{ padding: '4px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
+            {pinUnlocked ? '+ Add Draw' : '🔒 Add Draw'}
+          </button>
+        </div>
+
+        {/* Edit / Add form */}
+        {showForm && (
+          <div style={{ padding: '1rem 1.25rem', background: '#0f1117', borderBottom: '1px solid #2e3340' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1.5fr', gap: '0.75rem', alignItems: 'end' }}>
+              <div style={fieldSt}>
+                <label style={labelSt}>Property Name</label>
+                <input style={inputSt} value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} placeholder="e.g. Pooler, GA" />
+              </div>
+              <div style={fieldSt}>
+                <label style={labelSt}>Draw Amount ($)</label>
+                <input style={inputSt} type="number" value={form.draw_amount} onChange={e => setForm(f => ({...f, draw_amount: e.target.value}))} placeholder="6150000" />
+              </div>
+              <div style={fieldSt}>
+                <label style={labelSt}>Takedown Date</label>
+                <input style={inputSt} type="date" value={form.takedown_date} onChange={e => setForm(f => ({...f, takedown_date: e.target.value}))} />
+              </div>
+              <div style={fieldSt}>
+                <label style={labelSt}>Expected Payoff</label>
+                <input style={inputSt} type="date" value={form.payoff_date} onChange={e => setForm(f => ({...f, payoff_date: e.target.value}))} />
+              </div>
+              <div style={fieldSt}>
+                <label style={labelSt}>Status</label>
+                <select style={inputSt} value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))}>
+                  <option value="outstanding">Outstanding</option>
+                  <option value="paid_off">Paid Off</option>
+                </select>
+              </div>
+              <div style={fieldSt}>
+                <label style={labelSt}>Note</label>
+                <input style={inputSt} value={form.note} onChange={e => setForm(f => ({...f, note: e.target.value}))} placeholder="optional" />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+              <button onClick={saveDraw} style={{ padding: '5px 16px', background: TT_ORANGE, border: 'none', borderRadius: 3, color: '#fff', fontFamily: 'inherit', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+              <button onClick={() => { setShowForm(false); setEditId(null); }} style={{ padding: '5px 12px', background: 'none', border: '1px solid #2e3340', borderRadius: 3, color: '#9aa0aa', fontFamily: 'inherit', fontSize: '0.75rem', cursor: 'pointer' }}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Confirm delete */}
+        {deleteId && (
+          <div style={{ padding: '0.75rem 1.25rem', background: '#1a0f0f', borderBottom: '1px solid #4a1a1a', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <span style={{ fontSize: '0.78rem', color: '#c47474' }}>Delete this draw? This cannot be undone.</span>
+            <button onClick={() => deleteDraw(deleteId)} style={{ padding: '4px 14px', background: '#c47474', border: 'none', borderRadius: 3, color: '#fff', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
+            <button onClick={() => setDeleteId(null)} style={{ padding: '4px 12px', background: 'none', border: '1px solid #2e3340', borderRadius: 3, color: '#9aa0aa', fontFamily: 'inherit', fontSize: '0.72rem', cursor: 'pointer' }}>Cancel</button>
+          </div>
+        )}
+
+        {/* Table */}
+        {draws.length === 0 ? (
+          <div style={{ padding: '2.5rem', textAlign: 'center', color: '#4a4f5a', fontSize: '0.8rem' }}>No draws recorded yet — click Add Draw to get started.</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #1e2330' }}>
+                {['Property', 'Commitment', 'Funded', 'Takedown', 'Expected Payoff', 'Status', 'Note', ''].map(h => (
+                  <th key={h} style={{ padding: '0.55rem 1rem', textAlign: h === 'Commitment' || h === 'Funded' ? 'right' : 'left', fontSize: '0.6rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 400, whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {draws.map((d, i) => (
+                <tr key={d.id} style={{ borderBottom: '1px solid #1a1d24', opacity: d.status === 'paid_off' ? 0.55 : 1 }}>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#c8cdd6', fontWeight: 600 }}>{d.name}</td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#9aa0aa', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(d.draw_amount)}</td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: d.status === 'paid_off' ? '#4a4f5a' : '#e8eaed', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                    {d.status === 'paid_off' ? '—' : fmtM(d.draw_amount)}
+                  </td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.75rem', color: '#9aa0aa' }}>{fmtD(d.takedown_date)}</td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.75rem', color: '#9aa0aa' }}>{fmtD(d.payoff_date)}</td>
+                  <td style={{ padding: '0.7rem 1rem' }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: statusColor(d.status), background: d.status === 'paid_off' ? 'rgba(106,158,127,0.1)' : 'rgba(200,121,65,0.12)', padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
+                      {statusLabel(d.status)}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: '#4a4f5a', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '—'}</td>
+                  <td style={{ padding: '0.7rem 0.75rem', whiteSpace: 'nowrap' }}>
+                    {pinUnlocked ? (
+                      <>
+                        <button onClick={() => startEdit(d)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9aa0aa', fontSize: '0.75rem', padding: '2px 5px' }} title="Edit">✏</button>
+                        <button onClick={() => setDeleteId(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4747444', fontSize: '0.75rem', padding: '2px 5px' }} title="Delete">✕</button>
+                      </>
+                    ) : (
+                      <button onClick={() => requirePin(() => startEdit(d))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2a2d35', fontSize: '0.75rem', padding: '2px 5px' }} title="Unlock to edit">🔒</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {/* Totals row */}
+              <tr style={{ borderTop: '2px solid #2e3340', background: '#0f1117' }}>
+                <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: '#4a4f5a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total</td>
+                <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#9aa0aa', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{fmtM(totalCommitment)}</td>
+                <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#e8eaed', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{fmtM(totalOutstanding)}</td>
+                <td colSpan={5} />
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* ── 12-month exposure timeline ── */}
+      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1.25rem 1.5rem' }}>
+        <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: '1.25rem' }}>
+          12-Month Exposure Forecast
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 140, position: 'relative' }}>
+          {/* Y-axis labels */}
+          {[0, 0.25, 0.5, 0.75, 1].map(frac => {
+            const val = maxTimeline * frac;
+            return (
+              <div key={frac} style={{ position: 'absolute', left: 0, bottom: frac * 140 - 8, fontSize: '0.55rem', color: '#4a4f5a', width: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {fmtM(val)}
+              </div>
+            );
+          })}
+          {/* Threshold line */}
+          {threshold && (
+            <div style={{ position: 'absolute', left: 40, right: 0, bottom: (threshold / maxTimeline) * 140, borderTop: '1px dashed #c87941', zIndex: 2 }}>
+              <span style={{ position: 'absolute', right: 0, top: -14, fontSize: '0.55rem', color: '#c87941' }}>threshold</span>
+            </div>
+          )}
+          {/* Bars */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, flex: 1, marginLeft: 40, height: '100%' }}>
+            {timelineData.map(({ label, balance }) => {
+              const h = maxTimeline > 0 ? (balance / maxTimeline) * 140 : 0;
+              const overThreshold = threshold && balance > threshold;
+              const barColor = overThreshold ? '#c47474' : balance > 0 ? '#4a7a9e' : '#1e2330';
+              return (
+                <div key={label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+                  <div title={fmtM(balance)} style={{ width: '100%', height: Math.max(h, balance > 0 ? 2 : 0), background: barColor, borderRadius: '2px 2px 0 0', transition: 'height 0.3s', minWidth: 0 }} />
+                  <div style={{ fontSize: '0.5rem', color: '#4a4f5a', marginTop: 4, textAlign: 'center', whiteSpace: 'nowrap' }}>{label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ marginTop: '0.75rem', fontSize: '0.62rem', color: '#4a4f5a' }}>
+          Bars represent projected outstanding balance at the start of each month based on takedown and payoff dates. Draws without dates are excluded.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Leasing Tab ───────────────────────────────────────────────────────────────
 function LeasingTab() {
   const SB_URL     = 'https://ngflppgqohmkkfiljqma.supabase.co';
@@ -4340,6 +4696,9 @@ export default function App() {
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinPendingAction, setPinPendingAction] = useState(null);
+  const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land'];
+  const [visibleTabs, setVisibleTabs] = useState({ calculator:true, matrix:true, covenant:true, leasing:true, pipeline:true, land:true });
+  const [showTabConfig, setShowTabConfig] = useState(false);
 
   const SB_URL = 'https://ngflppgqohmkkfiljqma.supabase.co';
   const SB_KEY = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
@@ -4367,6 +4726,15 @@ export default function App() {
       if (sRes.ok) {
         const sRows = await sRes.json();
         if (sRows.length > 0) setSofrUpdated(new Date(JSON.parse(sRows[0].value)));
+      }
+      // Load visible tabs setting
+      const vtRes = await fetch(`${SB_URL}/rest/v1/settings?key=eq.visibleTabs`, { headers: SB_HEADERS });
+      if (vtRes.ok) {
+        const vtRows = await vtRes.json();
+        if (vtRows.length > 0) {
+          const val = JSON.parse(vtRows[0].value);
+          setVisibleTabs(prev => ({ ...prev, ...val }));
+        }
       }
     } catch (err) {
       console.warn('Could not load SOFR curve:', err);
@@ -4522,6 +4890,19 @@ export default function App() {
     setShowPinModal(true);
   }
 
+  async function saveTabVisibility(next) {
+    setVisibleTabs(next);
+    // If the active tab is being hidden, switch to first visible tab
+    if (!next[activeTab]) {
+      const first = ['covenant','calculator','matrix','land','leasing','pipeline'].find(t => next[t]);
+      if (first) setActiveTab(first);
+    }
+    try {
+      await fetch(`${SB_URL}/rest/v1/settings?key=eq.visibleTabs`, { method: 'DELETE', headers: SB_HEADERS });
+      await fetch(`${SB_URL}/rest/v1/settings`, { method: 'POST', headers: SB_HEADERS, body: JSON.stringify({ key: 'visibleTabs', value: JSON.stringify(next) }) });
+    } catch(e) { console.error('Could not save tab visibility:', e); }
+  }
+
   function handlePinSuccess() {
     setPinUnlocked(true);
     setShowPinModal(false);
@@ -4607,27 +4988,32 @@ export default function App() {
       <div style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
 
         {/* ── Tab Nav ── */}
-        <div style={{ display: "flex", borderBottom: `1px solid #2e3340`, marginBottom: "2rem" }}>
-          <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`}
-            onClick={() => setActiveTab("calculator")}>
-            Calculator
-          </button>
-          <button className={`tab-btn ${activeTab === "matrix" ? "tab-active" : "tab-inactive"}`}
-            onClick={() => setActiveTab("matrix")}>
-            DY / DSCR Matrix
-          </button>
-          <button className={`tab-btn ${activeTab === "covenant" ? "tab-active" : "tab-inactive"}`}
-            onClick={() => setActiveTab("covenant")}>
-            Covenant Tracker
-          </button>
-          <button className={`tab-btn ${activeTab === "leasing" ? "tab-active" : "tab-inactive"}`}
-            onClick={() => setActiveTab("leasing")}>
-            Leasing Dashboard
-          </button>
-          <button className={`tab-btn ${activeTab === "pipeline" ? "tab-active" : "tab-inactive"}`}
-            onClick={() => setActiveTab("pipeline")}>
-            Lender Pipeline
-          </button>
+        <div style={{ display: 'flex', borderBottom: `1px solid #2e3340`, marginBottom: '2rem', alignItems: 'flex-end', position: 'relative' }}>
+          {visibleTabs.calculator && <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("calculator")}>Calculator</button>}
+          {visibleTabs.matrix     && <button className={`tab-btn ${activeTab === "matrix"     ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("matrix")}>DY / DSCR Matrix</button>}
+          {visibleTabs.covenant   && <button className={`tab-btn ${activeTab === "covenant"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("covenant")}>Covenant Tracker</button>}
+          {visibleTabs.leasing    && <button className={`tab-btn ${activeTab === "leasing"    ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("leasing")}>Leasing Dashboard</button>}
+          {visibleTabs.pipeline   && <button className={`tab-btn ${activeTab === "pipeline"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("pipeline")}>Lender Pipeline</button>}
+          {visibleTabs.land       && <button className={`tab-btn ${activeTab === "land"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("land")}>Land Facility</button>}
+          {/* Gear button */}
+          <button
+            onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
+            title={pinUnlocked ? 'Configure visible tabs' : 'Unlock to configure tabs'}
+            style={{ marginLeft: 'auto', marginBottom: 6, padding: '4px 8px', background: showTabConfig ? 'rgba(200,121,65,0.15)' : 'none', border: showTabConfig ? `1px solid ${TT_ORANGE}44` : '1px solid transparent', borderRadius: 4, cursor: 'pointer', color: showTabConfig ? TT_ORANGE : '#4a4f5a', fontSize: '0.9rem', lineHeight: 1 }}
+          >⚙</button>
+          {/* Tab config dropdown */}
+          {showTabConfig && (
+            <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: '#13151a', border: `1px solid ${TT_ORANGE}44`, borderRadius: 4, padding: '0.75rem 1rem', minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+              <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: '0.65rem' }}>Visible Tabs</div>
+              {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility']].map(([key, label]) => (
+                <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ accentColor: TT_ORANGE, width: 14, height: 14 }} />
+                  <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? '#c8cdd6' : '#4a4f5a' }}>{label}</span>
+                </label>
+              ))}
+              <div style={{ marginTop: '0.5rem', fontSize: '0.58rem', color: '#4a4f5a' }}>Changes persist across sessions.</div>
+            </div>
+          )}
         </div>
 
         {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
@@ -4635,6 +5021,7 @@ export default function App() {
         {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} />}
         {activeTab === "leasing"    && <LeasingTab />}
         {activeTab === "pipeline"   && <PipelineTab />}
+        {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
 
         {/* ── Footer ── */}
         <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid #2e3340`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
