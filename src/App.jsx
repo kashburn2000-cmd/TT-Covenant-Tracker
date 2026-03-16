@@ -3994,6 +3994,217 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
     flash('✓ Threshold saved');
   }
 
+  async function exportLandPDF() {
+    flash('Generating PDF…');
+    try {
+      // Load jsPDF + autoTable
+      const loadLib = (src) => new Promise((res, rej) => {
+        if (document.querySelector(`script[src="${src}"]`) && window.jspdf) { res(); return; }
+        const s = document.createElement('script');
+        s.src = src; s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+      await loadLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      await loadLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+      const { jsPDF } = window.jspdf;
+
+      const doc   = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const now   = new Date();
+      const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+      const C_ORANGE = [200, 121, 65];
+      const C_DARK   = [22, 25, 31];
+      const C_LIGHT  = [200, 205, 214];
+      const C_GRAY   = [74, 79, 90];
+      const C_MID    = [154, 160, 170];
+
+      // ── Header bar ────────────────────────────────────────────────────────
+      doc.setFillColor(...C_DARK);
+      doc.rect(0, 0, pageW, 54, 'F');
+      doc.setFillColor(...C_ORANGE);
+      doc.rect(0, 54, pageW, 2, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(...C_ORANGE);
+      doc.text('Simmons Land Loan Facility Tracker', 28, 21);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...C_LIGHT);
+      doc.text(dateStr, 28, 34);
+
+      doc.setFontSize(7.5);
+      doc.setTextColor(...C_GRAY);
+      doc.text('Prepared monthly by Kevin Ashburn', 28, 46);
+
+      // ── Summary stats — top right ──────────────────────────────────────
+      const peak = Math.max(...timelineData.map(t => t.balance), 0);
+      const fmtPt = v => v == null ? '—' : '$' + (v / 1e6).toFixed(2) + 'M';
+      const stats = [
+        `Outstanding: ${fmtPt(totalOutstanding)}`,
+        `Facility: ${fmtPt(FACILITY_MAX)}`,
+        ...(threshold ? [`Threshold: ${fmtPt(threshold)}`] : []),
+        `12-Mo Peak: ${fmtPt(peak)}`,
+      ];
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(...C_MID);
+      let rx = pageW - 28;
+      stats.reverse().forEach(s => {
+        const w = doc.getTextWidth(s);
+        doc.text(s, rx - w, 34);
+        rx -= w + 18;
+      });
+
+      // ── Draws table ────────────────────────────────────────────────────
+      const fmtD = s => { if (!s) return '—'; try { return new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return s; } };
+      const statusLabel = s => s === 'paid_off' ? 'Paid Off' : s === 'proposed' ? 'Proposed' : 'Outstanding';
+
+      const head = [['Property', 'Amount', 'Currently Funded', 'Takedown Date', 'Expected Payoff', 'Status', 'Note']];
+      const body = draws.map(d => [
+        d.name,
+        fmtPt(d.draw_amount),
+        d.status === 'outstanding' ? fmtPt(d.draw_amount) : '—',
+        fmtD(d.takedown_date),
+        fmtD(d.payoff_date),
+        statusLabel(d.status),
+        d.note || '—',
+      ]);
+      // Totals row
+      body.push(['Currently Funded', '', fmtPt(totalOutstanding), '', '', '', '']);
+
+      doc.autoTable({
+        head,
+        body,
+        startY: 72,
+        margin: { left: 28, right: 28 },
+        styles: {
+          font: 'helvetica', fontSize: 8, cellPadding: 5,
+          fillColor: [19, 21, 26], textColor: C_LIGHT, lineColor: [30, 35, 48], lineWidth: 0.5,
+        },
+        headStyles: {
+          fillColor: C_DARK, textColor: C_ORANGE, fontStyle: 'bold', fontSize: 7,
+          textColor: [74, 79, 90],
+        },
+        columnStyles: {
+          0: { fontStyle: 'bold', cellWidth: 140 },
+          1: { halign: 'right', cellWidth: 72 },
+          2: { halign: 'right', cellWidth: 82, fontStyle: 'bold' },
+          3: { cellWidth: 82 },
+          4: { cellWidth: 82 },
+          5: { cellWidth: 68 },
+          6: { cellWidth: 'auto' },
+        },
+        alternateRowStyles: { fillColor: [15, 17, 23] },
+        willDrawCell: (data) => {
+          if (data.section === 'body') {
+            const row = data.row.raw;
+            // Totals row styling
+            if (row[0] === 'Currently Funded') {
+              data.cell.styles.fillColor = [15, 17, 23];
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.textColor = C_LIGHT;
+            }
+            // Paid off rows — dimmed
+            const d = draws[data.row.index];
+            if (d && d.status === 'paid_off') data.cell.styles.textColor = C_GRAY;
+            // Status cell color
+            if (data.column.index === 5 && d) {
+              if (d.status === 'outstanding') data.cell.styles.textColor = C_ORANGE;
+              if (d.status === 'proposed')    data.cell.styles.textColor = [74, 122, 158];
+              if (d.status === 'paid_off')    data.cell.styles.textColor = [106, 158, 127];
+            }
+          }
+        },
+        didDrawPage: (data) => {
+          const pg    = doc.internal.getCurrentPageInfo().pageNumber;
+          const total = doc.internal.getNumberOfPages();
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(6.5);
+          doc.setTextColor(...C_GRAY);
+          doc.text(`Page ${pg} of ${total}`, pageW - 28, pageH - 14, { align: 'right' });
+          doc.text('Thompson Thrift  ·  Simmons Land Loan Facility Tracker  ·  Confidential', 28, pageH - 14);
+        },
+      });
+
+      // ── Exposure chart — simple SVG-to-canvas-free line approximation ──
+      // Draw a mini line chart below the table using jsPDF native drawing
+      const tableBottom = doc.lastAutoTable.finalY + 20;
+      if (tableBottom < pageH - 80) {
+        const chartLeft = 28, chartRight = pageW - 28;
+        const chartTop  = tableBottom, chartBottom = Math.min(tableBottom + 100, pageH - 36);
+        const cW = chartRight - chartLeft - 50; // leave 50pt for y-axis labels
+        const cH = chartBottom - chartTop;
+        const xOff = chartLeft + 50;
+
+        // Title
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(...C_ORANGE);
+        doc.text('12-MONTH EXPOSURE FORECAST', chartLeft, chartTop - 4);
+
+        // Y-axis gridlines + labels
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        [0, 0.25, 0.5, 0.75, 1].forEach(frac => {
+          const y = chartBottom - frac * cH;
+          const val = frac * FACILITY_MAX;
+          doc.setTextColor(...C_GRAY);
+          doc.text(fmtPt(val), xOff - 4, y + 2, { align: 'right' });
+          doc.setDrawColor(frac === 1 ? 58 : 30, frac === 1 ? 69 : 35, frac === 1 ? 80 : 48);
+          doc.setLineWidth(frac === 1 ? 0.75 : 0.4);
+          doc.line(xOff, y, chartRight, y);
+        });
+
+        // Threshold line
+        if (threshold) {
+          const ty = chartBottom - (threshold / FACILITY_MAX) * cH;
+          doc.setDrawColor(...C_ORANGE);
+          doc.setLineWidth(0.75);
+          doc.setLineDashPattern([3, 2], 0);
+          doc.line(xOff, ty, chartRight, ty);
+          doc.setLineDashPattern([], 0);
+          doc.setTextColor(...C_ORANGE);
+          doc.setFontSize(6);
+          doc.text(fmtPt(threshold), chartRight - 2, ty - 3, { align: 'right' });
+        }
+
+        // Exposure line
+        const ptCoords = timelineData.map((p, i) => ({
+          x: xOff + (i / (timelineData.length - 1)) * cW,
+          y: chartBottom - (p.balance / FACILITY_MAX) * cH,
+          balance: p.balance,
+        }));
+
+        for (let i = 0; i < ptCoords.length - 1; i++) {
+          const over = threshold && (ptCoords[i].balance > threshold || ptCoords[i+1].balance > threshold);
+          doc.setDrawColor(...(over ? [196, 116, 116] : [74, 122, 158]));
+          doc.setLineWidth(1.5);
+          doc.line(ptCoords[i].x, ptCoords[i].y, ptCoords[i+1].x, ptCoords[i+1].y);
+        }
+
+        // X-axis month labels — every other
+        doc.setTextColor(...C_GRAY);
+        doc.setFontSize(6);
+        timelineData.forEach((p, i) => {
+          if (i % 2 === 0) {
+            doc.text(p.label, xOff + (i / (timelineData.length - 1)) * cW, chartBottom + 10, { align: 'center' });
+          }
+        });
+      }
+
+      const fname = `TT_Land_Facility_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.pdf`;
+      doc.save(fname);
+      flash('✓ PDF exported');
+    } catch (err) {
+      console.error(err);
+      flash('PDF error: ' + err.message, true);
+    }
+  }
+
   function startEdit(d) {
     setForm({ name: d.name, draw_amount: d.draw_amount, takedown_date: d.takedown_date || '', payoff_date: d.payoff_date || '', status: d.status || 'outstanding', note: d.note || '' });
     setEditId(d.id); setShowForm(true);
@@ -4129,9 +4340,14 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, marginBottom: '1.5rem', overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.25rem', borderBottom: '1px solid #1e2330' }}>
           <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>Simmons Bank — Land Draws</div>
-          <button onClick={() => requirePin(() => { setForm(EMPTY_DRAW); setEditId('new'); setShowForm(true); })} style={{ padding: '4px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
-            {pinUnlocked ? '+ Add Draw' : '🔒 Add Draw'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button onClick={exportLandPDF} style={{ padding: '4px 14px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>
+              ↓ Export PDF
+            </button>
+            <button onClick={() => requirePin(() => { setForm(EMPTY_DRAW); setEditId('new'); setShowForm(true); })} style={{ padding: '4px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
+              {pinUnlocked ? '+ Add Draw' : '🔒 Add Draw'}
+            </button>
+          </div>
         </div>
 
         {/* Edit / Add form */}
