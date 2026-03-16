@@ -4046,8 +4046,8 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       const stats = [
         `Outstanding: ${fmtPt(totalOutstanding)}`,
         `Facility: ${fmtPt(FACILITY_MAX)}`,
-        ...(threshold ? [`Threshold: ${fmtPt(threshold)}`] : []),
-        `12-Mo Peak: ${fmtPt(peak)}`,
+        ...(threshold ? [`TT Internal Threshold: ${fmtPt(threshold)}`] : []),
+        `12-Mo Peak Exposure: ${fmtPt(peak)}`,
       ];
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
@@ -4169,7 +4169,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           doc.setLineDashPattern([], 0);
           doc.setTextColor(...C_ORANGE);
           doc.setFontSize(6);
-          doc.text(fmtPt(threshold), chartRight - 2, ty - 3, { align: 'right' });
+          doc.text(`TT Internal Threshold: ${fmtPt(threshold)}`, chartRight - 2, ty - 3, { align: 'right' });
         }
 
         // Exposure line
@@ -4193,16 +4193,13 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           const delta = p.balance - timelineData[i - 1].balance;
           if (delta === 0) return;
           const isPos = delta > 0;
-          const arrow = isPos ? '\u25b2' : '\u25bc';
-          const amt   = '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M';
+          const label = (isPos ? '+' : '-') + '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M';
           const px    = xOff + (i / (timelineData.length - 1)) * cW;
           const py    = chartBottom - (p.balance / FACILITY_MAX) * cH;
-          const color = isPos ? [196, 116, 116] : [106, 158, 127];
-          doc.setTextColor(...color);
-          doc.setFontSize(5);
-          doc.text(arrow, px, isPos ? py - 8 : py + 8, { align: 'center' });
+          const labelY = isPos ? py - 5 : py + 11;
+          doc.setTextColor(...(isPos ? [196, 116, 116] : [106, 158, 127]));
           doc.setFontSize(5.5);
-          doc.text(amt, px, isPos ? py - 3 : py + 13, { align: 'center' });
+          doc.text(label, px, labelY, { align: 'center' });
         });
 
         // X-axis month labels — every other
@@ -4304,7 +4301,25 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msgErr ? '#4a1a1a' : '#1a3a2a', border: `1px solid ${msgErr ? '#c47474' : '#6a9e7f'}`, color: msgErr ? '#c47474' : '#6a9e7f', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem' }}>{msg}</div>}
 
       {/* ── Summary cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+        {/* 12-Month Peak — wider and more prominent */}
+        <div style={{ background: '#13151a', border: `1px solid ${(() => { const peak = Math.max(...timelineData.map(t => t.balance), 0); return threshold && peak > threshold ? '#c47474' : '#1e2330'; })()}`, borderRadius: 4, padding: '1rem 1.5rem' }}>
+          <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4, fontWeight: 700 }}>12-Month Peak Exposure</div>
+          {(() => {
+            const peak = Math.max(...timelineData.map(t => t.balance), 0);
+            const peakMonth = timelineData.find(t => t.balance === peak);
+            const overThreshold = threshold && peak > threshold;
+            return (
+              <>
+                <div style={{ fontSize: '1.7rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: overThreshold ? '#c47474' : '#e8eaed', letterSpacing: '-0.01em' }}>{fmtM(peak)}</div>
+                <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 3 }}>
+                  {peak > 0 && peakMonth ? `projected high — ${peakMonth.label}` : 'no projected draws'}
+                  {overThreshold && <span style={{ color: '#c47474', marginLeft: 8 }}>⚠ exceeds TT Internal Threshold</span>}
+                </div>
+              </>
+            );
+          })()}
+        </div>
         <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
           <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Outstanding Balance</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: totalOutstanding > (threshold || Infinity) ? '#c47474' : '#e8eaed' }}>{fmtM(totalOutstanding)}</div>
@@ -4315,27 +4330,11 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#e8eaed' }}>{fmtM(FACILITY_MAX)}</div>
           <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 2 }}>{fmtM(FACILITY_MAX - totalOutstanding)} remaining</div>
         </div>
-        <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
-          <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>12-Month Peak Exposure</div>
-          {(() => {
-            const peak = Math.max(...timelineData.map(t => t.balance), 0);
-            const peakMonth = timelineData.find(t => t.balance === peak);
-            const overThreshold = threshold && peak > threshold;
-            return (
-              <>
-                <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: overThreshold ? '#c47474' : '#e8eaed' }}>{fmtM(peak)}</div>
-                <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 2 }}>
-                  {peak > 0 && peakMonth ? `projected high — ${peakMonth.label}` : 'no projected draws'}
-                </div>
-              </>
-            );
-          })()}
-        </div>
       </div>
 
       {/* ── Threshold input row ── */}
       <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '0.75rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <div style={{ fontSize: '0.62rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>Internal Threshold ($M)</div>
+        <div style={{ fontSize: '0.62rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>TT Internal Threshold ($M)</div>
         <input
           type="number" step="0.1" min="0" max="45"
           value={thresholdInput}
@@ -4351,8 +4350,8 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
         {threshold > 0 && (
           <div style={{ marginLeft: '0.5rem', fontSize: '0.72rem', color: totalOutstanding > threshold ? '#c47474' : '#6a9e7f' }}>
             {totalOutstanding > threshold
-              ? `⚠ ${fmtM(totalOutstanding - threshold)} over threshold`
-              : `${fmtM(threshold - totalOutstanding)} headroom`}
+              ? `⚠ ${fmtM(totalOutstanding - threshold)} over TT Internal Threshold`
+              : `${fmtM(threshold - totalOutstanding)} headroom vs. TT Internal Threshold`}
           </div>
         )}
       </div>
@@ -4478,7 +4477,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>12-Month Exposure Forecast</div>
           <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
             <span style={{ fontSize: '0.6rem', color: '#4a7a9e', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 2, background: '#4a7a9e', borderRadius: 1 }} />Projected exposure</span>
-            {threshold && <span style={{ fontSize: '0.6rem', color: '#c87941', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed #c87941' }} />Threshold {fmtM(threshold)}</span>}
+            {threshold && <span style={{ fontSize: '0.6rem', color: '#c87941', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed #c87941' }} />TT Internal Threshold {fmtM(threshold)}</span>}
             <span style={{ fontSize: '0.6rem', color: '#3a4050', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '1px dashed #3a4050' }} />$45M cap</span>
           </div>
         </div>
@@ -4506,7 +4505,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
               <line x1={LABEL_W + 2} x2={SVG_VW} y1={thresholdY} y2={thresholdY}
                 stroke="#c87941" strokeWidth={1.5} strokeDasharray="6 3" opacity="0.85" />
               <text x={SVG_VW - 3} y={thresholdY - 5} textAnchor="end" fontSize="8.5" fill="#c87941" fontFamily="inherit" opacity="0.9">
-                {fmtM(threshold)}
+                TT Internal Threshold: {fmtM(threshold)}
               </text>
             </g>
           )}
