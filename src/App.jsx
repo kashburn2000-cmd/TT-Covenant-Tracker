@@ -4005,8 +4005,6 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
   const paidOff     = draws.filter(d => d.status === 'paid_off');
   const totalOutstanding = outstanding.reduce((s, d) => s + (d.draw_amount || 0), 0);
   const totalProposed    = proposed.reduce((s, d) => s + (d.draw_amount || 0), 0);
-  const facilityUsedPct  = totalOutstanding / FACILITY_MAX;
-  const thresholdPct     = threshold ? totalOutstanding / threshold : null;
 
   // ── 12-month timeline — fixed Y axis 0 to $45M ────────────────────────────
   const today = new Date();
@@ -4058,11 +4056,6 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
   // ── Formatters ──────────────────────────────────────────────────────────────
   const fmtM  = v => v == null ? '—' : '$' + (v / 1e6).toFixed(2) + 'M';
   const fmtD  = s => { if (!s) return '—'; try { return new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return s; } };
-  const pctBar = (pct, color) => (
-    <div style={{ height: 6, background: '#1e2330', borderRadius: 3, overflow: 'hidden', marginTop: 4 }}>
-      <div style={{ height: '100%', width: `${Math.min(pct * 100, 100)}%`, background: color, borderRadius: 3, transition: 'width 0.4s' }} />
-    </div>
-  );
   const statusColor = s => s === 'paid_off' ? '#6a9e7f' : s === 'proposed' ? '#4a9acf' : '#c87941';
   const statusLabel = s => s === 'paid_off' ? 'Paid Off' : s === 'proposed' ? 'Proposed' : 'Outstanding';
   const statusBg    = s => s === 'paid_off' ? 'rgba(106,158,127,0.1)' : s === 'proposed' ? 'rgba(74,154,207,0.12)' : 'rgba(200,121,65,0.12)';
@@ -4079,57 +4072,57 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msgErr ? '#4a1a1a' : '#1a3a2a', border: `1px solid ${msgErr ? '#c47474' : '#6a9e7f'}`, color: msgErr ? '#c47474' : '#6a9e7f', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem' }}>{msg}</div>}
 
       {/* ── Summary cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-        {[
-          { label: 'Outstanding Balance', value: fmtM(totalOutstanding), sub: `${outstanding.length} active draw${outstanding.length !== 1 ? 's' : ''}`, color: totalOutstanding > (threshold || Infinity) ? '#c47474' : '#e8eaed' },
-          { label: 'Proposed Exposure', value: fmtM(totalProposed), sub: `${proposed.length} proposed draw${proposed.length !== 1 ? 's' : ''}`, color: '#4a9acf' },
-          { label: 'Facility Capacity', value: fmtM(FACILITY_MAX), sub: `${fmtM(FACILITY_MAX - totalOutstanding)} remaining`, color: '#e8eaed' },
-          { label: 'Internal Threshold', value: threshold ? fmtM(threshold) : 'Not set', sub: threshold ? (totalOutstanding > threshold ? '⚠ Over threshold' : `${fmtM(threshold - totalOutstanding)} headroom`) : 'Set below', color: threshold && totalOutstanding > threshold ? '#c47474' : '#e8eaed' },
-        ].map(({ label, value, sub, color }) => (
-          <div key={label} style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
-            <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-            <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 2 }}>{sub}</div>
-          </div>
-        ))}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
+        <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Outstanding Balance</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: totalOutstanding > (threshold || Infinity) ? '#c47474' : '#e8eaed' }}>{fmtM(totalOutstanding)}</div>
+          <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 2 }}>{outstanding.length} active draw{outstanding.length !== 1 ? 's' : ''}</div>
+        </div>
+        <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Facility Capacity</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#e8eaed' }}>{fmtM(FACILITY_MAX)}</div>
+          <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 2 }}>{fmtM(FACILITY_MAX - totalOutstanding)} remaining</div>
+        </div>
+        <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>12-Month Peak Exposure</div>
+          {(() => {
+            const peak = Math.max(...timelineData.map(t => t.balance), 0);
+            const peakMonth = timelineData.find(t => t.balance === peak);
+            const overThreshold = threshold && peak > threshold;
+            return (
+              <>
+                <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: overThreshold ? '#c47474' : '#e8eaed' }}>{fmtM(peak)}</div>
+                <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 2 }}>
+                  {peak > 0 && peakMonth ? `projected high — ${peakMonth.label}` : 'no projected draws'}
+                </div>
+              </>
+            );
+          })()}
+        </div>
       </div>
 
-      {/* ── Utilization bars ── */}
-      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.67rem', color: '#9aa0aa' }}>
-              <span>Facility utilization</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{(facilityUsedPct * 100).toFixed(1)}% of $45M</span>
-            </div>
-            {pctBar(facilityUsedPct, facilityUsedPct > 0.9 ? '#c47474' : facilityUsedPct > 0.7 ? '#c87941' : '#6a9e7f')}
+      {/* ── Threshold input row ── */}
+      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '0.75rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ fontSize: '0.62rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>Internal Threshold ($M)</div>
+        <input
+          type="number" step="0.1" min="0" max="45"
+          value={thresholdInput}
+          onChange={e => setThresholdInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && requirePin(saveThreshold)}
+          placeholder="e.g. 30"
+          style={{ ...inputSt, width: 100 }}
+          disabled={!pinUnlocked}
+        />
+        <button onClick={() => requirePin(saveThreshold)} style={{ padding: '5px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
+          {pinUnlocked ? 'Save' : '🔒 Save'}
+        </button>
+        {threshold > 0 && (
+          <div style={{ marginLeft: '0.5rem', fontSize: '0.72rem', color: totalOutstanding > threshold ? '#c47474' : '#6a9e7f' }}>
+            {totalOutstanding > threshold
+              ? `⚠ ${fmtM(totalOutstanding - threshold)} over threshold`
+              : `${fmtM(threshold - totalOutstanding)} headroom`}
           </div>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.67rem', color: '#9aa0aa' }}>
-              <span>vs. internal threshold</span>
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                {threshold ? `${(thresholdPct * 100).toFixed(1)}% of ${fmtM(threshold)}` : 'No threshold set'}
-              </span>
-            </div>
-            {threshold ? pctBar(thresholdPct, thresholdPct > 1 ? '#c47474' : thresholdPct > 0.85 ? '#c87941' : '#6a9e7f') : <div style={{ height: 6, background: '#1e2330', borderRadius: 3, marginTop: 4 }} />}
-          </div>
-        </div>
-
-        {/* Threshold input */}
-        <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ fontSize: '0.62rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>Internal Threshold ($M)</div>
-          <input
-            type="number" step="0.1" min="0" max="45"
-            value={thresholdInput}
-            onChange={e => setThresholdInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && requirePin(saveThreshold)}
-            placeholder="e.g. 30"
-            style={{ ...inputSt, width: 100 }}
-            disabled={!pinUnlocked}
-          />
-          <button onClick={() => requirePin(saveThreshold)} style={{ padding: '5px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
-            {pinUnlocked ? 'Save' : '🔒 Save'}
-          </button>
-        </div>
+        )}
       </div>
 
       {/* ── Draws table ── */}
