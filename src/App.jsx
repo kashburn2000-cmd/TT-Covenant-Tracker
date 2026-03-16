@@ -4188,18 +4188,21 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
 
         // Delta labels — only at points where balance changed
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(5.5);
         timelineData.forEach((p, i) => {
           if (i === 0) return;
           const delta = p.balance - timelineData[i - 1].balance;
           if (delta === 0) return;
           const isPos = delta > 0;
-          const label = (isPos ? '+' : '\u2212') + '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M';
-          const px = xOff + (i / (timelineData.length - 1)) * cW;
-          const py = chartBottom - (p.balance / FACILITY_MAX) * cH;
-          const labelY = isPos ? py - 5 : py + 10;
-          doc.setTextColor(...(isPos ? [196, 116, 116] : [106, 158, 127]));
-          doc.text(label, px, labelY, { align: 'center' });
+          const arrow = isPos ? '\u25b2' : '\u25bc';
+          const amt   = '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M';
+          const px    = xOff + (i / (timelineData.length - 1)) * cW;
+          const py    = chartBottom - (p.balance / FACILITY_MAX) * cH;
+          const color = isPos ? [196, 116, 116] : [106, 158, 127];
+          doc.setTextColor(...color);
+          doc.setFontSize(5);
+          doc.text(arrow, px, isPos ? py - 8 : py + 8, { align: 'center' });
+          doc.setFontSize(5.5);
+          doc.text(amt, px, isPos ? py - 3 : py + 13, { align: 'center' });
         });
 
         // X-axis month labels — every other
@@ -4237,6 +4240,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
   // ── 12-month timeline — fixed Y axis 0 to $45M ────────────────────────────
   const today = new Date();
   const CHART_H  = 200;
+  const CHART_TOP_PAD = 20;  // breathing room above the $45M line
   const Y_MAX    = FACILITY_MAX;
   const LABEL_W  = 46;
   const LABEL_H  = 18;
@@ -4271,14 +4275,14 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
   });
 
   // SVG coordinate helpers — Y inverted (0 at bottom)
-  const toY = val => CHART_H - (val / Y_MAX) * CHART_H;
+  const toY = val => CHART_TOP_PAD + (CHART_H - (val / Y_MAX) * CHART_H);
   const toX = i => LABEL_W + 6 + (i / (timelineData.length - 1)) * PLOT_W;
 
   const pts = timelineData.map((p, i) => ({ x: toX(i), y: toY(p.balance), balance: p.balance, label: p.label }));
   const polyline = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-  const areaPath = `M${pts[0].x.toFixed(1)},${CHART_H} ` +
+  const areaPath = `M${pts[0].x.toFixed(1)},${(CHART_H + CHART_TOP_PAD).toFixed(1)} ` +
     pts.map(p => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') +
-    ` L${pts[pts.length-1].x.toFixed(1)},${CHART_H} Z`;
+    ` L${pts[pts.length-1].x.toFixed(1)},${(CHART_H + CHART_TOP_PAD).toFixed(1)} Z`;
   const thresholdY = threshold ? toY(threshold) : null;
 
   // ── Formatters ──────────────────────────────────────────────────────────────
@@ -4469,8 +4473,8 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       </div>
 
       {/* ── 12-month exposure line chart ── */}
-      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1.25rem 1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1.25rem 1.5rem', marginTop: '0.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>12-Month Exposure Forecast</div>
           <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
             <span style={{ fontSize: '0.6rem', color: '#4a7a9e', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 2, background: '#4a7a9e', borderRadius: 1 }} />Projected exposure</span>
@@ -4478,7 +4482,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
             <span style={{ fontSize: '0.6rem', color: '#3a4050', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '1px dashed #3a4050' }} />$45M cap</span>
           </div>
         </div>
-        <svg viewBox={`0 0 ${SVG_VW} ${CHART_H + LABEL_H}`} style={{ width: '100%', display: 'block', overflow: 'visible' }}>
+        <svg viewBox={`0 0 ${SVG_VW} ${CHART_H + CHART_TOP_PAD + LABEL_H}`} style={{ width: '100%', display: 'block', overflow: 'visible' }}>
           {/* Horizontal grid lines at 0%, 25%, 50%, 75%, 100% of $45M */}
           {[0, 0.25, 0.5, 0.75, 1].map(frac => {
             const y = toY(frac * Y_MAX);
@@ -4541,21 +4545,28 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
             const delta = p.balance - pts[i - 1].balance;
             if (delta === 0) return null;
             const isPos = delta > 0;
-            const label = (isPos ? '+' : '−') + '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M';
-            // Position above dot for increases, below for decreases
-            const labelY = isPos ? p.y - 10 : p.y + 19;
+            const arrow = isPos ? '▲' : '▼';
+            const amt   = '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M';
+            const labelY = isPos ? p.y - 10 : p.y + 18;
             const color  = isPos ? '#c47474' : '#6a9e7f';
             return (
-              <text key={i} x={p.x.toFixed(1)} y={labelY.toFixed(1)}
-                textAnchor="middle" fontSize="8" fill={color} fontFamily="inherit" fontWeight="600">
-                {label}
-              </text>
+              <g key={i}>
+                <text x={p.x.toFixed(1)} y={labelY.toFixed(1)}
+                  textAnchor="middle" fontSize="7" fill={color} fontFamily="inherit" fontWeight="600">
+                  {arrow}
+                </text>
+                <text x={p.x.toFixed(1)} y={(labelY + 9).toFixed(1)}
+                  textAnchor="middle" fontSize="8" fill={color} fontFamily="monospace" fontWeight="600"
+                  letterSpacing="0">
+                  {amt}
+                </text>
+              </g>
             );
           })}
 
           {/* X-axis labels — every other month to avoid crowding */}
           {pts.map((p, i) => i % 2 === 0 && (
-            <text key={i} x={p.x.toFixed(1)} y={CHART_H + 14}
+            <text key={i} x={p.x.toFixed(1)} y={CHART_H + CHART_TOP_PAD + 14}
               textAnchor="middle" fontSize="9" fill="#4a4f5a" fontFamily="inherit">
               {p.label}
             </text>
