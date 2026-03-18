@@ -1069,7 +1069,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   function toDb(p) {
     return {
       test_type: p.testType, property: p.property, lender: p.lender,
-      loan_amount: p.loanAmount, noi: p.noi, noi_t1: p.noiT1 || null, noi_t1_current: p.noiT1Current || null, noi_stabilized: p.noiStabilized || null, noi_stabilized_month: p.noiStabilizedMonth || null, spread: p.spread, amort: p.amort,
+      loan_amount: p.loanAmount, noi: p.noi, noi_t1: p.noiT1 || null, noi_t1_current: p.noiT1Current || null, noi_stabilized: p.noiStabilized || null, noi_stabilized_month: p.noiStabilizedMonth || null, paydown_display: p.paydownDisplay ?? null, spread: p.spread, amort: p.amort,
       spread_10y: p.spread10y != null && p.spread10y !== '' ? parseFloat(p.spread10y) : null,
       sizing_rate: p.sizingRate != null && p.sizingRate !== '' ? parseFloat(p.sizingRate) : null,
       covenant_type: p.covenantType, covenant_req: p.covenantReq,
@@ -1096,8 +1096,6 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       noiT1Current: r.noi_t1_current != null ? parseFloat(r.noi_t1_current) : null,
       noiStabilized: r.noi_stabilized != null ? parseFloat(r.noi_stabilized) : null,
       noiStabilizedMonth: r.noi_stabilized_month ?? null,
-      noiStabilized: r.noi_stabilized != null ? parseFloat(r.noi_stabilized) : null,
-      noiStabilizedMonth: r.noi_stabilized_month ?? null,
       spread: parseFloat(r.spread), amort: parseInt(r.amort),
       spread10y: r.spread_10y != null ? parseFloat(r.spread_10y) : null,
       sizingRate: r.sizing_rate != null ? parseFloat(r.sizing_rate) : null,
@@ -1115,6 +1113,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       stdEarlyTerm: r.std_early_term != null ? parseFloat(r.std_early_term) : null,
       oneTimeExpenseMonths: r.one_time_expenses ? (() => { try { const v = typeof r.one_time_expenses === 'string' ? JSON.parse(r.one_time_expenses) : r.one_time_expenses; return Array.isArray(v) ? v : []; } catch(e) { return []; } })() : [],
       replacementReserves: r.replacement_reserves != null ? parseFloat(r.replacement_reserves) : null,
+      paydownDisplay: r.paydown_display ?? null,
       updatedAt: r.updated_at,
     };
   }
@@ -1673,6 +1672,23 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     setForm({ ...p, spread: String(p.spread), spread10y: p.spread10y != null ? String(p.spread10y) : '', sizingRate: p.sizingRate != null ? String(p.sizingRate) : '', covenantReq: String(p.covenantReq), loanAmount: String(p.loanAmount), noi: String(p.noi), incomeMonths: String(p.incomeMonths), expenseMonths: String(p.expenseMonths), variableLoan: p.variableLoan || false, loanCommitment: p.loanCommitment != null ? String(p.loanCommitment) : '', loanSchedule: existingSchedule, actualEarlyTermMonths: (p.actualEarlyTermMonths || []).map(v => v != null ? String(v) : ''), stdEarlyTerm: p.stdEarlyTerm != null ? String(p.stdEarlyTerm) : '', oneTimeExpenseMonths: (p.oneTimeExpenseMonths || []).map(v => v != null ? String(v) : ''), replacementReserves: p.replacementReserves != null ? String(p.replacementReserves) : '' });
     setEditId(p.id);
     setShowForm(true);
+  }
+
+  async function togglePaydownDisplay(id, current) {
+    // Cycle: null (calculated) → 'TBD' → 'dash' → null
+    const next = current === null ? 'TBD' : current === 'TBD' ? 'dash' : null;
+    // Optimistic local update
+    setProperties(ps => ps.map(p => p.id === id ? { ...p, paydownDisplay: next } : p));
+    try {
+      await fetch(`${SB_URL}/rest/v1/properties?id=eq.${id}`, {
+        method: 'PATCH',
+        headers: SB_HEADERS,
+        body: JSON.stringify({ paydown_display: next }),
+      });
+    } catch(err) {
+      // Revert on failure
+      setProperties(ps => ps.map(p => p.id === id ? { ...p, paydownDisplay: current } : p));
+    }
   }
 
   async function deleteRow(id) {
@@ -2753,15 +2769,33 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     )}
 
                     {/* ── Paydown ── */}
-                    {col('paydown') && (
-                      <td style={{ padding: '0.65rem 0.75rem' }}>
-                        {r.paydown > 0
-                          ? r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999
-                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
-                            : <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c87941' }}>{formatCurrency(r.paydown)}</div>
-                          : <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>}
-                      </td>
-                    )}
+                    {col('paydown') && (() => {
+                      const disp = r.paydownDisplay;
+                      const isOverridden = disp !== null && disp !== undefined;
+                      const overrideTip = isOverridden ? 'Click to cycle (overridden)' : 'Click to override display';
+                      function paydownContent() {
+                        if (disp === 'TBD') return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
+                        if (disp === 'dash') return <span style={{ fontSize: '0.85rem', color: '#4a4f5a' }}>—</span>;
+                        if (r.paydown > 0) {
+                          if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999)
+                            return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
+                          return <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c87941' }}>{formatCurrency(r.paydown)}</div>;
+                        }
+                        return <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>;
+                      }
+                      return (
+                        <td style={{ padding: '0.65rem 0.75rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span
+                              onClick={() => requirePin(() => togglePaydownDisplay(r.id, r.paydownDisplay ?? null))}
+                              style={{ cursor: 'pointer' }}
+                              title={overrideTip}
+                            >{paydownContent()}</span>
+                            {isOverridden && <span title="Display overridden — click value to cycle" style={{ width: 5, height: 5, borderRadius: '50%', background: '#c87941', display: 'inline-block', flexShrink: 0 }} />}
+                          </div>
+                        </td>
+                      );
+                    })()}
 
                     {(() => {
                       const loan = r.effectiveLoan || r.loanAmount;
@@ -2797,6 +2831,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       const winnerIsAsIs = paydownAsIs >= paydownStab;
 
                       function renderCell(paydown, noi, sublabel) {
+                        // Check override first
+                        const disp = r.paydownDisplay;
+                        if (disp === 'TBD') return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
+                        if (disp === 'dash') return <span style={{ fontSize: '0.85rem', color: '#4a4f5a' }}>—</span>;
                         if (isTBD) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
                         if (!noi || noi <= 0) return <span style={{ fontSize: '0.75rem', color: '#4a4f5a' }}>No NOI</span>;
                         if (paydown >= loan * 0.999) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
@@ -2818,9 +2856,21 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       const paydownWinner = winnerIsAsIs ? paydownAsIs : paydownStab;
                       const noiWinner     = winnerIsAsIs ? noiAsIs : noiStabForCalc;
                       const labelWinner   = winnerIsAsIs ? asIsLabel : stabLabel;
+                      const isOverridden = r.paydownDisplay !== null && r.paydownDisplay !== undefined;
                       return (
                         <>
-                          {col('dfPaydown') && <td style={{ padding: '0.65rem 0.75rem' }}>{renderCell(paydownWinner, noiWinner, labelWinner)}</td>}
+                          {col('dfPaydown') && (
+                            <td style={{ padding: '0.65rem 0.75rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <span
+                                  onClick={() => requirePin(() => togglePaydownDisplay(r.id, r.paydownDisplay ?? null))}
+                                  style={{ cursor: 'pointer' }}
+                                  title={isOverridden ? 'Click to cycle (overridden)' : 'Click to override display'}
+                                >{renderCell(paydownWinner, noiWinner, labelWinner)}</span>
+                                {isOverridden && <span title="Display overridden — click value to cycle" style={{ width: 5, height: 5, borderRadius: '50%', background: '#c87941', display: 'inline-block', flexShrink: 0 }} />}
+                              </div>
+                            </td>
+                          )}
                         </>
                       );
                     })()}
