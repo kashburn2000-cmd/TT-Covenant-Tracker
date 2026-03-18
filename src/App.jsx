@@ -855,13 +855,14 @@ async function parseForecasts(file) {
     });
 
     // Find key rows by description in col 1
-    let incomeIdx = -1, ctrlExpIdx = -1, nonCtrlExpIdx = -1, noiIdx = -1;
+    let incomeIdx = -1, ctrlExpIdx = -1, nonCtrlExpIdx = -1, noiIdx = -1, endOccIdx = -1;
     for (let i = headerRowIdx; i < data.length; i++) {
       const desc = String((data[i] || [])[1] || '');
       if (desc === 'Total Income' && incomeIdx < 0) incomeIdx = i;
       if (desc === 'Subtotal Controllable Expenses' && ctrlExpIdx < 0) ctrlExpIdx = i;
       if (desc === 'Subtotal Non-Controllable Expenses' && nonCtrlExpIdx < 0) nonCtrlExpIdx = i;
       if (desc === 'Net Operating Income' && noiIdx < 0) noiIdx = i;
+      if (desc === 'Ending Occupancy %' && endOccIdx < 0) endOccIdx = i;
     }
     if (noiIdx < 0) continue;
 
@@ -873,7 +874,28 @@ async function parseForecasts(file) {
     const totalExp    = ctrlExp.map((v, i) => v + nonCtrlExp[i]);
     const noiVals     = getRow(noiIdx);
 
-    results.push({ sheetName, propertyTitle, monthData, incomeVals, totalExp, noiVals });
+    // Extract ending occupancy % for each month (raw 0–1 decimal)
+    const occVals = endOccIdx >= 0
+      ? (data[endOccIdx] || []).slice(janCol, janCol + 12).map(v => {
+          const f = parseFloat(v);
+          return isNaN(f) ? null : f;
+        })
+      : Array(12).fill(null);
+
+    // Find first month where ending occupancy strictly > 92% with a non-zero NOI
+    let noiStabilized = null;
+    let noiStabilizedMonth = null;
+    for (let mi = 0; mi < 12; mi++) {
+      if (occVals[mi] !== null && occVals[mi] > 0.92 && noiVals[mi] && noiVals[mi] > 0) {
+        noiStabilized = noiVals[mi] * 12; // annualize
+        noiStabilizedMonth = monthData[mi]
+          ? `${MONTHS[monthData[mi].month]} ${monthData[mi].year}`
+          : null;
+        break;
+      }
+    }
+
+    results.push({ sheetName, propertyTitle, monthData, incomeVals, totalExp, noiVals, occVals, noiStabilized, noiStabilizedMonth });
   }
   return results;
 }
@@ -1047,7 +1069,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   function toDb(p) {
     return {
       test_type: p.testType, property: p.property, lender: p.lender,
-      loan_amount: p.loanAmount, noi: p.noi, noi_t1: p.noiT1 || null, spread: p.spread, amort: p.amort,
+      loan_amount: p.loanAmount, noi: p.noi, noi_t1: p.noiT1 || null, noi_t1_current: p.noiT1Current || null, noi_stabilized: p.noiStabilized || null, noi_stabilized_month: p.noiStabilizedMonth || null, spread: p.spread, amort: p.amort,
       spread_10y: p.spread10y != null && p.spread10y !== '' ? parseFloat(p.spread10y) : null,
       sizing_rate: p.sizingRate != null && p.sizingRate !== '' ? parseFloat(p.sizingRate) : null,
       covenant_type: p.covenantType, covenant_req: p.covenantReq,
@@ -1071,6 +1093,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       id: r.id, testType: r.test_type, property: r.property, lender: r.lender,
       loanAmount: parseFloat(r.loan_amount), noi: parseFloat(r.noi),
       noiT1: r.noi_t1 != null ? parseFloat(r.noi_t1) : null,
+      noiT1Current: r.noi_t1_current != null ? parseFloat(r.noi_t1_current) : null,
+      noiStabilized: r.noi_stabilized != null ? parseFloat(r.noi_stabilized) : null,
+      noiStabilizedMonth: r.noi_stabilized_month ?? null,
+      noiStabilized: r.noi_stabilized != null ? parseFloat(r.noi_stabilized) : null,
+      noiStabilizedMonth: r.noi_stabilized_month ?? null,
       spread: parseFloat(r.spread), amort: parseInt(r.amort),
       spread10y: r.spread_10y != null ? parseFloat(r.spread_10y) : null,
       sizingRate: r.sizing_rate != null ? parseFloat(r.sizing_rate) : null,
@@ -1148,6 +1175,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [dfMode, setDfMode] = useState('dy'); // 'dscr' or 'dy'
   const [dfDY, setDfDY] = useState('4.90');
   const [dfDYInput, setDfDYInput] = useState('4.90');
+  // Separate DY inputs: current T1 (most recent month) vs T1 at test date
+  const [dfDYAsIs, setDfDYAsIs] = useState('4.90');
+  const [dfDYAsIsInput, setDfDYAsIsInput] = useState('4.90');
+  const [dfDYStab, setDfDYStab] = useState('7.50');
+  const [dfDYStabInput, setDfDYStabInput] = useState('7.50');
 
   const ALL_COLS = [
     { key: 'testType',    label: 'Type' },
@@ -1160,7 +1192,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     { key: 'noi',         label: 'Annual NOI' },
     { key: 'noiVariance', label: 'NOI Variance' },
     { key: 'paydown',     label: 'Paydown' },
-    { key: 'debtFund',    label: 'Debt Fund Paydown' },
+    { key: 'dfPaydown', label: 'Debt Fund Paydown' },
   ];
   const DEFAULT_COLS = Object.fromEntries(ALL_COLS.map(c => [c.key, true]));
   const [visibleCols, setVisibleCols] = useState(DEFAULT_COLS);
@@ -1420,14 +1452,22 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           continue;
         }
 
-        // T1 NOI (most recent single month annualized) for debt fund sizing
+        // T1 NOI at test date (T1 immediately before covenant date)
         const { noi: computedT1 } = computeNOI(bestSheet, 1, 1, prop.covenantDate);
+        // T1 NOI current (most recent available month regardless of test date)
+        const { noi: computedT1Current } = computeNOI(bestSheet, 1, 1, '2099-12-31');
+        // Stabilized NOI = first month >92% ending occupancy, annualized
+        const computedStabilized    = bestSheet.noiStabilized    ?? null;
+        const computedStabilizedMon = bestSheet.noiStabilizedMonth ?? null;
 
         results.push({
           id: prop.id, property: prop.property, status: 'matched',
           matchedSheet: bestSheet.propertyTitle, score: bestScore,
           oldNOI: prop.noi, newNOI: computedNOI,
           newNOIT1: computedT1,
+          newNOIT1Current: computedT1Current,
+          newNOIStabilized: computedStabilized,
+          newNOIStabilizedMonth: computedStabilizedMon,
           noiDetail: computedDetail,
           incomeMonths: prop.incomeMonths, expenseMonths: prop.expenseMonths,
         });
@@ -1463,7 +1503,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     Promise.all(matched.map(async m => {
       const prop = properties.find(p => p.id === m.id);
       if (!prop) return;
-      const patch = { noi: m.newNOI, noi_t1: m.newNOIT1 ?? null, updated_at: new Date().toISOString() };
+      const patch = { noi: m.newNOI, noi_t1: m.newNOIT1 ?? null, noi_t1_current: m.newNOIT1Current ?? null, noi_stabilized: m.newNOIStabilized ?? null, noi_stabilized_month: m.newNOIStabilizedMonth ?? null, updated_at: new Date().toISOString() };
       if (m.isFund && m.fundProperties) { patch.fund_properties = JSON.stringify(m.fundProperties); patch.is_fund = true; }
       if (m.noiDetail) patch.noi_detail = JSON.stringify(m.noiDetail);
       await fetch(`${SB_URL}/rest/v1/properties?id=eq.${m.id}`, {
@@ -1476,7 +1516,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         const next = ps.map(p => {
           const match = matched.find(r => r.id === p.id);
           if (!match) return p;
-          return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
+          return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiT1Current: match.newNOIT1Current ?? null, noiStabilized: match.newNOIStabilized ?? null, noiStabilizedMonth: match.newNOIStabilizedMonth ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
         });
         next.forEach(p => {
           if (matched.find(r => r.id === p.id)) saveSnapshot(p.id, calcRow(p));
@@ -2046,18 +2086,30 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             </div>
           )}
 
-          {/* DY input — shown in DY mode */}
+          {/* DY inputs — shown in DY mode: two separate blanks */}
           {dfMode === 'dy' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Min DY</span>
-              <input
-                type="number" step="0.01" value={dfDYInput}
-                onChange={e => setDfDYInput(e.target.value)}
-                onBlur={() => { const v = parseFloat(dfDYInput); if (!isNaN(v) && v > 0) setDfDY(String(v)); }}
-                style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
-              />
-              <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
-            </div>
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>As-Is DY (T1 at test date)</span>
+                <input
+                  type="number" step="0.01" value={dfDYAsIsInput}
+                  onChange={e => setDfDYAsIsInput(e.target.value)}
+                  onBlur={() => { const v = parseFloat(dfDYAsIsInput); if (!isNaN(v) && v > 0) setDfDYAsIs(String(v)); }}
+                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+                />
+                <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Stabilized DY (first mo. &gt;92% occ)</span>
+                <input
+                  type="number" step="0.01" value={dfDYStabInput}
+                  onChange={e => setDfDYStabInput(e.target.value)}
+                  onBlur={() => { const v = parseFloat(dfDYStabInput); if (!isNaN(v) && v > 0) setDfDYStab(String(v)); }}
+                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+                />
+                <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
+              </div>
+            </>
           )}
 
           {dfMode === 'dscr' && <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -2531,7 +2583,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Annual NOI</th>}
                 {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Variance</th>}
                 {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Paydown</th>}
-                {col('debtFund')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown ({dfMode === 'dy' ? `${dfDY}% DY` : `${dfDSCR}x DSCR`})</th>}
+                {col('dfPaydown') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown ({dfMode === 'dy' ? `${dfDYAsIs}% as-is / ${dfDYStab}% stab` : `${dfDSCR}x DSCR`})</th>}
                 <th style={{ padding: '0.65rem 0.4rem' }}></th>
               </tr>
             </thead>
@@ -2711,41 +2763,65 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       </td>
                     )}
 
-                    {col('debtFund') && (() => {
-                      const dfNOI = r.noiT1 != null ? r.noiT1 : r.noi;
+                    {(() => {
+                      const loan = r.effectiveLoan || r.loanAmount;
                       const dfRate = getSofr(r.covenantDate) + parseFloat(dfSpread) / 100;
-                      let maxDFLoan = 0;
-                      if (dfMode === 'dy') {
-                        const dyReq = parseFloat(dfDY) / 100;
-                        maxDFLoan = dfNOI > 0 ? dfNOI / dyReq : 0;
-                      } else {
+
+                      function calcMaxLoan(noi, dyReq) {
+                        if (!noi || noi <= 0) return 0;
+                        if (dfMode === 'dy') return noi / dyReq;
                         const dfDSCRVal = parseFloat(dfDSCR);
-                        let adsPerDollar;
-                        if (dfIO) {
-                          adsPerDollar = dfRate;
-                        } else {
+                        const adsPerDollar = dfIO ? dfRate : (() => {
                           const mRate = dfRate / 12, n = parseInt(dfAmort) * 12;
-                          adsPerDollar = (mRate * Math.pow(1 + mRate, n)) / (Math.pow(1 + mRate, n) - 1) * 12;
-                        }
-                        maxDFLoan = dfNOI > 0 ? dfNOI / (dfDSCRVal * adsPerDollar) : 0;
+                          return (mRate * Math.pow(1 + mRate, n)) / (Math.pow(1 + mRate, n) - 1) * 12;
+                        })();
+                        return noi / (dfDSCRVal * adsPerDollar);
                       }
-                      const dfPaydown = Math.max(0, (r.effectiveLoan || r.loanAmount) - maxDFLoan);
-                      const modeLabel = dfMode === 'dy' ? `${dfDY}% DY` : `${(dfRate * 100).toFixed(2)}% ${dfIO ? 'I/O' : `${dfAmort}yr`}`;
+
+                      // Column A — As-Is: T1 NOI at test date
+                      const noiAsIs = r.noiT1 != null ? r.noiT1 : r.noi;
+                      const dyAsIsReq = parseFloat(dfDYAsIs) / 100;
+                      const paydownAsIs = Math.max(0, loan - calcMaxLoan(noiAsIs, dyAsIsReq));
+
+                      // Column B — Stabilized: first month >92% ending occupancy, annualized
+                      // If no month crosses 92%, fall back to As-Is NOI with a note
+                      const noiStab = r.noiStabilized;
+                      const stabMonth = r.noiStabilizedMonth;
+                      const stabFallback = !noiStab;
+                      const noiStabForCalc = stabFallback ? noiAsIs : noiStab;
+                      const dyStabReq = parseFloat(dfDYStab) / 100;
+                      const paydownStab = Math.max(0, loan - calcMaxLoan(noiStabForCalc, dyStabReq));
+
+                      // Winner = higher paydown (more binding constraint)
+                      const isTBD = r.paydown >= loan * 0.999;
+                      const winnerIsAsIs = paydownAsIs >= paydownStab;
+
+                      function renderCell(paydown, noi, sublabel) {
+                        if (isTBD) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
+                        if (!noi || noi <= 0) return <span style={{ fontSize: '0.75rem', color: '#4a4f5a' }}>No NOI</span>;
+                        if (paydown >= loan * 0.999) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
+                        if (paydown <= 0) return <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>;
+                        return (
+                          <div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c8cdd6' }}>{formatCurrency(paydown)}</div>
+                            <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginTop: 1 }}>{sublabel}</div>
+                          </div>
+                        );
+                      }
+
+                      const asIsLabel = `${dfDYAsIs}% · T1 @ test date`;
+                      const stabLabel = stabFallback
+                        ? `${dfDYStab}% · no month >92% — using as-is NOI`
+                        : `${dfDYStab}% · ${stabMonth}`;
+
+                      // Pick the higher paydown as the binding constraint
+                      const paydownWinner = winnerIsAsIs ? paydownAsIs : paydownStab;
+                      const noiWinner     = winnerIsAsIs ? noiAsIs : noiStabForCalc;
+                      const labelWinner   = winnerIsAsIs ? asIsLabel : stabLabel;
                       return (
-                        <td style={{ padding: '0.65rem 0.75rem' }}>
-                          {r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999
-                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
-                            : dfNOI <= 0
-                            ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
-                            : dfPaydown >= (r.effectiveLoan || r.loanAmount) * 0.999
-                              ? <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>
-                              : dfPaydown > 0
-                                ? <div>
-                                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c8cdd6' }}>{formatCurrency(dfPaydown)}</div>
-                                    <div style={{ fontSize: '0.65rem', color: '#4a4f5a', marginTop: 2 }}>{modeLabel}</div>
-                                  </div>
-                                : <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>}
-                        </td>
+                        <>
+                          {col('dfPaydown') && <td style={{ padding: '0.65rem 0.75rem' }}>{renderCell(paydownWinner, noiWinner, labelWinner)}</td>}
+                        </>
                       );
                     })()}
 
@@ -2760,7 +2836,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                   {/* ── Math transparency panel ── */}
                   {expandedMath.has(r.id) && (() => {
-                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','priorResult','noi','noiVariance','paydown','debtFund'].filter(col).length + 2;
+                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','priorResult','noi','noiVariance','paydown','dfPaydown'].filter(col).length + 2;
                     const monthlyPayment = r.amort === 0 ? null : (r.loanAmount * (r.rate/12) * Math.pow(1+r.rate/12, r.amort*12)) / (Math.pow(1+r.rate/12, r.amort*12) - 1);
                     const dyActual = (r.noi / (r.effectiveLoan || r.loanAmount)) * 100;
                     return (
@@ -3026,7 +3102,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                   {/* ── History & Comments panel ── */}
                   {expandedHistory.has(r.id) && (() => {
-                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','priorResult','noi','noiVariance','paydown','debtFund'].filter(col).length + 2;
+                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','priorResult','noi','noiVariance','paydown','dfPaydown'].filter(col).length + 2;
                     const events = propertyEvents[r.id] || null;
                     const fmtEvent = (iso) => {
                       const d = new Date(iso);
@@ -3180,7 +3256,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       )}
 
                       {col('paydown') && <td></td>}
-                      {col('debtFund') && <td></td>}
+                      {col('dfPaydown') && <td></td>}
                       <td></td>
                     </tr>
                     );
