@@ -2818,12 +2818,12 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       const paydownAsIs = Math.max(0, loan - calcMaxLoan(noiAsIs, dyAsIsReq));
 
                       // Column B — Stabilized: first month >92% ending occupancy, annualized
-                      // If no month crosses 92%, fall back to As-Is NOI with a note
+                      // If no month crosses 92%, fall back to As-Is NOI *and* As-Is DY threshold
                       const noiStab = r.noiStabilized;
                       const stabMonth = r.noiStabilizedMonth;
                       const stabFallback = !noiStab;
                       const noiStabForCalc = stabFallback ? noiAsIs : noiStab;
-                      const dyStabReq = parseFloat(dfDYStab) / 100;
+                      const dyStabReq = stabFallback ? dyAsIsReq : parseFloat(dfDYStab) / 100;
                       const paydownStab = Math.max(0, loan - calcMaxLoan(noiStabForCalc, dyStabReq));
 
                       // Winner = higher paydown (more binding constraint)
@@ -2849,7 +2849,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                       const asIsLabel = `${dfDYAsIs}% · T1 @ test date`;
                       const stabLabel = stabFallback
-                        ? `${dfDYStab}% · no month >92% — using as-is NOI`
+                        ? `${dfDYAsIs}% · no month >92% — as-is DY`
                         : `${dfDYStab}% · ${stabMonth}`;
 
                       // Pick the higher paydown as the binding constraint
