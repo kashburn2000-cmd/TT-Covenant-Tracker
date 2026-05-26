@@ -1729,24 +1729,109 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     }
   }
 
+  // Exports mirror the executive workbook's "Covenant Dashboard Export" tab so the
+  // data pastes in with zero reformatting: raw numbers/decimals (DY req 0.08, current
+  // DY 0.0744, rate 0.055) and real Excel dates rather than display strings.
+  const EXPORT_HEADERS = ['Property','Lender','Loan Amount','Annual NOI','Covenant Type','Requirement','Current Value','Satisfied','Required NOI','NOI Variance','Paydown Needed','Rate','Covenant Date','Maturity Date'];
+
+  function exportRow(r) {
+    const isDscr = r.covenantType === 'dscr';
+    return {
+      isDscr,
+      property: r.property,
+      lender: r.lender,
+      loanAmount: Math.round(r.loanAmount),
+      noi: Math.round(r.noi),
+      covenantType: r.covenantType.toUpperCase(),
+      requirement: isDscr ? r.covenantReq.toFixed(2) + 'x' : r.covenantReq / 100,
+      currentVal: isDscr ? r.currentVal : r.currentVal / 100,
+      satisfied: r.satisfied ? 'YES' : 'NO',
+      requiredNOI: Math.round(r.requiredNOI),
+      noiVariance: Math.round(r.noiVariance),
+      paydown: Math.round(r.paydown),
+      rate: r.rate,
+      covenantDate: r.covenantDate || '',
+      maturityDate: r.maturityDate || '',
+    };
+  }
+
+  // Excel serial (days since 1899-12-30) for a 'YYYY-MM-DD' string, or null.
+  function isoToExcelSerial(iso) {
+    if (!iso || typeof iso !== 'string') return null;
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    const [, y, mo, d] = m.map(Number);
+    return Math.round((Date.UTC(y, mo - 1, d) - Date.UTC(1899, 11, 30)) / 86400000);
+  }
+
+  function isoToUSDate(iso) {
+    if (!iso || typeof iso !== 'string') return '';
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return '';
+    return `${Number(m[2])}/${Number(m[3])}/${m[1]}`;
+  }
+
   function exportCSV() {
-    const headers = ['Property','Lender','Loan Amount','Annual NOI','Covenant Type','Requirement','Current Value','Satisfied','Required NOI','NOI Variance','Paydown Needed','Rate','Covenant Date','Maturity Date','Income Months','Expense Months'];
-    const csvRows = rows.map(r => [
-      r.property, r.lender, r.loanAmount.toFixed(0), r.noi.toFixed(0),
-      r.covenantType.toUpperCase(),
-      r.covenantType === 'dscr' ? r.covenantReq.toFixed(2)+'x' : r.covenantReq.toFixed(2)+'%',
-      r.covenantType === 'dscr' ? r.currentVal.toFixed(3)+'x' : r.currentVal.toFixed(2)+'%',
-      r.satisfied ? 'YES' : 'NO',
-      r.requiredNOI.toFixed(0), r.noiVariance.toFixed(0), r.paydown.toFixed(0),
-      (r.rate*100).toFixed(4)+'%', r.covenantDate, r.maturityDate,
-      r.incomeMonths, r.expenseMonths,
-    ]);
-    const csv = [headers, ...csvRows].map(r => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const esc = (v) => {
+      const s = v == null ? '' : String(v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const lines = [EXPORT_HEADERS.join(',')];
+    for (const r of rows) {
+      const e = exportRow(r);
+      lines.push([
+        e.property, e.lender, e.loanAmount, e.noi, e.covenantType,
+        e.requirement, e.currentVal, e.satisfied, e.requiredNOI,
+        e.noiVariance, e.paydown, e.rate,
+        isoToUSDate(e.covenantDate), isoToUSDate(e.maturityDate),
+      ].map(esc).join(','));
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'covenant_dashboard.csv'; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = 'covenant_dashboard_export.csv'; a.click();
     URL.revokeObjectURL(url);
     setExportMsg('CSV exported!');
+    setTimeout(() => setExportMsg(''), 2500);
+  }
+
+  // Native .xlsx whose sheet name and column schema match the executive workbook's
+  // "Covenant Dashboard Export" tab, with typed/formatted cells for drop-in pasting.
+  function exportXLSX() {
+    const XLSX = window.XLSX;
+    if (!XLSX) {
+      setExportMsg('Excel engine still loading — try again in a moment.');
+      setTimeout(() => setExportMsg(''), 2500);
+      return;
+    }
+    const data = rows.map(exportRow);
+    const aoa = [EXPORT_HEADERS, ...data.map(e => [
+      e.property, e.lender, e.loanAmount, e.noi, e.covenantType,
+      e.requirement, e.currentVal, e.satisfied, e.requiredNOI,
+      e.noiVariance, e.paydown, e.rate,
+      isoToExcelSerial(e.covenantDate), isoToExcelSerial(e.maturityDate),
+    ])];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    const NUM = '#,##0';
+    const setZ = (col, rowIdx, z) => {
+      const ref = XLSX.utils.encode_cell({ c: col, r: rowIdx + 1 });
+      const cell = ws[ref];
+      if (cell && cell.v != null && cell.v !== '') cell.z = z;
+    };
+    data.forEach((e, i) => {
+      setZ(2, i, NUM); setZ(3, i, NUM); setZ(8, i, NUM); setZ(9, i, NUM); setZ(10, i, NUM);
+      if (!e.isDscr) setZ(5, i, '0.00%');           // DY requirement (DSCR stays "1.20x" text)
+      setZ(6, i, e.isDscr ? '0.000' : '0.00%');      // current value
+      setZ(11, i, '0.000%');                          // rate
+      setZ(12, i, 'm/d/yyyy'); setZ(13, i, 'm/d/yyyy');
+    });
+
+    ws['!cols'] = [16, 16, 14, 13, 8, 11, 12, 9, 13, 13, 14, 9, 13, 13].map(wch => ({ wch }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Covenant Dashboard Export');
+    XLSX.writeFile(wb, 'covenant_dashboard_export.xlsx');
+    setExportMsg('Excel exported!');
     setTimeout(() => setExportMsg(''), 2500);
   }
 
@@ -2250,6 +2335,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           )}
           {exportMsg && <span style={{ fontSize: '0.7rem', color: '#6a9e7f' }}>{exportMsg}</span>}
           {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? '#6a9e7f' : '#c8cdd6' }}>{uploadStatus}</span>}
+          <button onClick={exportXLSX} title="Drops straight into the workbook's Covenant Dashboard Export tab" style={{
+            padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(106,158,127,0.15)', color: '#6a9e7f', outline: '1px solid #6a9e7f44',
+          }}>↓ Export Excel</button>
           <button onClick={exportCSV} style={{
             padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '0.72rem', fontWeight: 600, background: 'rgba(106,158,127,0.15)', color: '#6a9e7f', outline: '1px solid #6a9e7f44',
