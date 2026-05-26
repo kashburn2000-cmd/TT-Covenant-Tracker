@@ -5604,7 +5604,13 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
                   <td style={{ ...td, textAlign: 'center', color: arrowColor, fontWeight: 700 }}>{arrow}</td>
                   <td style={{ ...td, textAlign: 'center' }}>{fmtResult(cur, r.covenantType)}</td>
                   <td style={{ ...td, textAlign: 'center', background: ok ? C.okBg : C.failBg, color: ok ? C.okTxt : C.failTxt, fontWeight: 700, fontStyle: waived ? 'italic' : 'normal' }}>{statusText}</td>
-                  <td style={{ ...td, textAlign: 'right' }}>{r.paydown > 0 ? usd0(r.paydown) : '$0'}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{(() => {
+                    const disp = r.paydownDisplay;
+                    if (disp === 'TBD') return 'TBD';
+                    if (disp === 'dash') return '—';
+                    if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999) return 'TBD';
+                    return r.paydown > 0 ? usd0(r.paydown) : '$0';
+                  })()}</td>
                 </tr>
               );
             }))}
