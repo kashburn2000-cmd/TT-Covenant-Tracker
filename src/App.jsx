@@ -3071,6 +3071,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       const isOverridden = disp !== null && disp !== undefined;
                       const overrideTip = isOverridden ? 'Click to cycle (overridden)' : 'Click to override display';
                       function paydownContent() {
+                        if (r.waived) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#6a9e7f', fontStyle: 'italic' }}>Waived</span>;
                         if (disp === 'TBD') return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
                         if (disp === 'dash') return <span style={{ fontSize: '0.85rem', color: '#4a4f5a' }}>—</span>;
                         if (r.paydown > 0) {
@@ -5604,7 +5605,8 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
                   <td style={{ ...td, textAlign: 'center', color: arrowColor, fontWeight: 700 }}>{arrow}</td>
                   <td style={{ ...td, textAlign: 'center' }}>{fmtResult(cur, r.covenantType)}</td>
                   <td style={{ ...td, textAlign: 'center', background: ok ? C.okBg : C.failBg, color: ok ? C.okTxt : C.failTxt, fontWeight: 700, fontStyle: waived ? 'italic' : 'normal' }}>{statusText}</td>
-                  <td style={{ ...td, textAlign: 'right' }}>{(() => {
+                  <td style={{ ...td, textAlign: 'right', ...(waived ? { fontStyle: 'italic' } : {}) }}>{(() => {
+                    if (waived) return 'Waived';
                     const disp = r.paydownDisplay;
                     if (disp === 'TBD') return 'TBD';
                     if (disp === 'dash') return '—';
