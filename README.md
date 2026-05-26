@@ -79,6 +79,7 @@ Expandable per-row panel showing the full calculation chain:
 
 | Column | Type | Description |
 |---|---|---|
+| `waived` | boolean | Lender has waived the test — displays WAIVED instead of FAIL |
 | `variable_loan` | boolean | Enables rolling balance mode |
 | `loan_commitment` | numeric | Total facility size (variable loans) |
 | `loan_schedule` | jsonb | Monthly balance entries `[{ month, balance }]` |
@@ -104,6 +105,7 @@ Run the following in the Supabase SQL editor to create all required columns:
 
 ```sql
 ALTER TABLE properties
+  ADD COLUMN IF NOT EXISTS waived boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS is_fund boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS fund_properties jsonb,
   ADD COLUMN IF NOT EXISTS noi_detail jsonb,

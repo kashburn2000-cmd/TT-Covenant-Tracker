@@ -1074,7 +1074,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     amort: '30',
     covenantType: 'dscr', covenantReq: '1.25',
     testType: 'Covenant', covenantDate: SOFR_MIN, maturityDate: '',
-    incomeMonths: '3', expenseMonths: '3', note: '',
+    incomeMonths: '3', expenseMonths: '3', note: '', waived: false,
     variableLoan: false, loanCommitment: '', loanSchedule: EMPTY_LOAN_SCHEDULE,
     actualEarlyTermMonths: [], oneTimeExpenseMonths: [], stdEarlyTerm: '', replacementReserves: '',
   };
@@ -1095,6 +1095,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       covenant_date: p.covenantDate, maturity_date: p.maturityDate || null,
       income_months: p.incomeMonths, expense_months: p.expenseMonths,
       note: p.note || null,
+      waived: p.waived || false,
       is_fund: p.isFund || false,
       fund_properties: p.fundProperties ? JSON.stringify(p.fundProperties) : null,
       noi_detail: p.noiDetail ? JSON.stringify(p.noiDetail) : null,
@@ -1122,6 +1123,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       covenantDate: r.covenant_date, maturityDate: r.maturity_date || '',
       incomeMonths: parseInt(r.income_months), expenseMonths: parseInt(r.expense_months),
       note: r.note || '',
+      waived: r.waived || false,
       isFund: r.is_fund || false,
       fundProperties: r.fund_properties ? (typeof r.fund_properties === 'string' ? JSON.parse(r.fund_properties) : r.fund_properties) : [],
       noiDetail: r.noi_detail ? (typeof r.noi_detail === 'string' ? JSON.parse(r.noi_detail) : r.noi_detail) : null,
@@ -2557,6 +2559,19 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             </label>
           </div>
 
+          {/* ── Covenant Waived Toggle ── */}
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
+              <div
+                onClick={() => setF('waived', !form.waived)}
+                style={{ width: 36, height: 20, borderRadius: 10, background: form.waived ? '#6a9e7f' : '#2e3340', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: 3, left: form.waived ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: '#e8eaed', transition: 'left 0.2s' }} />
+              </div>
+              <span style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: form.waived ? '#6a9e7f' : '#9aa0aa', fontWeight: 600 }}>Covenant Waived</span>
+            </label>
+            <div style={{ fontSize: '0.66rem', color: '#6a7079', marginTop: '0.3rem' }}>Lender has waived this test — shows WAIVED instead of FAIL on the dashboard and Doc View.</div>
+          </div>
+
           {form.variableLoan && (
             <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: '#16191f', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #c87941' }}>
               {/* Commitment field — replaces loan amount display */}
@@ -2793,8 +2808,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                         <div style={{ fontSize: '0.78rem', color: '#c8cdd6', fontWeight: 600 }}>
                           {r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x DSCR` : `${r.covenantReq.toFixed(2)}% DY`}
                         </div>
-                        <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: r.satisfied ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: r.satisfied ? '#6a9e7f' : '#c47474' }}>
-                          {r.satisfied ? '✓ PASS' : '✗ FAIL'}
+                        <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: r.waived ? 'rgba(106,158,127,0.15)' : r.satisfied ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: r.waived ? '#6a9e7f' : r.satisfied ? '#6a9e7f' : '#c47474', fontStyle: r.waived ? 'italic' : 'normal' }}>
+                          {r.waived ? '◐ WAIVED' : r.satisfied ? '✓ PASS' : '✗ FAIL'}
                         </span>
                       </td>
                     )}
