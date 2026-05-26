@@ -811,6 +811,22 @@ function fuzzyMatch(sheetTitle, propertyName) {
   return matches.length / Math.max(words.length, 1);
 }
 
+// Parse a month-period header label into { month, year }.
+// Handles the formats forecast exports use: "Jan 2026", "Jan-26",
+// "January 2026", "Jan/26", etc. Returns null for anything else.
+const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function parseMonthLabel(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  const m = s.match(/^([A-Za-z]{3,9})[\s\-/.]+(\d{2,4})$/);
+  if (!m) return null;
+  const key = m[1].slice(0, 3).toLowerCase();
+  const month = MONTH_ABBR.findIndex(x => x.toLowerCase() === key);
+  if (month < 0) return null;
+  let year = parseInt(m[2], 10);
+  if (year < 100) year += 2000;
+  return { month, year };
+}
+
 // Parse xlsx file using SheetJS (loaded via script tag in App)
 async function parseForecasts(file) {
   const XLSX = window.XLSX;
@@ -825,67 +841,70 @@ async function parseForecasts(file) {
     const ws = wb.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-    // Extract property name from row 0
+    // Extract property name from row 0 — prefer a "Budget Analysis" title cell,
+    // else the first non-empty text cell, else fall back to the sheet tab name.
     const titleRow = data[0] || [];
-    const titleCell = titleRow.find(c => typeof c === 'string' && c.includes('Budget Analysis'));
-    const propertyTitle = titleCell || sheetName;
+    const baTitle = titleRow.find(c => typeof c === 'string' && c.includes('Budget Analysis'));
+    const firstText = titleRow.find(c => typeof c === 'string' && c.trim().length > 0);
+    const propertyTitle = baTitle || firstText || sheetName;
 
-    // Find header row (has 'Jan 2026' or similar)
-    let janCol = -1, headerRowIdx = -1;
-    let monthLabels = [];
-    for (let i = 0; i < Math.min(data.length, 20); i++) {
+    // Find the month-header row and the exact column index of each month.
+    // Exports vary: labels may read "Jan 2026" or "Jan-26", the month columns
+    // are not always contiguous (spacer/summary columns can sit between them),
+    // and a workbook may carry more than 12 months (e.g. a rolling forecast
+    // that spills into the next year). So capture every month cell with its
+    // real column index rather than assuming 12 columns starting at January.
+    let headerRowIdx = -1;
+    let monthCols = []; // [{ col, month, year }]
+    for (let i = 0; i < Math.min(data.length, 25); i++) {
       const row = data[i] || [];
+      const found = [];
       for (let j = 0; j < row.length; j++) {
-        const cell = String(row[j] || '');
-        if (/^Jan \d{4}$/.test(cell)) {
-          janCol = j; headerRowIdx = i;
-          monthLabels = row.slice(j, j + 12).map(c => String(c || ''));
-          break;
-        }
+        const parsed = parseMonthLabel(row[j]);
+        if (parsed) found.push({ col: j, ...parsed });
       }
-      if (janCol >= 0) break;
+      if (found.length >= 6) { headerRowIdx = i; monthCols = found; break; }
     }
-    if (janCol < 0) continue;
+    if (headerRowIdx < 0) continue;
 
-    // Parse month labels to get year and month index
-    const monthData = monthLabels.map(label => {
-      const m = label.match(/^(\w{3}) (\d{4})$/);
-      if (!m) return null;
-      return { month: MONTHS.indexOf(m[1]), year: parseInt(m[2]) };
-    });
+    const monthData = monthCols.map(mc => ({ month: mc.month, year: mc.year }));
 
-    // Find key rows by description in col 1
+    // Find key rows by description. The label sits in the first or second
+    // column depending on the export layout, so check both.
     let incomeIdx = -1, ctrlExpIdx = -1, nonCtrlExpIdx = -1, noiIdx = -1, endOccIdx = -1;
     for (let i = headerRowIdx; i < data.length; i++) {
-      const desc = String((data[i] || [])[1] || '');
-      if (desc === 'Total Income' && incomeIdx < 0) incomeIdx = i;
-      if (desc === 'Subtotal Controllable Expenses' && ctrlExpIdx < 0) ctrlExpIdx = i;
-      if (desc === 'Subtotal Non-Controllable Expenses' && nonCtrlExpIdx < 0) nonCtrlExpIdx = i;
-      if (desc === 'Net Operating Income' && noiIdx < 0) noiIdx = i;
-      if (desc === 'Ending Occupancy %' && endOccIdx < 0) endOccIdx = i;
+      const row = data[i] || [];
+      const descA = String(row[0] == null ? '' : row[0]).trim();
+      const descB = String(row[1] == null ? '' : row[1]).trim();
+      const is = label => descA === label || descB === label;
+      if (is('Total Income') && incomeIdx < 0) incomeIdx = i;
+      if (is('Subtotal Controllable Expenses') && ctrlExpIdx < 0) ctrlExpIdx = i;
+      if (is('Subtotal Non-Controllable Expenses') && nonCtrlExpIdx < 0) nonCtrlExpIdx = i;
+      if (is('Net Operating Income') && noiIdx < 0) noiIdx = i;
+      if (is('Ending Occupancy %') && endOccIdx < 0) endOccIdx = i;
     }
     if (noiIdx < 0) continue;
 
-    // Extract 12 months of income, expenses, NOI
-    const getRow = idx => (data[idx] || []).slice(janCol, janCol + 12).map(v => parseFloat(v) || 0);
-    const incomeVals  = incomeIdx >= 0 ? getRow(incomeIdx) : Array(12).fill(0);
-    const ctrlExp     = ctrlExpIdx >= 0 ? getRow(ctrlExpIdx) : Array(12).fill(0);
-    const nonCtrlExp  = nonCtrlExpIdx >= 0 ? getRow(nonCtrlExpIdx) : Array(12).fill(0);
+    // Extract income, expenses, NOI from the resolved month columns
+    const getRow = idx => monthCols.map(mc => parseFloat((data[idx] || [])[mc.col]) || 0);
+    const incomeVals  = incomeIdx >= 0 ? getRow(incomeIdx) : monthCols.map(() => 0);
+    const ctrlExp     = ctrlExpIdx >= 0 ? getRow(ctrlExpIdx) : monthCols.map(() => 0);
+    const nonCtrlExp  = nonCtrlExpIdx >= 0 ? getRow(nonCtrlExpIdx) : monthCols.map(() => 0);
     const totalExp    = ctrlExp.map((v, i) => v + nonCtrlExp[i]);
     const noiVals     = getRow(noiIdx);
 
     // Extract ending occupancy % for each month (raw 0–1 decimal)
     const occVals = endOccIdx >= 0
-      ? (data[endOccIdx] || []).slice(janCol, janCol + 12).map(v => {
-          const f = parseFloat(v);
+      ? monthCols.map(mc => {
+          const f = parseFloat((data[endOccIdx] || [])[mc.col]);
           return isNaN(f) ? null : f;
         })
-      : Array(12).fill(null);
+      : monthCols.map(() => null);
 
     // Find first month where ending occupancy strictly > 92% with a non-zero NOI
     let noiStabilized = null;
     let noiStabilizedMonth = null;
-    for (let mi = 0; mi < 12; mi++) {
+    for (let mi = 0; mi < monthData.length; mi++) {
       if (occVals[mi] !== null && occVals[mi] > 0.92 && noiVals[mi] && noiVals[mi] > 0) {
         noiStabilized = noiVals[mi] * 12; // annualize
         noiStabilizedMonth = monthData[mi]
@@ -1415,7 +1434,17 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           : Object.entries(FUND_SHEETS).map(([code, name]) => ({ name, sheetCode: code, noi: 0, allocatedLoan: FUND_ALLOC[code] || null }));
 
         const updatedFundProps = baseFundProps.map(fp => {
-          const match = sheets.find(s => s.sheetName.toLowerCase().startsWith(fp.sheetCode));
+          // Prefer the internal code-named tab; otherwise fall back to matching
+          // the fund property name against the sheet title / tab name, since
+          // some exports name tabs by location rather than property code.
+          let match = sheets.find(s => s.sheetName.toLowerCase().startsWith(fp.sheetCode));
+          if (!match) {
+            let bestScore = 0.5;
+            for (const s of sheets) {
+              const sc = Math.max(fuzzyMatch(s.propertyTitle, fp.name), fuzzyMatch(s.sheetName, fp.name));
+              if (sc > bestScore) { bestScore = sc; match = s; }
+            }
+          }
           if (!match) return fp;
           const { noi, detail } = computeNOI(match, fundRow.incomeMonths, fundRow.expenseMonths, fundRow.covenantDate, { actualEarlyTermMonths: fundRow.actualEarlyTermMonths, stdEarlyTerm: fundRow.stdEarlyTerm, oneTimeExpenseMonths: fundRow.oneTimeExpenseMonths, replacementReserves: fundRow.replacementReserves });
           return { ...fp, noi: noi !== null ? Math.round(noi) : fp.noi, noiDetail: detail };
