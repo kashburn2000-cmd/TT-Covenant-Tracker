@@ -1100,6 +1100,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       income_months: p.incomeMonths, expense_months: p.expenseMonths,
       note: p.note || null,
       waived: p.waived || false,
+      hidden: p.hidden || false,
       is_fund: p.isFund || false,
       fund_properties: p.fundProperties ? JSON.stringify(p.fundProperties) : null,
       noi_detail: p.noiDetail ? JSON.stringify(p.noiDetail) : null,
@@ -1128,6 +1129,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       incomeMonths: parseInt(r.income_months), expenseMonths: parseInt(r.expense_months),
       note: r.note || '',
       waived: r.waived || false,
+      hidden: r.hidden || false,
       isFund: r.is_fund || false,
       fundProperties: r.fund_properties ? (typeof r.fund_properties === 'string' ? JSON.parse(r.fund_properties) : r.fund_properties) : [],
       noiDetail: r.noi_detail ? (typeof r.noi_detail === 'string' ? JSON.parse(r.noi_detail) : r.noi_detail) : null,
@@ -1191,11 +1193,12 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [showColPicker, setShowColPicker] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPaydown, setShowPaydown] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const [docView, setDocView] = useState(false);
   function openDocView() {
     setDocView(true);
     // Pull prior-snapshot values for every row so the Previous Test column populates.
-    rows.forEach(r => { if (!propertyEvents[r.id]) fetchEvents(r.id); });
+    activeRows.forEach(r => { if (!propertyEvents[r.id]) fetchEvents(r.id); });
   }
   const [dfSpread, setDfSpread] = useState('2.25');
   const [dfDSCR, setDfDSCR] = useState('1.05');
@@ -1420,12 +1423,19 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     });
   }, [properties, sortField]);
 
+  // activeRows = the live set (hidden tests excluded). Used for summary cards,
+  // exports and Doc View. visibleRows = what the dashboard table renders, which
+  // also includes hidden rows when "Show Hidden" is on.
+  const activeRows = useMemo(() => rows.filter(r => !r.hidden), [rows]);
+  const hiddenCount = rows.length - activeRows.length;
+  const visibleRows = showHidden ? rows : activeRows;
+
   const summary = useMemo(() => ({
-    total: rows.length,
-    passing: rows.filter(r => r.satisfied).length,
-    failing: rows.filter(r => !r.satisfied).length,
-    totalPaydown: rows.reduce((s, r) => s + r.paydown, 0),
-  }), [rows]);
+    total: activeRows.length,
+    passing: activeRows.filter(r => r.satisfied).length,
+    failing: activeRows.filter(r => !r.satisfied).length,
+    totalPaydown: activeRows.reduce((s, r) => s + r.paydown, 0),
+  }), [activeRows]);
 
   async function handleFileUpload(e) {
     const file = e.target.files[0];
@@ -1744,6 +1754,25 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     }
   }
 
+  // Hide / un-hide a test (past or no longer applicable). Hidden rows drop out
+  // of the dashboard, summary counts and exports, but are kept in the database
+  // so they can be restored — distinct from a permanent delete.
+  async function toggleHidden(id, current) {
+    const next = !current;
+    setProperties(ps => ps.map(p => p.id === id ? { ...p, hidden: next } : p));
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/properties?id=eq.${id}`, {
+        method: 'PATCH',
+        headers: SB_HEADERS,
+        body: JSON.stringify({ hidden: next }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+    } catch (err) {
+      setProperties(ps => ps.map(p => p.id === id ? { ...p, hidden: current } : p));
+      alert('Could not update — make sure the "hidden" column exists in Supabase.\n' + err.message);
+    }
+  }
+
   // Exports mirror the executive workbook's "Covenant Dashboard Export" tab so the
   // data pastes in with zero reformatting: raw numbers/decimals (DY req 0.08, current
   // DY 0.0744, rate 0.055) and real Excel dates rather than display strings.
@@ -1792,7 +1821,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
     const lines = [EXPORT_HEADERS.join(',')];
-    for (const r of rows) {
+    for (const r of activeRows) {
       const e = exportRow(r);
       lines.push([
         e.property, e.lender, e.loanAmount, e.noi, e.covenantType,
@@ -1818,7 +1847,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       setTimeout(() => setExportMsg(''), 2500);
       return;
     }
-    const data = rows.map(exportRow);
+    const data = activeRows.map(exportRow);
     const aoa = [EXPORT_HEADERS, ...data.map(e => [
       e.property, e.lender, e.loanAmount, e.noi, e.covenantType,
       e.requirement, e.currentVal, e.satisfied, e.requiredNOI,
@@ -1904,8 +1933,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       doc.text('Prepared by Kevin Ashburn  //  Updated Monthly', 28, 44);
 
       // Summary pills — top right
-      const passing = rows.filter(r => r.satisfied).length;
-      const failing = rows.filter(r => !r.satisfied).length;
+      const passing = activeRows.filter(r => r.satisfied).length;
+      const failing = activeRows.filter(r => !r.satisfied).length;
       const pillY = 14;
       let pillX = pageW - 28;
 
@@ -1923,7 +1952,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
 
       doc.setFillColor(200, 121, 65);
       // Draw pills right to left
-      const totalPaydown = rows.reduce((s, r) => s + r.paydown, 0);
+      const totalPaydown = activeRows.reduce((s, r) => s + r.paydown, 0);
       // Failing pill
       if (failing > 0) {
         const label = `Failing: ${failing}`;
@@ -2038,7 +2067,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
       // ── Table ─────────────────────────────────────────────────────────────
       const head = [visibleDefs.map(c => c.head)];
-      const body = rows.map(r => visibleDefs.map(c => c.cell(r)));
+      const body = activeRows.map(r => visibleDefs.map(c => c.cell(r)));
 
       // Per-row style — color result cell text by pass/fail
       const resultColIdx = visibleDefs.findIndex(c => c.key === 'result');
@@ -2074,7 +2103,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         },
         didParseCell: (data) => {
           if (data.section === 'body') {
-            const row = rows[data.row.index];
+            const row = activeRows[data.row.index];
             if (!row) return;
             // Result column — color by pass/fail
             if (resultColIdx !== -1 && data.column.index === resultColIdx) {
@@ -2127,7 +2156,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
     <div>
       {/* ── Executive Doc View overlay ── */}
       {docView && (
-        <DocView rows={rows} propertyEvents={propertyEvents} lastUpdated={lastUpdated} onClose={() => setDocView(false)} />
+        <DocView rows={activeRows} propertyEvents={propertyEvents} lastUpdated={lastUpdated} onClose={() => setDocView(false)} />
       )}
 
       {/* ── DB Loading / Error states ── */}
@@ -2432,6 +2461,13 @@ Req: ${formatCurrency(r.requiredNOI)}`,
               </div>
             )}
           </div>
+          {hiddenCount > 0 && (
+            <button onClick={() => setShowHidden(v => !v)} title="Hidden tests are kept in the database but excluded from the dashboard, summary and exports" style={{
+              padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: '0.72rem', fontWeight: 600, background: showHidden ? 'rgba(154,160,170,0.22)' : 'rgba(154,160,170,0.10)',
+              color: '#9aa0aa', outline: '1px solid #9aa0aa44',
+            }}>{showHidden ? '🙈 Hide Hidden' : `👁 Show Hidden (${hiddenCount})`}</button>
+          )}
           <button onClick={() => requirePin(() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); })} style={{
             padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '0.72rem', fontWeight: 600,
@@ -2792,7 +2828,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => {
+              {visibleRows.map((r, i) => {
                 const days = daysUntil(r.covenantDate);
                 const isUrgent = days !== null && days <= 30 && days >= 0;
                 const isPast = days !== null && days < 0;
@@ -2803,13 +2839,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 const fundProps = r.fundProperties || [];
                 return (
                   <React.Fragment key={r.id}>
-                  <tr style={{ background: i % 2 === 0 ? 'transparent' : '#13151a', borderBottom: isFundRow && expandedFund ? 'none' : '1px solid #16191f' }}>
+                  <tr style={{ background: i % 2 === 0 ? 'transparent' : '#13151a', borderBottom: isFundRow && expandedFund ? 'none' : '1px solid #16191f', opacity: r.hidden ? 0.5 : 1 }}>
 
                     {/* ── Test Date — always first ── */}
                     <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap', borderRight: '1px solid #2e3340' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 700, color: dateColor }}>
                         {isUrgent ? '⚠ ' : isPast ? '✗ ' : ''}{fmtDate(r.covenantDate)}
                       </div>
+                      {r.hidden && <div style={{ display: 'inline-block', marginTop: '0.25rem', padding: '1px 6px', borderRadius: 2, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.08em', background: 'rgba(154,160,170,0.15)', color: '#9aa0aa' }}>HIDDEN</div>}
                       {days !== null && (
                         <div style={{ fontSize: '0.65rem', color: isUrgent ? '#8a7a42' : isPast ? '#c4747455' : '#4a4f5a' }}>
                           {isPast ? `${Math.abs(days)}d ago` : `${days}d away`}
@@ -3066,6 +3103,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     {/* ── Actions ── */}
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
                       <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#9aa0aa' : '#2a2d35', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
+                      <button onClick={() => requirePin(() => toggleHidden(r.id, r.hidden))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? (r.hidden ? '#6a9e7f' : '#9aa0aa') : '#2a2d35', fontSize: '0.78rem', padding: '2px 5px' }} title={pinUnlocked ? (r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)') : 'Unlock to hide'}>{r.hidden ? '↩' : '⊘'}</button>
                       <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#c4747444' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
                       <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? '#c87941' : '#4a4f5a' }} title="Show calculation">∑</button>
                       <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? '#6a9e7f' : '#4a4f5a' }} title="History &amp; notes">⏱</button>
@@ -3516,6 +3554,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           </table>
         </div>
         {rows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: '#4a4f5a', fontSize: '0.85rem' }}>No properties yet — click "+ Add Property" to get started</div>}
+        {rows.length > 0 && visibleRows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: '#4a4f5a', fontSize: '0.85rem' }}>All tests are hidden — click "Show Hidden" to view them.</div>}
       </div>
 
       </div>
