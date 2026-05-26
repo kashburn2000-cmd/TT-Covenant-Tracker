@@ -5459,7 +5459,7 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#fff', zIndex: 4000, overflow: 'auto', fontFamily: "'Inter', sans-serif" }}>
       <div style={{ position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 1rem', background: '#f1f1f1', borderBottom: `1px solid ${C.line}`, zIndex: 2 }}>
-        <span style={{ fontSize: '0.7rem', color: '#666', fontWeight: 600 }}>DOC VIEW — styled like the executive Covenant Dashboard</span>
+        <span style={{ fontSize: '0.7rem', color: '#666', fontWeight: 600 }}>Doc View</span>
         <button onClick={onClose} style={{ padding: '5px 16px', borderRadius: 3, border: '1px solid #999', background: '#fff', color: '#333', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>✕ Close</button>
       </div>
 
