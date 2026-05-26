@@ -4,6 +4,18 @@ import React, { useState, useMemo } from "react";
 // Legacy snapshots (is_monthly null) predate this flag, so they still count.
 const isMonthlySnap = e => e.type === 'snapshot' && e.is_monthly !== false;
 
+// Convert a forecast-month label ("April 2026") to the ISO timestamp of the last
+// day of that month, so a back-dated Prior Test snapshot shows the right date.
+function monthLabelToISO(label) {
+  if (!label) return null;
+  const FULL = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const m = String(label).trim().match(/^([A-Za-z]+)\s+(\d{4})$/);
+  if (!m) return null;
+  const monthIdx = FULL.indexOf(m[1].toLowerCase());
+  if (monthIdx < 0) return null;
+  return new Date(Date.UTC(parseInt(m[2], 10), monthIdx + 1, 0, 12, 0, 0)).toISOString();
+}
+
 // ─── Chatham 1-Month Term SOFR Forward Curve (as of 03 Mar 2026) ───────────
 const SOFR_CURVE = [
   { date: "2026-03-09", sofr: 0.036649 },
@@ -1190,6 +1202,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [uploadResults, setUploadResults] = useState([]);
   const [showUploadResults, setShowUploadResults] = useState(false);
   const [monthlyUpload, setMonthlyUpload] = useState(true); // big monthly update vs small interim update
+  const [uploadMode, setUploadMode] = useState('current'); // 'current' = update live NOI; 'prior' = set Prior Test baseline only
   const [showColPicker, setShowColPicker] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPaydown, setShowPaydown] = useState(false);
@@ -1443,6 +1456,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     setUploadStatus('Parsing file...');
     setUploadResults([]);
     setShowUploadResults(false);
+    setUploadMode('current');
 
     try {
       const sheets = await parseForecasts(file);
@@ -1588,6 +1602,31 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     });
   }
 
+  // Record the parsed forecast as the Prior Test baseline WITHOUT touching the
+  // current live NOI. Each matched property gets a monthly snapshot computed
+  // from the uploaded NOI but the property's current loan/rate params, dated to
+  // the forecast month so the Prior Test column shows the right date.
+  async function applyAsPriorTest() {
+    const matched = uploadResults.filter(r => r.status === 'matched');
+    if (matched.length === 0) { setUploadStatus('No matched properties to set as Prior Test.'); return; }
+    const label = forecastMonthInput.trim() || forecastMonth;
+    const createdAt = monthLabelToISO(label);
+    try {
+      await Promise.all(matched.map(async m => {
+        const prop = properties.find(p => p.id === m.id);
+        if (!prop) return;
+        const temp = { ...prop, noi: m.newNOI, ...(m.isFund && m.fundProperties ? { fundProperties: m.fundProperties } : {}) };
+        await saveSnapshot(m.id, calcRow(temp), true, createdAt);
+      }));
+      await Promise.all(matched.map(m => fetchEvents(m.id)));
+      setShowUploadResults(false);
+      setUploadStatus(`✓ Set Prior Test from ${label || 'forecast'} for ${matched.length} properties (current NOI unchanged).`);
+      setTimeout(() => setUploadStatus(''), 5000);
+    } catch (err) {
+      setUploadStatus('Error saving Prior Test: ' + err.message);
+    }
+  }
+
   async function saveForm() {
     const p = {
       ...form,
@@ -1678,7 +1717,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     } catch (err) { console.error('fetchEvents error', err); }
   }
 
-  async function saveSnapshot(propertyId, row, isMonthly = false) {
+  async function saveSnapshot(propertyId, row, isMonthly = false, createdAt = null) {
     try {
       await fetch(`${SB_URL}/rest/v1/property_events`, {
         method: 'POST',
@@ -1694,6 +1733,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           covenant_req: row.covenantReq,
           satisfied: row.satisfied,
           is_monthly: isMonthly,
+          ...(createdAt ? { created_at: createdAt } : {}),
         }),
       });
     } catch (err) { console.error('saveSnapshot error', err); }
@@ -2482,20 +2522,36 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid #c8cdd6' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 600 }}>
-              Upload Preview — Review NOI Updates
+              {uploadMode === 'prior' ? 'Upload Preview — Set as Prior Test' : 'Upload Preview — Review NOI Updates'}
             </div>
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
               <label
-                title="Checked: this upload is the official monthly report and becomes the baseline for the Prior Test comparison. Uncheck for a small interim update so it does not overwrite last month's result."
-                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: monthlyUpload ? '#c87941' : '#9aa0aa' }}
+                title="Update current NOI: overwrite live figures with this forecast (the normal monthly update). Set as Prior Test only: record this forecast as the last test result baseline without changing current NOI — use it to backfill an earlier forecast for the comparison column."
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', fontWeight: 600, color: '#9aa0aa' }}
               >
-                <input type="checkbox" checked={monthlyUpload} onChange={e => setMonthlyUpload(e.target.checked)} style={{ accentColor: '#c87941', cursor: 'pointer' }} />
-                Monthly baseline update
+                <select value={uploadMode} onChange={e => setUploadMode(e.target.value)} style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 2, color: '#c8cdd6', padding: '4px 8px', fontSize: '0.7rem', fontFamily: 'inherit', cursor: 'pointer' }}>
+                  <option value="current">Update current NOI</option>
+                  <option value="prior">Set as Prior Test only</option>
+                </select>
               </label>
+              {uploadMode === 'current' && (
+                <label
+                  title="Checked: this upload is the official monthly report and becomes the baseline for the Prior Test comparison. Uncheck for a small interim update so it does not overwrite last month's result."
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: monthlyUpload ? '#c87941' : '#9aa0aa' }}
+                >
+                  <input type="checkbox" checked={monthlyUpload} onChange={e => setMonthlyUpload(e.target.checked)} style={{ accentColor: '#c87941', cursor: 'pointer' }} />
+                  Monthly baseline update
+                </label>
+              )}
               <button onClick={() => setShowUploadResults(false)} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: '#1e2128', color: '#9aa0aa', outline: '1px solid #2e3340' }}>Dismiss</button>
-              <button onClick={applyUploadResults} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, background: '#c8cdd6', color: '#13151a' }}>Apply All Updates</button>
+              <button onClick={() => uploadMode === 'prior' ? applyAsPriorTest() : applyUploadResults()} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, background: '#c8cdd6', color: '#13151a' }}>{uploadMode === 'prior' ? 'Set as Prior Test' : 'Apply All Updates'}</button>
             </div>
           </div>
+          {uploadMode === 'prior' && (
+            <div style={{ fontSize: '0.7rem', color: '#9aa0aa', marginBottom: '0.85rem', padding: '0.5rem 0.65rem', background: '#1e2128', borderRadius: 3, borderLeft: '3px solid #c87941' }}>
+              Records this forecast as the <strong style={{ color: '#c8cdd6' }}>Prior Test</strong> result{(forecastMonthInput.trim() || forecastMonth) ? <> dated <strong style={{ color: '#c8cdd6' }}>{forecastMonthInput.trim() || forecastMonth}</strong></> : null}. Current live NOI figures are left unchanged.
+            </div>
+          )}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #2e3340' }}>
