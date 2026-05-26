@@ -2118,6 +2118,11 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
   return (
     <div>
+      {/* ── Executive Doc View overlay ── */}
+      {docView && (
+        <DocView rows={rows} propertyEvents={propertyEvents} lastUpdated={lastUpdated} onClose={() => setDocView(false)} />
+      )}
+
       {/* ── DB Loading / Error states ── */}
       {dbLoading && (
         <div style={{ textAlign: 'center', padding: '3rem', color: '#9aa0aa', fontSize: '0.85rem' }}>
@@ -5696,11 +5701,6 @@ export default function App() {
         document.head.appendChild(s);
         return null;
       })()}
-
-      {/* ── Executive Doc View overlay ── */}
-      {docView && (
-        <DocView rows={rows} propertyEvents={propertyEvents} lastUpdated={lastUpdated} onClose={() => setDocView(false)} />
-      )}
 
       {/* ── PIN Modal ── */}
       {showPinModal && (
