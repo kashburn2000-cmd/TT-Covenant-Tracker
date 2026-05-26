@@ -4,6 +4,19 @@ import React, { useState, useMemo } from "react";
 // Legacy snapshots (is_monthly null) predate this flag, so they still count.
 const isMonthlySnap = e => e.type === 'snapshot' && e.is_monthly !== false;
 
+// A snapshot the user explicitly designated as the Prior Test baseline (via the
+// "Set as Prior Test" forecast upload). Stored on the comment field so it needs
+// no schema change and stays invisible in the history feed's comment branch.
+const PRIOR_TAG = '__prior_baseline__';
+const isPriorBaseline = e => e.type === 'snapshot' && e.comment === PRIOR_TAG;
+
+// The Prior Test result: an explicitly-set baseline wins over the auto-recorded
+// monthly snapshot, since the latest monthly snapshot mirrors current values.
+const findPriorTest = (events) => {
+  if (!events) return null;
+  return events.find(isPriorBaseline) || events.find(isMonthlySnap) || null;
+};
+
 // Convert a forecast-month label ("April 2026") to the ISO timestamp of the last
 // day of that month, so a back-dated Prior Test snapshot shows the right date.
 function monthLabelToISO(label) {
@@ -1615,8 +1628,10 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       await Promise.all(matched.map(async m => {
         const prop = properties.find(p => p.id === m.id);
         if (!prop) return;
+        // Clear any existing baseline so there is exactly one per property.
+        await fetch(`${SB_URL}/rest/v1/property_events?property_id=eq.${m.id}&type=eq.snapshot&comment=eq.${PRIOR_TAG}`, { method: 'DELETE', headers: SB_HEADERS });
         const temp = { ...prop, noi: m.newNOI, ...(m.isFund && m.fundProperties ? { fundProperties: m.fundProperties } : {}) };
-        await saveSnapshot(m.id, calcRow(temp), true, createdAt);
+        await saveSnapshot(m.id, calcRow(temp), true, createdAt, PRIOR_TAG);
       }));
       await Promise.all(matched.map(m => fetchEvents(m.id)));
       setShowUploadResults(false);
@@ -1717,7 +1732,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     } catch (err) { console.error('fetchEvents error', err); }
   }
 
-  async function saveSnapshot(propertyId, row, isMonthly = false, createdAt = null) {
+  async function saveSnapshot(propertyId, row, isMonthly = false, createdAt = null, comment = null) {
     try {
       await fetch(`${SB_URL}/rest/v1/property_events`, {
         method: 'POST',
@@ -1734,6 +1749,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           satisfied: row.satisfied,
           is_monthly: isMonthly,
           ...(createdAt ? { created_at: createdAt } : {}),
+          ...(comment ? { comment } : {}),
         }),
       });
     } catch (err) { console.error('saveSnapshot error', err); }
@@ -2073,7 +2089,7 @@ ${r.rateWinner ? r.rateWinner.label : ''}`,
           head: 'Prior Test',
           cell: r => {
             const events = propertyEvents[r.id];
-            const prior = events ? events.find(isMonthlySnap) : null;
+            const prior = findPriorTest(events);
             if (!prior) return '—';
             const val = parseFloat(prior.result);
             const trend = r.currentVal - val;
@@ -2998,7 +3014,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       // Find most recent snapshot from propertyEvents (already loaded if history is open)
                       // Otherwise try to pull from events cache; show placeholder if not loaded
                       const events = propertyEvents[r.id];
-                      const prior = events ? events.find(isMonthlySnap) : null;
+                      const prior = findPriorTest(events);
                       if (!events) {
                         // Lazy-load if column is visible but history panel hasn't been opened
                         if (!propertyEvents[r.id]) fetchEvents(r.id);
@@ -3475,12 +3491,20 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                       <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                         {fmtEvent(ev.created_at)}
                                         {ev.type === 'snapshot' && (
-                                          <span style={{
-                                            fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                                            padding: '1px 5px', borderRadius: 2,
-                                            background: ev.is_monthly === false ? 'rgba(154,160,170,0.12)' : 'rgba(200,121,65,0.15)',
-                                            color: ev.is_monthly === false ? '#9aa0aa' : '#c87941',
-                                          }}>{ev.is_monthly === false ? 'Interim' : 'Monthly'}</span>
+                                          isPriorBaseline(ev) ? (
+                                            <span style={{
+                                              fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                                              padding: '1px 5px', borderRadius: 2,
+                                              background: 'rgba(106,158,127,0.18)', color: '#6a9e7f',
+                                            }}>Prior Test</span>
+                                          ) : (
+                                            <span style={{
+                                              fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                                              padding: '1px 5px', borderRadius: 2,
+                                              background: ev.is_monthly === false ? 'rgba(154,160,170,0.12)' : 'rgba(200,121,65,0.15)',
+                                              color: ev.is_monthly === false ? '#9aa0aa' : '#c87941',
+                                            }}>{ev.is_monthly === false ? 'Interim' : 'Monthly'}</span>
+                                          )
                                         )}
                                       </div>
                                       {ev.type === 'comment' ? (
@@ -5471,7 +5495,7 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
 
   const priorOf = r => {
     const evs = propertyEvents[r.id];
-    const snap = evs ? evs.find(isMonthlySnap) : null;
+    const snap = findPriorTest(evs);
     if (!snap) return null;
     const val = parseFloat(snap.result);
     if (isNaN(val)) return null;
