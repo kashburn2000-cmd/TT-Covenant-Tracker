@@ -1184,6 +1184,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [uploadResults, setUploadResults] = useState([]);
   const [showUploadResults, setShowUploadResults] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPaydown, setShowPaydown] = useState(false);
   const [docView, setDocView] = useState(false);
   function openDocView() {
@@ -2138,6 +2139,19 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       )}
       {!dbLoading && (
       <div>
+      {/* ── Dashboard header + prominent Doc View ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ fontSize: '0.7rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 600 }}>
+          Covenant Compliance Dashboard
+        </div>
+        <button onClick={openDocView} title="View the dashboard styled like the executive Excel doc" style={{
+          padding: '8px 20px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+          fontSize: '0.78rem', fontWeight: 700, background: '#1f4e79', color: '#eaf2fb',
+          outline: '1px solid #2e6aa3', boxShadow: '0 2px 8px rgba(31,78,121,0.35)', display: 'flex', alignItems: 'center', gap: '0.45rem',
+        }}>
+          <span style={{ fontSize: '0.9rem' }}>▦</span> Open Doc View
+        </button>
+      </div>
       {/* ── Summary Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           <div className="card" style={{ textAlign: 'center' }}>
@@ -2348,22 +2362,35 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           )}
           {exportMsg && <span style={{ fontSize: '0.7rem', color: '#6a9e7f' }}>{exportMsg}</span>}
           {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? '#6a9e7f' : '#c8cdd6' }}>{uploadStatus}</span>}
-          <button onClick={exportXLSX} title="Drops straight into the workbook's Covenant Dashboard Export tab" style={{
-            padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(106,158,127,0.15)', color: '#6a9e7f', outline: '1px solid #6a9e7f44',
-          }}>↓ Export Excel</button>
-          <button onClick={exportCSV} style={{
-            padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(106,158,127,0.15)', color: '#6a9e7f', outline: '1px solid #6a9e7f44',
-          }}>↓ Export CSV</button>
-          <button onClick={exportPDF} style={{
-            padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,121,65,0.15)', color: '#c87941', outline: '1px solid #c8794144',
-          }}>↓ Export PDF</button>
-          <button onClick={openDocView} title="View the dashboard styled like the executive Excel doc" style={{
-            padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(31,78,121,0.18)', color: '#7fa8d8', outline: '1px solid #1f4e7966',
-          }}>▦ Doc View</button>
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowExportMenu(v => !v)} style={{
+              padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: '0.72rem', fontWeight: 600, background: showExportMenu ? 'rgba(106,158,127,0.25)' : 'rgba(106,158,127,0.15)',
+              color: '#6a9e7f', outline: '1px solid #6a9e7f44',
+            }}>↓ Export ▾</button>
+            {showExportMenu && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 100,
+                background: '#16191f', border: '1px solid #2e3340', borderRadius: 4,
+                padding: '0.35rem 0', minWidth: 150, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              }}>
+                {[
+                  ['Excel', () => exportXLSX(), '#6a9e7f', "Drops straight into the workbook's Covenant Dashboard Export tab"],
+                  ['CSV', () => exportCSV(), '#6a9e7f', ''],
+                  ['PDF', () => exportPDF(), '#c87941', ''],
+                ].map(([label, fn, color, tip]) => (
+                  <div key={label} title={tip} onClick={() => { fn(); setShowExportMenu(false); }} style={{
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    padding: '0.4rem 0.95rem', cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, color,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#1e2128'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <span style={{ opacity: 0.7 }}>↓</span>{label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowColPicker(v => !v)} style={{
               padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
@@ -2730,7 +2757,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       )}
 
       {/* ── Main Table ── */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }} onClick={() => showColPicker && setShowColPicker(false)}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }} onClick={() => { if (showColPicker) setShowColPicker(false); if (showExportMenu) setShowExportMenu(false); }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead>
