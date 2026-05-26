@@ -1,5 +1,9 @@
 import React, { useState, useMemo } from "react";
 
+// Prior-Test comparison only counts monthly (big) snapshots, never interim edits.
+// Legacy snapshots (is_monthly null) predate this flag, so they still count.
+const isMonthlySnap = e => e.type === 'snapshot' && e.is_monthly !== false;
+
 // ─── Chatham 1-Month Term SOFR Forward Curve (as of 03 Mar 2026) ───────────
 const SOFR_CURVE = [
   { date: "2026-03-09", sofr: 0.036649 },
@@ -1183,6 +1187,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [forecastMonthInput, setForecastMonthInput] = useState(''); // user-typed label before upload
   const [uploadResults, setUploadResults] = useState([]);
   const [showUploadResults, setShowUploadResults] = useState(false);
+  const [monthlyUpload, setMonthlyUpload] = useState(true); // big monthly update vs small interim update
   const [showColPicker, setShowColPicker] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showPaydown, setShowPaydown] = useState(false);
@@ -1556,7 +1561,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiT1Current: match.newNOIT1Current ?? null, noiStabilized: match.newNOIStabilized ?? null, noiStabilizedMonth: match.newNOIStabilizedMonth ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
         });
         next.forEach(p => {
-          if (matched.find(r => r.id === p.id)) saveSnapshot(p.id, calcRow(p));
+          if (matched.find(r => r.id === p.id)) saveSnapshot(p.id, calcRow(p), monthlyUpload);
         });
         return next;
       });
@@ -1663,7 +1668,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     } catch (err) { console.error('fetchEvents error', err); }
   }
 
-  async function saveSnapshot(propertyId, row) {
+  async function saveSnapshot(propertyId, row, isMonthly = false) {
     try {
       await fetch(`${SB_URL}/rest/v1/property_events`, {
         method: 'POST',
@@ -1678,6 +1683,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           result: row.currentVal,
           covenant_req: row.covenantReq,
           satisfied: row.satisfied,
+          is_monthly: isMonthly,
         }),
       });
     } catch (err) { console.error('saveSnapshot error', err); }
@@ -1998,7 +2004,7 @@ ${r.rateWinner ? r.rateWinner.label : ''}`,
           head: 'Prior Test',
           cell: r => {
             const events = propertyEvents[r.id];
-            const prior = events ? events.find(e => e.type === 'snapshot') : null;
+            const prior = events ? events.find(isMonthlySnap) : null;
             if (!prior) return '—';
             const val = parseFloat(prior.result);
             const trend = r.currentVal - val;
@@ -2442,7 +2448,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 600 }}>
               Upload Preview — Review NOI Updates
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <label
+                title="Checked: this upload is the official monthly report and becomes the baseline for the Prior Test comparison. Uncheck for a small interim update so it does not overwrite last month's result."
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: monthlyUpload ? '#c87941' : '#9aa0aa' }}
+              >
+                <input type="checkbox" checked={monthlyUpload} onChange={e => setMonthlyUpload(e.target.checked)} style={{ accentColor: '#c87941', cursor: 'pointer' }} />
+                Monthly baseline update
+              </label>
               <button onClick={() => setShowUploadResults(false)} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: '#1e2128', color: '#9aa0aa', outline: '1px solid #2e3340' }}>Dismiss</button>
               <button onClick={applyUploadResults} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, background: '#c8cdd6', color: '#13151a' }}>Apply All Updates</button>
             </div>
@@ -2892,7 +2905,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       // Find most recent snapshot from propertyEvents (already loaded if history is open)
                       // Otherwise try to pull from events cache; show placeholder if not loaded
                       const events = propertyEvents[r.id];
-                      const prior = events ? events.find(e => e.type === 'snapshot') : null;
+                      const prior = events ? events.find(isMonthlySnap) : null;
                       if (!events) {
                         // Lazy-load if column is visible but history panel hasn't been opened
                         if (!propertyEvents[r.id]) fetchEvents(r.id);
@@ -3365,7 +3378,17 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                     </div>
                                     {/* Content */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                      <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginBottom: '0.2rem' }}>{fmtEvent(ev.created_at)}</div>
+                                      <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        {fmtEvent(ev.created_at)}
+                                        {ev.type === 'snapshot' && (
+                                          <span style={{
+                                            fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                                            padding: '1px 5px', borderRadius: 2,
+                                            background: ev.is_monthly === false ? 'rgba(154,160,170,0.12)' : 'rgba(200,121,65,0.15)',
+                                            color: ev.is_monthly === false ? '#9aa0aa' : '#c87941',
+                                          }}>{ev.is_monthly === false ? 'Interim' : 'Monthly'}</span>
+                                        )}
+                                      </div>
                                       {ev.type === 'comment' ? (
                                         <div style={{ fontSize: '0.75rem', color: '#c8cdd6' }}>{ev.comment}</div>
                                       ) : (
@@ -5353,7 +5376,7 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
 
   const priorOf = r => {
     const evs = propertyEvents[r.id];
-    const snap = evs ? evs.find(e => e.type === 'snapshot') : null;
+    const snap = evs ? evs.find(isMonthlySnap) : null;
     if (!snap) return null;
     const val = parseFloat(snap.result);
     if (isNaN(val)) return null;

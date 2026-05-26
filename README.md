@@ -124,6 +124,12 @@ CREATE TABLE IF NOT EXISTS ten_year_curve (
   date date not null,
   rate numeric not null
 );
+
+-- Marks which snapshots are big monthly updates (the baseline used for the
+-- Prior Test comparison) vs small interim updates. Leave nullable: existing
+-- snapshots stay NULL and continue to count as before, so nothing breaks.
+ALTER TABLE property_events
+  ADD COLUMN IF NOT EXISTS is_monthly boolean DEFAULT false;
 ```
 
 ### Deployment
