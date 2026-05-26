@@ -1183,6 +1183,12 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [showUploadResults, setShowUploadResults] = useState(false);
   const [showColPicker, setShowColPicker] = useState(false);
   const [showPaydown, setShowPaydown] = useState(false);
+  const [docView, setDocView] = useState(false);
+  function openDocView() {
+    setDocView(true);
+    // Pull prior-snapshot values for every row so the Previous Test column populates.
+    rows.forEach(r => { if (!propertyEvents[r.id]) fetchEvents(r.id); });
+  }
   const [dfSpread, setDfSpread] = useState('2.25');
   const [dfDSCR, setDfDSCR] = useState('1.05');
   const [dfSpreadInput, setDfSpreadInput] = useState('2.25');
@@ -2347,6 +2353,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,121,65,0.15)', color: '#c87941', outline: '1px solid #c8794144',
           }}>↓ Export PDF</button>
+          <button onClick={openDocView} title="View the dashboard styled like the executive Excel doc" style={{
+            padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: '0.72rem', fontWeight: 600, background: 'rgba(31,78,121,0.18)', color: '#7fa8d8', outline: '1px solid #1f4e7966',
+          }}>▦ Doc View</button>
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowColPicker(v => !v)} style={{
               padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
@@ -5283,6 +5293,143 @@ function LeasingTab() {
 
 
 
+// ── Executive "Doc View" — mirrors the layout of the Covenant Dashboard Excel doc ──
+function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
+  const asOf = lastUpdated instanceof Date && !isNaN(lastUpdated) ? lastUpdated : new Date();
+  const fmtTitle = d => `${d.getDate()}-${d.toLocaleString('en-US', { month: 'short' })}-${d.getFullYear()}`;
+  const fmtMDY = d => `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  const usd0 = v => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
+  const num2 = v => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+  const dscrFmt = v => new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 3 }).format(v);
+  const parseDate = s => { const d = new Date(s + 'T00:00:00'); return isNaN(d) ? null : d; };
+  const fmtResult = (val, type) => type === 'dscr' ? dscrFmt(val) : `${val.toFixed(2)}%`;
+
+  const priorOf = r => {
+    const evs = propertyEvents[r.id];
+    const snap = evs ? evs.find(e => e.type === 'snapshot') : null;
+    if (!snap) return null;
+    const val = parseFloat(snap.result);
+    if (isNaN(val)) return null;
+    return { val, date: snap.created_at ? new Date(snap.created_at) : null };
+  };
+
+  // Previous-column header date = most recent prior snapshot across rows.
+  const priorDates = rows.map(priorOf).filter(p => p && p.date && !isNaN(p.date)).map(p => p.date.getTime());
+  const prevHeaderDate = priorDates.length ? new Date(Math.max(...priorDates)) : null;
+
+  // Year bucketing: 12-month windows measured forward from the report date, so the
+  // current cohort (recent + next 12 months of tests) all lands in Year 1.
+  const yearOf = r => {
+    const d = parseDate(r.covenantDate);
+    if (!d) return 1;
+    const months = (d.getFullYear() - asOf.getFullYear()) * 12 + (d.getMonth() - asOf.getMonth());
+    return Math.max(1, Math.floor(months / 12) + 1);
+  };
+  const groups = [];
+  rows.forEach(r => {
+    const y = yearOf(r);
+    const last = groups[groups.length - 1];
+    if (last && last.year === y) last.rows.push(r);
+    else groups.push({ year: y, rows: [r] });
+  });
+
+  const C = {
+    navy: '#1f4e79', band: '#d9e1f2', bandTxt: '#1f3864',
+    covBg: '#fff2cc', covTxt: '#9c6500',
+    okBg: '#c6efce', okTxt: '#006100', failBg: '#ffc7ce', failTxt: '#9c0006',
+    line: '#bfbfbf', txt: '#1a1a1a',
+  };
+  const td = { border: `1px solid ${C.line}`, padding: '3px 8px', fontSize: '0.74rem', color: C.txt, whiteSpace: 'nowrap' };
+  const th = { border: `1px solid ${C.navy}`, padding: '5px 8px', fontSize: '0.66rem', fontWeight: 700, color: '#fff', background: C.navy, textAlign: 'center', letterSpacing: '0.02em' };
+  const dateTh = { border: 'none', fontSize: '0.62rem', fontStyle: 'italic', color: '#555', textAlign: 'center', paddingBottom: 2 };
+
+  const reqText = r => r.covenantType === 'dscr'
+    ? `${r.covenantReq.toFixed(2)} Debt Service Coverage`
+    : `${r.covenantReq % 1 === 0 ? r.covenantReq : r.covenantReq.toFixed(2)}% Debt Yield`;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#fff', zIndex: 4000, overflow: 'auto', fontFamily: "'Inter', sans-serif" }}>
+      <div style={{ position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 1rem', background: '#f1f1f1', borderBottom: `1px solid ${C.line}`, zIndex: 2 }}>
+        <span style={{ fontSize: '0.7rem', color: '#666', fontWeight: 600 }}>DOC VIEW — styled like the executive Covenant Dashboard</span>
+        <button onClick={onClose} style={{ padding: '5px 16px', borderRadius: 3, border: '1px solid #999', background: '#fff', color: '#333', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>✕ Close</button>
+      </div>
+
+      <div style={{ padding: '1.25rem 1.5rem' }}>
+        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#000' }}>Covenant Dashboard - {fmtTitle(asOf)}</div>
+        <div style={{ fontSize: '0.72rem', fontWeight: 700, fontStyle: 'italic', color: '#000', marginBottom: '0.75rem' }}>Prepared Monthly by Kevin</div>
+
+        <table style={{ borderCollapse: 'collapse', background: '#fff' }}>
+          <thead>
+            <tr>
+              <th colSpan={7} style={{ border: 'none' }}></th>
+              <th style={dateTh}>{prevHeaderDate ? fmtMDY(prevHeaderDate) : ''}</th>
+              <th style={{ border: 'none' }}></th>
+              <th style={dateTh}>{fmtMDY(asOf)}</th>
+              <th colSpan={2} style={{ border: 'none' }}></th>
+            </tr>
+            <tr>
+              <th style={{ ...th, width: 22 }}></th>
+              <th style={th}>DATE</th>
+              <th style={th}>TYPE</th>
+              <th style={th}>PROPERTY</th>
+              <th style={th}>LENDER</th>
+              <th style={{ ...th, textAlign: 'right' }}>Loan Amount</th>
+              <th style={th}>COVENANT REQUIREMENT</th>
+              <th style={th}>PREVIOUS TEST RESULT</th>
+              <th style={{ ...th, width: 26 }}></th>
+              <th style={th}>CURRENT TEST RESULT</th>
+              <th style={th}>SATISFIED (TRUE/FALSE)</th>
+              <th style={{ ...th, textAlign: 'right' }}>Potential Paydown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map(g => g.rows.map((r, ri) => {
+              const prior = priorOf(r);
+              const cur = r.currentVal;
+              let arrow = '', arrowColor = '#888';
+              if (prior) {
+                const delta = cur - prior.val;
+                if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = '#6a9e7f'; }
+                else if (delta > 0) { arrow = '▲'; arrowColor = '#2e7d32'; }
+                else { arrow = '▼'; arrowColor = '#c0392b'; }
+              }
+              const waived = r.waived === true;
+              const ok = waived || r.satisfied;
+              const statusText = waived ? 'WAIVED' : (r.satisfied ? 'TRUE' : 'FALSE');
+              const isCov = (r.testType || 'Covenant') === 'Covenant';
+              const d = parseDate(r.covenantDate);
+              return (
+                <tr key={r.id}>
+                  {ri === 0 && (
+                    <td rowSpan={g.rows.length} style={{ ...td, background: C.band, color: C.bandTxt, fontWeight: 700, textAlign: 'center', padding: 0 }}>
+                      <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: '0.72rem' }}>Year {g.year}</div>
+                    </td>
+                  )}
+                  <td style={{ ...td, textAlign: 'center' }}>{d ? fmtMDY(d) : ''}</td>
+                  <td style={{ ...td, textAlign: 'center', ...(isCov ? { background: C.covBg, color: C.covTxt, fontWeight: 600 } : {}) }}>{r.testType || 'Covenant'}</td>
+                  <td style={td}>{r.property}</td>
+                  <td style={td}>{r.lender}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>${num2(r.loanAmount)}</td>
+                  <td style={{ ...td, textAlign: 'center' }}>{reqText(r)}</td>
+                  <td style={{ ...td, textAlign: 'center' }}>{prior ? fmtResult(prior.val, r.covenantType) : '—'}</td>
+                  <td style={{ ...td, textAlign: 'center', color: arrowColor, fontWeight: 700 }}>{arrow}</td>
+                  <td style={{ ...td, textAlign: 'center' }}>{fmtResult(cur, r.covenantType)}</td>
+                  <td style={{ ...td, textAlign: 'center', background: ok ? C.okBg : C.failBg, color: ok ? C.okTxt : C.failTxt, fontWeight: 700, fontStyle: waived ? 'italic' : 'normal' }}>{statusText}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{r.paydown > 0 ? usd0(r.paydown) : '$0'}</td>
+                </tr>
+              );
+            }))}
+          </tbody>
+        </table>
+
+        <div style={{ fontSize: '0.62rem', color: '#999', marginTop: '0.75rem' }}>
+          Generated live from the Covenant Tracker · {fmtMDY(asOf)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Root App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [activeTab, setActiveTab] = useState("covenant");
@@ -5534,6 +5681,11 @@ export default function App() {
         document.head.appendChild(s);
         return null;
       })()}
+
+      {/* ── Executive Doc View overlay ── */}
+      {docView && (
+        <DocView rows={rows} propertyEvents={propertyEvents} lastUpdated={lastUpdated} onClose={() => setDocView(false)} />
+      )}
 
       {/* ── PIN Modal ── */}
       {showPinModal && (
