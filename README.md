@@ -52,6 +52,24 @@ Expandable per-row panel showing the full calculation chain:
 - Updates NOI and NOI detail for matched properties in one click
 - Also parses and saves the 10-Year forward curve from the Chatham tab
 
+### Loans Database
+A queryable database of closed-loan abstracts (construction + refinance),
+replacing loose Word docs.
+- Sortable, filterable table — by lender, maturity year, loan type, repayment
+  guaranty %, and TTH net-worth / liquidity covenant thresholds
+- Expandable per-loan detail view covering all terms, covenants, extension,
+  prepayment, and type-specific JSON
+- **Import Abstract** form (PIN-gated): paste the JSON sidecar + attach the
+  `.docx`; re-importing the same doc updates in place (no duplicates)
+- **Download .docx** per loan via short-lived Supabase Storage signed URL
+- PDF export of the filtered list
+- One-time backfill script (`scripts/backfill-loans.mjs`) parses existing Word
+  abstracts into rows and uploads the source docs
+
+**Setup:** run [`db/loans_setup.sql`](db/loans_setup.sql) once in the Supabase
+SQL editor (creates the `loans` table, indexes, and the private `loan-docs`
+Storage bucket). Full how-to in [`ingest/README.md`](ingest/README.md).
+
 ---
 
 ## Tech Stack
@@ -71,6 +89,7 @@ Expandable per-row panel showing the full calculation chain:
 | Table | Purpose |
 |---|---|
 | `properties` | All tracked loans and covenant parameters |
+| `loans` | Closed-loan abstracts database (construction + refinance) — see `db/loans_setup.sql` |
 | `sofr_curve` | Chatham 1-Mo Term SOFR forward curve |
 | `ten_year_curve` | Chatham 10-Year Treasury forward curve |
 | `settings` | App-level config (reserved) |
