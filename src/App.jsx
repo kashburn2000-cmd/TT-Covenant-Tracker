@@ -6575,7 +6575,7 @@ export default function App() {
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinPendingAction, setPinPendingAction] = useState(null);
   const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land','loans'];
-  const [visibleTabs, setVisibleTabs] = useState({ calculator:true, matrix:true, covenant:true, leasing:true, pipeline:true, land:true, loans:true });
+  const [visibleTabs, setVisibleTabs] = useState({ calculator:false, matrix:false, covenant:true, leasing:false, pipeline:false, land:false, loans:true });
   const [showTabConfig, setShowTabConfig] = useState(false);
 
   const SB_URL = 'https://ngflppgqohmkkfiljqma.supabase.co';
