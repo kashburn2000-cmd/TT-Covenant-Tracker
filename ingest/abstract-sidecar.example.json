@@ -1,0 +1,91 @@
+{
+  "loan_type": "construction",
+  "property_name": "Wheat Ridge Kipling St",
+  "borrower_entity": "TTRES CO Wheat Ridge Kipling St, LLC",
+  "property_city": "Wheat Ridge",
+  "property_state": "CO",
+  "unit_count": 255,
+  "closing_date": "2025-02-13",
+
+  "loan_amount": 51694640,
+  "loan_fee_pct": 0.50,
+  "loan_fee_amount": 258473,
+  "annual_fee_amount": null,
+  "rate_index": "SOFR",
+  "rate_spread_bps": 325,
+  "rate_floor_pct": 0.00,
+  "rate_cap_pct": null,
+  "note_rate_pct": null,
+  "initial_term_months": 42,
+  "maturity_date": "2028-08-13",
+  "ltc_pct": 61.0,
+  "ltv_pct": 65.0,
+  "amortization_type": "IO_during_construction",
+  "repayment_summary": "I/O during Construction Period (through Conversion Date); if Extension exercised, P&I on 30-yr amort at then-prevailing rate, re-amortized annually",
+
+  "lead_lender": "BOKF, NA",
+  "lead_lender_role": "Sole Bookrunner / Lead Arranger / Administrative Agent",
+  "lead_lender_commitment": 33586097,
+  "participants": [
+    { "name": "RCB Bank", "commitment": 18108543, "pct": 35.03 }
+  ],
+  "lender_contact": "James A. Leikam, SVP — BOKF, NA dba Bank of Oklahoma (Tulsa)",
+
+  "completion_guaranty_pct": 100,
+  "repayment_guaranty_pct": 40,
+  "guarantor_entity": "TTH",
+  "guaranty_reduction_terms": "Reduces to 30% at Substantial Completion; further reduces to 25% upon DSCR >= 1.25:1.00 as of last day of any calendar quarter beginning on/after Conversion Date (excluding curative quarters); no re-increase",
+
+  "min_net_worth": 75000000,
+  "min_liquidity": 15000000,
+  "dscr_covenant": 1.25,
+  "debt_yield_covenant": null,
+  "dscr_test_frequency": "quarterly",
+  "dscr_formula": "Income: T3 gross rental income from leases with tenants in occupancy. Expenses: T3 actual (ex-net-income taxes, depreciation/amortization, debt service); no mgmt fee floor, no per-unit reserve add. Rate assumption: greater of (A) note rate, (B) 6.75%, or (C) 10yr UST + 250 bps. Amortization: 30-yr",
+  "debt_yield_formula": null,
+  "significant_covenants": "Ongoing DSCR >= 1.25:1.00, tested end of each calendar quarter ending after the quarter Conversion Date occurs; 30-day cure by pay-down or cash collateral; cash collateral release after 3 consecutive months at 1.35:1.00. TTH NW/Liq: $15M liquidity / $75M NW, tested quarterly",
+  "lender_assumed_reserves_per_unit": null,
+
+  "extension_count": 1,
+  "extension_term_months": 18,
+  "extension_fee_pct": 0.25,
+  "extension_fee_amount": null,
+  "extension_term_changes": "Amortization commences on Conversion Date (30-yr amort, level P&I, re-amortized at each annual anniversary at then-current rate)",
+  "extension_test_summary": "DSCR >= 1.15:1.00 for most recent 3-month period AND LTV <= 60% per new appraisal; no Default/EOD; Borrower may cure DSCR/LTV by paying down principal",
+  "extension_maturity_date": "2030-02-13",
+
+  "prepayment_open": true,
+  "prepayment_terms": null,
+  "exit_fee_pct": null,
+
+  "financial_reporting_borrower": "Quarterly (within 65 days, beginning quarter of Substantial Completion): internally prepared BS and IS, Compliance Certificate, rent roll + occupancy info upon commencement of leasing. Annual (until quarterly kicks in; within 125 days of fiscal year-end beginning 12/31/25): internally prepared BS",
+  "financial_reporting_guarantor": "Quarterly (within 65 days): CPA-reviewed financial statements, global real estate schedule, brokerage statements, contingent debt schedules. Annual: federal tax return within 30 days of filing",
+  "miscellaneous": "Equity Deposit: $23,278,603.99 to be deposited with BOKF within 10 BDs of Closing; usable only for Approved Project Costs. All operating/deposit accounts maintained with BOKF; treasury management services required. Retainage: 10% initial, reducible to 5% upon 50% of hard costs billed. HVCRE compliance required at all times. Late fee: 5% of payment if 15+ days late",
+  "notes": null,
+
+  "type_specific": {
+    "lender_required_completion_date": "2028-08-13",
+    "development_fee_total": 3870626,
+    "development_fee_funding": "25% at closing / 50% in equal monthly installments during Construction Period / 25% at Substantial Completion",
+    "minimum_equity_contribution": 30743000,
+    "equity_deposit": 23278603.99,
+    "retainage_initial_pct": 10,
+    "retainage_reduced_pct": 5,
+    "retainage_reduction_trigger": "50% of hard costs billed",
+    "change_order": { "individual_dollar": 100000, "pct": 3, "basis": "greater of", "summary": "Project Budget cost-category reallocations capped at greater of $100,000 or 3% per category before requiring Admin Agent approval" },
+    "non_standard_draw_requirements": "Standard",
+    "final_completion_draw_requirements": "Standard",
+    "post_closing_items": [
+      "Minimum equity contribution of $30,743,000 received and expended",
+      "Phase-appropriate permits (including building permits)",
+      "Evidence of utility service availability at Site boundaries",
+      "Front End / cost analysis review by Inspecting Contractor (CCDI, Inc.)"
+    ],
+    "letters_of_credit": [
+      { "amount": 4976329, "beneficiary": "City of Wheat Ridge", "issuer": "BOKF", "notes": "standby LC; supported by Borrower Demand Promissory Note; 100% TTH guaranty via separate Guaranty Agreement" }
+    ],
+    "inspecting_contractor": "CCDI, Inc."
+  },
+
+  "source_doc_path": "construction/ttres-co-wheat-ridge-kipling-st.docx"
+}

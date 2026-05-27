@@ -5628,6 +5628,768 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
 }
 
 // ── Root App ──────────────────────────────────────────────────────────────────
+// ── Loans Tab ───────────────────────────────────────────────────────────────
+// Queryable database of closed-loan abstracts (construction + refinance).
+// Source docs live in the Supabase Storage bucket "loan-docs"; the .docx is
+// pulled on demand via a short-lived signed URL.
+const LOAN_TYPE_LABEL = { construction: 'Construction', refinance: 'Refinance' };
+
+const LOAN_FIELD_GROUPS = [
+  { title: 'Identity', fields: [
+    ['property_name', 'Property Name', 'text'],
+    ['borrower_entity', 'Borrower Entity *', 'text'],
+    ['property_city', 'City', 'text'],
+    ['property_state', 'State', 'text'],
+    ['unit_count', 'Units', 'number'],
+    ['closing_date', 'Closing Date', 'date'],
+  ] },
+  { title: 'Loan Terms', fields: [
+    ['loan_amount', 'Loan Amount ($) *', 'number'],
+    ['loan_fee_pct', 'Loan Fee (%)', 'number'],
+    ['loan_fee_amount', 'Loan Fee ($)', 'number'],
+    ['annual_fee_amount', 'Annual Fee ($)', 'number'],
+    ['rate_index', 'Rate Index', 'text'],
+    ['rate_spread_bps', 'Spread (bps)', 'number'],
+    ['rate_floor_pct', 'Rate Floor (%)', 'number'],
+    ['rate_cap_pct', 'Rate Cap (%)', 'number'],
+    ['note_rate_pct', 'Note Rate (%)', 'number'],
+    ['initial_term_months', 'Initial Term (mo)', 'number'],
+    ['maturity_date', 'Maturity Date', 'date'],
+    ['ltc_pct', 'LTC (%)', 'number'],
+    ['ltv_pct', 'LTV (%)', 'number'],
+    ['amortization_type', 'Amortization Type', 'text'],
+    ['repayment_summary', 'Repayment', 'textarea'],
+  ] },
+  { title: 'Lender', fields: [
+    ['lead_lender', 'Lead Lender', 'text'],
+    ['lead_lender_role', 'Lender Role', 'text'],
+    ['lead_lender_commitment', 'Lead Commitment ($)', 'number'],
+    ['lender_contact', 'Lender Contact', 'textarea'],
+  ] },
+  { title: 'Guaranty (TTH only)', fields: [
+    ['completion_guaranty_pct', 'Completion Guaranty (%)', 'number'],
+    ['repayment_guaranty_pct', 'Repayment Guaranty (%)', 'number'],
+    ['guarantor_entity', 'Guarantor', 'text'],
+    ['guaranty_reduction_terms', 'Guaranty Reductions', 'textarea'],
+  ] },
+  { title: 'Covenants & Reporting', fields: [
+    ['min_net_worth', 'TTH Min Net Worth ($)', 'number'],
+    ['min_liquidity', 'TTH Min Liquidity ($)', 'number'],
+    ['dscr_covenant', 'DSCR Covenant (x)', 'number'],
+    ['debt_yield_covenant', 'Debt Yield Covenant (%)', 'number'],
+    ['dscr_test_frequency', 'DSCR Test Frequency', 'text'],
+    ['lender_assumed_reserves_per_unit', 'Assumed Reserves ($/unit)', 'number'],
+    ['dscr_formula', 'DSCR Formula', 'textarea'],
+    ['debt_yield_formula', 'Debt Yield Formula', 'textarea'],
+    ['significant_covenants', 'Significant Covenants', 'textarea'],
+    ['financial_reporting_borrower', 'Reporting — Borrower', 'textarea'],
+    ['financial_reporting_guarantor', 'Reporting — Guarantor', 'textarea'],
+  ] },
+  { title: 'Extension', fields: [
+    ['extension_count', 'Extension Count', 'number'],
+    ['extension_term_months', 'Extension Term (mo)', 'number'],
+    ['extension_fee_pct', 'Extension Fee (%)', 'number'],
+    ['extension_fee_amount', 'Extension Fee ($)', 'number'],
+    ['extension_maturity_date', 'Extension Maturity', 'date'],
+    ['extension_test_summary', 'Extension Test', 'textarea'],
+    ['extension_term_changes', 'Extension Term Changes', 'textarea'],
+  ] },
+  { title: 'Prepayment & Other', fields: [
+    ['exit_fee_pct', 'Exit Fee (%)', 'number'],
+    ['prepayment_terms', 'Prepayment Terms', 'textarea'],
+    ['miscellaneous', 'Miscellaneous', 'textarea'],
+    ['notes', 'Notes', 'textarea'],
+  ] },
+];
+
+const LOAN_INT_FIELDS = new Set(['unit_count', 'rate_spread_bps', 'initial_term_months', 'extension_count', 'extension_term_months']);
+const LOAN_NUM_FIELDS = new Set([
+  'unit_count', 'loan_amount', 'loan_fee_pct', 'loan_fee_amount', 'annual_fee_amount',
+  'rate_spread_bps', 'rate_floor_pct', 'rate_cap_pct', 'note_rate_pct', 'initial_term_months',
+  'ltc_pct', 'ltv_pct', 'lead_lender_commitment', 'completion_guaranty_pct', 'repayment_guaranty_pct',
+  'min_net_worth', 'min_liquidity', 'dscr_covenant', 'debt_yield_covenant', 'lender_assumed_reserves_per_unit',
+  'extension_count', 'extension_term_months', 'extension_fee_pct', 'extension_fee_amount', 'exit_fee_pct',
+]);
+
+const EMPTY_LOAN = {
+  loan_type: 'construction',
+  property_name: '', borrower_entity: '', property_city: '', property_state: '', unit_count: '', closing_date: '',
+  loan_amount: '', loan_fee_pct: '', loan_fee_amount: '', annual_fee_amount: '',
+  rate_index: 'SOFR', rate_spread_bps: '', rate_floor_pct: '', rate_cap_pct: '', note_rate_pct: '',
+  initial_term_months: '', maturity_date: '', ltc_pct: '', ltv_pct: '', amortization_type: '', repayment_summary: '',
+  lead_lender: '', lead_lender_role: '', lead_lender_commitment: '', participants: [], lender_contact: '',
+  completion_guaranty_pct: '', repayment_guaranty_pct: '', guarantor_entity: 'TTH', guaranty_reduction_terms: '',
+  min_net_worth: '', min_liquidity: '', dscr_covenant: '', debt_yield_covenant: '',
+  dscr_test_frequency: '', lender_assumed_reserves_per_unit: '',
+  dscr_formula: '', debt_yield_formula: '', significant_covenants: '',
+  financial_reporting_borrower: '', financial_reporting_guarantor: '',
+  extension_count: '', extension_term_months: '', extension_fee_pct: '', extension_fee_amount: '',
+  extension_maturity_date: '', extension_test_summary: '', extension_term_changes: '',
+  exit_fee_pct: '', prepayment_open: false, prepayment_terms: '',
+  miscellaneous: '', notes: '', type_specific: {}, source_doc_path: '',
+};
+
+function LoansTab({ pinUnlocked, requirePin }) {
+  const SB_URL     = 'https://ngflppgqohmkkfiljqma.supabase.co';
+  const SB_KEY     = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
+  const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+  const BUCKET     = 'loan-docs';
+
+  const [loans, setLoans]         = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [editId, setEditId]       = useState(null);   // loan id being edited, or 'new'
+  const [editForm, setEditForm]   = useState(null);
+  const [tsDraft, setTsDraft]     = useState('{}');    // type_specific JSON textarea buffer
+  const [expandedId, setExpandedId] = useState(null);
+  const [saving, setSaving]       = useState(false);
+  const [msg, setMsg]             = useState('');
+  const [confirmDel, setConfirmDel] = useState(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importJson, setImportJson] = useState('');
+  const [importFile, setImportFile] = useState(null);
+
+  // filters + sort
+  const [fType, setFType]         = useState('all');
+  const [fLender, setFLender]     = useState('');
+  const [fYear, setFYear]         = useState('all');
+  const [fGuaranty, setFGuaranty] = useState('');   // ≥ %, repayment guaranty
+  const [fNW, setFNW]             = useState('');    // ≥ $M, TTH net worth
+  const [fLiq, setFLiq]           = useState('');    // ≥ $M, TTH liquidity
+  const [sortField, setSortField] = useState('maturity_date');
+  const [sortDir, setSortDir]     = useState('asc');
+
+  function flash(text, isErr = false) { setMsg({ text, isErr }); setTimeout(() => setMsg(''), 4000); }
+
+  // ── Load ───────────────────────────────────────────────────────────────────
+  React.useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch(`${SB_URL}/rest/v1/loans?order=maturity_date.asc`, { headers: SB_HEADERS });
+        if (res.ok) { const rows = await res.json(); setLoans(Array.isArray(rows) ? rows : []); }
+        else { const e = await res.json().catch(() => ({})); flash('Load error: ' + (e.message || res.status), true); }
+      } catch (err) { console.error('Loans load error:', err); flash('Load error: ' + err.message, true); }
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  // ── Coerce a form/import object into a DB-ready row ──────────────────────────
+  function coerceBody(src) {
+    const body = { ...src };
+    LOAN_NUM_FIELDS.forEach(k => {
+      const v = body[k];
+      if (v === '' || v == null) { body[k] = null; }
+      else { body[k] = LOAN_INT_FIELDS.has(k) ? parseInt(v, 10) : Number(v); if (Number.isNaN(body[k])) body[k] = null; }
+    });
+    // dates: empty string → null
+    ['closing_date', 'maturity_date', 'extension_maturity_date'].forEach(k => { if (body[k] === '') body[k] = null; });
+    // jsonb fields stay native objects/arrays
+    body.participants = Array.isArray(body.participants) ? body.participants : [];
+    if (body.type_specific == null || typeof body.type_specific !== 'object') body.type_specific = {};
+    body.prepayment_open = !!body.prepayment_open;
+    // remaining empty strings → null
+    Object.keys(body).forEach(k => { if (body[k] === '') body[k] = null; });
+    return body;
+  }
+
+  // ── Save (create or update) ──────────────────────────────────────────────────
+  async function saveLoan() {
+    if (!editForm.borrower_entity) { flash('Borrower entity is required', true); return; }
+    if (editForm.loan_amount === '' || editForm.loan_amount == null) { flash('Loan amount is required', true); return; }
+    let ts;
+    try { ts = tsDraft.trim() ? JSON.parse(tsDraft) : {}; }
+    catch (e) { flash('Type-specific JSON is invalid: ' + e.message, true); return; }
+    setSaving(true);
+    const isNew = editId === 'new';
+    const body = coerceBody({ ...editForm, type_specific: ts, updated_at: new Date().toISOString() });
+    try {
+      let res;
+      if (isNew) {
+        res = await fetch(`${SB_URL}/rest/v1/loans`, { method: 'POST', headers: SB_HEADERS, body: JSON.stringify(body) });
+      } else {
+        res = await fetch(`${SB_URL}/rest/v1/loans?id=eq.${editForm.id}`, { method: 'PATCH', headers: SB_HEADERS, body: JSON.stringify(body) });
+      }
+      if (res.ok) {
+        const saved = await res.json();
+        const row = Array.isArray(saved) ? saved[0] : saved;
+        setLoans(prev => isNew ? [...prev, row] : prev.map(l => l.id === row.id ? row : l));
+        flash(isNew ? '✓ Loan added' : '✓ Saved');
+        setEditId(null); setEditForm(null);
+      } else {
+        const e = await res.json().catch(() => ({}));
+        flash('Save error: ' + (e.message || e.details || e.hint || res.status), true);
+      }
+    } catch (err) { flash('Save error: ' + err.message, true); }
+    setSaving(false);
+  }
+
+  async function deleteLoan(id) {
+    setSaving(true);
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/loans?id=eq.${id}`, { method: 'DELETE', headers: SB_HEADERS });
+      if (res.ok) { setLoans(prev => prev.filter(l => l.id !== id)); flash('Loan deleted'); }
+      else flash('Delete error', true);
+    } catch (err) { flash('Delete error: ' + err.message, true); }
+    setConfirmDel(null); setSaving(false);
+  }
+
+  // ── Upload a .docx to Storage, return its path ───────────────────────────────
+  async function uploadDoc(loanType, slug, file) {
+    const path = `${loanType || 'construction'}/${slug}.docx`;
+    const res = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${encodeURI(path)}`, {
+      method: 'POST',
+      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'x-upsert': 'true',
+                 'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+      body: file,
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.message || `upload failed (${res.status})`); }
+    return path;
+  }
+
+  // ── Import Abstract: paste JSON sidecar (+ optional .docx) → upsert row ───────
+  async function importAbstract() {
+    let data;
+    try { data = JSON.parse(importJson); } catch (e) { flash('Invalid JSON: ' + e.message, true); return; }
+    if (!data.borrower_entity) { flash('JSON must include "borrower_entity"', true); return; }
+    if (data.loan_amount == null) { flash('JSON must include "loan_amount"', true); return; }
+    setSaving(true);
+    try {
+      let path = data.source_doc_path || null;
+      if (importFile) {
+        const slug = slugify(data.borrower_entity || data.property_name || 'loan');
+        path = await uploadDoc(data.loan_type, slug, importFile);
+      }
+      const body = coerceBody({
+        ...EMPTY_LOAN, ...data,
+        source_doc_path: path,
+        source_doc_uploaded_at: importFile ? new Date().toISOString() : (data.source_doc_uploaded_at || null),
+        updated_at: new Date().toISOString(),
+      });
+      // Upsert on source_doc_path when present (idempotent re-import); else plain insert.
+      const url = path
+        ? `${SB_URL}/rest/v1/loans?on_conflict=source_doc_path`
+        : `${SB_URL}/rest/v1/loans`;
+      const headers = path
+        ? { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates,return=representation' }
+        : SB_HEADERS;
+      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+      if (res.ok) {
+        const saved = await res.json();
+        const row = Array.isArray(saved) ? saved[0] : saved;
+        setLoans(prev => { const i = prev.findIndex(l => l.id === row.id); return i >= 0 ? prev.map(l => l.id === row.id ? row : l) : [...prev, row]; });
+        flash('✓ Abstract imported');
+        setShowImport(false); setImportJson(''); setImportFile(null);
+      } else {
+        const e = await res.json().catch(() => ({}));
+        flash('Import error: ' + (e.message || e.details || e.hint || res.status), true);
+      }
+    } catch (err) { flash('Import error: ' + err.message, true); }
+    setSaving(false);
+  }
+
+  // ── Download source .docx via signed URL ─────────────────────────────────────
+  async function downloadDoc(loan) {
+    if (!loan.source_doc_path) { flash('No source document on file for this loan', true); return; }
+    try {
+      const res = await fetch(`${SB_URL}/storage/v1/object/sign/${BUCKET}/${encodeURI(loan.source_doc_path)}`, {
+        method: 'POST', headers: SB_HEADERS, body: JSON.stringify({ expiresIn: 3600 }),
+      });
+      const body = await res.json();
+      if (res.ok && body.signedURL) {
+        const a = document.createElement('a');
+        a.href = `${SB_URL}/storage/v1${body.signedURL}`;
+        a.target = '_blank'; a.rel = 'noopener'; a.click();
+      } else { flash('Could not generate download link', true); }
+    } catch (err) { flash('Download error: ' + err.message, true); }
+  }
+
+  // ── Edit helpers ─────────────────────────────────────────────────────────────
+  function startEdit(loan) {
+    setEditForm({ ...EMPTY_LOAN, ...loan, participants: Array.isArray(loan.participants) ? loan.participants : [] });
+    setTsDraft(JSON.stringify(loan.type_specific || {}, null, 2));
+    setEditId(loan.id); setExpandedId(null);
+  }
+  function startNew() {
+    setEditForm({ ...EMPTY_LOAN }); setTsDraft('{}'); setEditId('new'); setExpandedId(null);
+  }
+  function setF(k, v) { setEditForm(f => ({ ...f, [k]: v })); }
+  function addParticipant() { setF('participants', [...(editForm.participants || []), { name: '', commitment: '', pct: '' }]); }
+  function setParticipant(i, k, v) { setF('participants', (editForm.participants || []).map((r, idx) => idx === i ? { ...r, [k]: v } : r)); }
+  function removeParticipant(i) { setF('participants', (editForm.participants || []).filter((_, idx) => idx !== i)); }
+
+  // ── Formatting ───────────────────────────────────────────────────────────────
+  const fmt$   = n => n == null ? '—' : '$' + (Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : Number(n).toLocaleString());
+  const fmtFull$ = n => n == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
+  const fmtDate = d => { if (!d) return '—'; try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
+  const fmtPct  = (v, dp = 2) => v == null ? '—' : Number(v).toFixed(dp) + '%';
+  const fmtRate = l => {
+    if (!l.rate_index) return l.note_rate_pct != null ? fmtPct(l.note_rate_pct) : '—';
+    if (String(l.rate_index).toLowerCase() === 'fixed') return l.note_rate_pct != null ? `${fmtPct(l.note_rate_pct)} fixed` : 'Fixed';
+    const parts = [l.rate_index];
+    if (l.rate_spread_bps != null) parts.push(`+ ${l.rate_spread_bps} bps`);
+    let s = parts.join(' ');
+    if (l.rate_floor_pct != null) s += ` (${fmtPct(l.rate_floor_pct)} floor)`;
+    return s;
+  };
+
+  // ── Derived: filters, sort, summary ──────────────────────────────────────────
+  const years = Array.from(new Set(loans.map(l => l.maturity_date ? l.maturity_date.slice(0, 4) : null).filter(Boolean))).sort();
+
+  const filtered = loans.filter(l => {
+    if (fType !== 'all' && l.loan_type !== fType) return false;
+    if (fLender && !(l.lead_lender || '').toLowerCase().includes(fLender.toLowerCase())) return false;
+    if (fYear !== 'all' && (l.maturity_date || '').slice(0, 4) !== fYear) return false;
+    if (fGuaranty !== '' && !(l.repayment_guaranty_pct != null && Number(l.repayment_guaranty_pct) >= Number(fGuaranty))) return false;
+    if (fNW !== '' && !(l.min_net_worth != null && Number(l.min_net_worth) >= Number(fNW) * 1e6)) return false;
+    if (fLiq !== '' && !(l.min_liquidity != null && Number(l.min_liquidity) >= Number(fLiq) * 1e6)) return false;
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    let av = a[sortField], bv = b[sortField];
+    if (av == null) return 1; if (bv == null) return -1;
+    if (typeof av === 'string') return av.localeCompare(bv) * dir;
+    return (av - bv) * dir;
+  });
+
+  function toggleSort(f) {
+    if (sortField === f) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(f); setSortDir('asc'); }
+  }
+  function clearFilters() { setFType('all'); setFLender(''); setFYear('all'); setFGuaranty(''); setFNW(''); setFLiq(''); }
+
+  const thisYear = new Date().getFullYear();
+  const totalAmount = filtered.reduce((s, l) => s + (Number(l.loan_amount) || 0), 0);
+  const maturingThisYear = filtered.filter(l => (l.maturity_date || '').slice(0, 4) === String(thisYear)).length;
+  const constructionCount = filtered.filter(l => l.loan_type === 'construction').length;
+  const refinanceCount = filtered.filter(l => l.loan_type === 'refinance').length;
+
+  // ── PDF export of the filtered list ──────────────────────────────────────────
+  async function exportPDF() {
+    flash('Generating PDF…');
+    try {
+      const loadLib = (src) => new Promise((res, rej) => {
+        if (document.querySelector(`script[src="${src}"]`) && window.jspdf) { res(); return; }
+        const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s);
+      });
+      await loadLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      await loadLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const C_ORANGE = [200, 121, 65], C_DARK = [22, 25, 31], C_LIGHT = [200, 205, 214], C_GRAY = [74, 79, 90];
+
+      doc.setFillColor(...C_DARK); doc.rect(0, 0, pageW, 52, 'F');
+      doc.setFillColor(...C_ORANGE); doc.rect(0, 52, pageW, 2, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...C_ORANGE);
+      doc.text('Loan Portfolio', 28, 21);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...C_LIGHT); doc.text(dateStr, 28, 34);
+      doc.setFontSize(7.5); doc.setTextColor(...C_GRAY); doc.text('Thompson Thrift · Loan Database', 28, 45);
+      doc.setFontSize(7); doc.setTextColor(...C_LIGHT);
+      doc.text(`${filtered.length} loans  ·  ${fmt$(totalAmount)} total`, pageW - 28, 28, { align: 'right' });
+
+      const head = [['Property', 'Type', 'Lender', 'Closing', 'Maturity', 'Loan Amount', 'Rate', 'Repay Guar', 'DSCR', 'TTH NW', 'TTH Liq']];
+      const body = sorted.map(l => [
+        l.property_name || l.borrower_entity || '—',
+        LOAN_TYPE_LABEL[l.loan_type] || l.loan_type,
+        l.lead_lender || '—',
+        fmtDate(l.closing_date),
+        fmtDate(l.maturity_date),
+        fmtFull$(l.loan_amount),
+        fmtRate(l),
+        l.repayment_guaranty_pct != null ? fmtPct(l.repayment_guaranty_pct, 0) : '—',
+        l.dscr_covenant != null ? Number(l.dscr_covenant).toFixed(2) + 'x' : '—',
+        fmt$(l.min_net_worth),
+        fmt$(l.min_liquidity),
+      ]);
+      doc.autoTable({
+        head, body, startY: 64, margin: { left: 28, right: 28 },
+        styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 4, fillColor: [19, 21, 26], textColor: C_LIGHT, lineColor: [30, 35, 48], lineWidth: 0.5 },
+        headStyles: { fillColor: C_DARK, textColor: C_GRAY, fontStyle: 'bold', fontSize: 6.5 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 110 }, 5: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' }, 9: { halign: 'right' }, 10: { halign: 'right' } },
+        alternateRowStyles: { fillColor: [15, 17, 23] },
+        didDrawPage: () => {
+          const pg = doc.internal.getCurrentPageInfo().pageNumber, total = doc.internal.getNumberOfPages();
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...C_GRAY);
+          doc.text(`Page ${pg} of ${total}`, pageW - 28, pageH - 14, { align: 'right' });
+          doc.text('Thompson Thrift  ·  Loan Database  ·  Confidential', 28, pageH - 14);
+        },
+      });
+      doc.save(`TT_Loans_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}.pdf`);
+      flash('✓ PDF exported');
+    } catch (err) { console.error(err); flash('PDF error: ' + err.message, true); }
+  }
+
+  // ── Styles ───────────────────────────────────────────────────────────────────
+  const inputSt = (extra = {}) => ({ background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#c8cdd6', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', ...extra });
+  const labelSt = { fontSize: '0.6rem', color: '#5a6070', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
+  const fieldSt = { marginBottom: '0.6rem' };
+  const groupHdr = { fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.6rem' };
+  const typeBadge = l => (
+    <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '2px 7px', borderRadius: 3, whiteSpace: 'nowrap',
+      background: l.loan_type === 'construction' ? 'rgba(79,163,200,0.12)' : 'rgba(155,143,192,0.14)',
+      color: l.loan_type === 'construction' ? '#4fa3c8' : '#9b8fc0' }}>
+      {(LOAN_TYPE_LABEL[l.loan_type] || l.loan_type || '').toUpperCase()}
+    </span>
+  );
+
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: '#4a4f5a', fontSize: '0.8rem' }}>Loading loans…</div>;
+
+  function renderField([key, label, type]) {
+    const span = type === 'textarea' ? { gridColumn: '1 / -1' } : {};
+    return (
+      <div key={key} style={{ ...fieldSt, ...span }}>
+        <label style={labelSt}>{label}</label>
+        {type === 'textarea'
+          ? <textarea style={inputSt({ minHeight: 56, resize: 'vertical' })} value={editForm[key] ?? ''} onChange={e => setF(key, e.target.value)} />
+          : <input type={type} style={inputSt()} value={editForm[key] ?? ''} onChange={e => setF(key, e.target.value)} />}
+      </div>
+    );
+  }
+
+  // ── Edit Modal ────────────────────────────────────────────────────────────────
+  const EditModal = () => {
+    if (!editForm) return null;
+    const isNew = editId === 'new';
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2rem 1rem', overflowY: 'auto' }}>
+        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, width: '100%', maxWidth: 980, padding: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+            <span style={{ fontWeight: 700, color: '#c8cdd6', fontSize: '1rem' }}>{isNew ? 'Add Loan' : `Edit — ${editForm.property_name || editForm.borrower_entity}`}</span>
+            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div>
+              <label style={labelSt}>Loan Type *</label>
+              <select style={inputSt({ width: 180 })} value={editForm.loan_type} onChange={e => setF('loan_type', e.target.value)}>
+                <option value="construction">Construction</option>
+                <option value="refinance">Refinance</option>
+              </select>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.78rem', color: '#9aa0aa', marginTop: 16 }}>
+              <input type="checkbox" checked={!!editForm.prepayment_open} onChange={e => setF('prepayment_open', e.target.checked)} style={{ width: 14, height: 14, accentColor: TT_ORANGE }} />
+              Prepayment open (no penalty)
+            </label>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1.5rem' }}>
+            {LOAN_FIELD_GROUPS.map(g => (
+              <div key={g.title} style={{ marginBottom: '0.75rem' }}>
+                <div style={groupHdr}>{g.title}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 0.75rem' }}>
+                  {g.fields.map(renderField)}
+                </div>
+              </div>
+            ))}
+
+            {/* Participants */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <span style={groupHdr}>Participants</span>
+                <button onClick={addParticipant} style={{ background: 'none', border: '1px solid #2e3340', color: '#6a7080', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'inherit' }}>+ Row</button>
+              </div>
+              {(editForm.participants || []).map((row, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1fr auto', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                  <input style={inputSt({ fontSize: '0.68rem', padding: '3px 5px' })} placeholder="Name" value={row.name || ''} onChange={e => setParticipant(i, 'name', e.target.value)} />
+                  <input style={inputSt({ fontSize: '0.68rem', padding: '3px 5px' })} placeholder="Commitment $" type="number" value={row.commitment || ''} onChange={e => setParticipant(i, 'commitment', e.target.value)} />
+                  <input style={inputSt({ fontSize: '0.68rem', padding: '3px 5px' })} placeholder="%" type="number" value={row.pct || ''} onChange={e => setParticipant(i, 'pct', e.target.value)} />
+                  <button onClick={() => removeParticipant(i)} style={{ background: 'none', border: 'none', color: '#c47474', cursor: 'pointer', fontSize: '0.75rem', padding: '0 3px' }}>✕</button>
+                </div>
+              ))}
+            </div>
+
+            {/* Type-specific JSON */}
+            <div style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
+              <div style={groupHdr}>Type-specific details — advanced (JSON)</div>
+              <textarea style={inputSt({ minHeight: 120, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={tsDraft} onChange={e => setTsDraft(e.target.value)} spellCheck={false} />
+              <div style={{ fontSize: '0.6rem', color: '#5a6070', marginTop: 3 }}>
+                {editForm.loan_type === 'construction'
+                  ? 'e.g. lender_required_completion_date, development_fee_funding, retainage, letters_of_credit, post_closing_items'
+                  : 'e.g. prior_lender, future_advance, lockbox_structure, cash_management_waterfall, cash_collateral_reserves'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem', paddingTop: '1rem', borderTop: '1px solid #2e3340' }}>
+            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
+            <button onClick={saveLoan} disabled={saving} style={{ padding: '7px 22px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : isNew ? 'Add Loan' : 'Save Changes'}</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Import Modal ────────────────────────────────────────────────────────────
+  const ImportModal = () => {
+    if (!showImport) return null;
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2rem 1rem', overflowY: 'auto' }}>
+        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, width: '100%', maxWidth: 720, padding: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <span style={{ fontWeight: 700, color: '#c8cdd6', fontSize: '1rem' }}>Import Abstract</span>
+            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#7a8090', lineHeight: 1.5, marginBottom: '1rem' }}>
+            Paste the JSON sidecar your loan-abstract assistant produced, then attach the matching <code>.docx</code>. Re-importing the same document updates the existing record (no duplicates).
+          </div>
+          <label style={labelSt}>Abstract JSON</label>
+          <textarea style={inputSt({ minHeight: 220, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={importJson} onChange={e => setImportJson(e.target.value)} spellCheck={false} placeholder='{ "loan_type": "construction", "borrower_entity": "...", "loan_amount": 51694640, ... }' />
+          <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <label style={{ padding: '6px 14px', borderRadius: 3, cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: '#c8cdd6', outline: '1px solid #c8cdd633' }}>
+              {importFile ? '✓ ' + importFile.name : '↑ Attach source .docx'}
+              <input type="file" accept=".docx" onChange={e => setImportFile(e.target.files[0] || null)} style={{ display: 'none' }} />
+            </label>
+            {importFile && <button onClick={() => setImportFile(null)} style={{ background: 'none', border: 'none', color: '#c47474', cursor: 'pointer', fontSize: '0.72rem', fontFamily: 'inherit' }}>remove</button>}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #2e3340' }}>
+            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
+            <button onClick={importAbstract} disabled={saving} style={{ padding: '7px 22px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Importing…' : 'Import'}</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const ConfirmDeleteModal = () => {
+    if (!confirmDel) return null;
+    const loan = loans.find(l => l.id === confirmDel);
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ background: '#1e2128', border: '1px solid #c47474', borderRadius: 6, padding: '1.5rem', maxWidth: 380, width: '90%' }}>
+          <div style={{ fontWeight: 700, color: '#c8cdd6', marginBottom: '0.5rem' }}>Delete loan?</div>
+          <div style={{ fontSize: '0.8rem', color: '#9aa0aa', marginBottom: '1.25rem' }}>
+            <strong style={{ color: '#c8cdd6' }}>{loan?.property_name || loan?.borrower_entity}</strong> will be permanently removed. The source .docx in Storage is not deleted.
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+            <button onClick={() => setConfirmDel(null)} style={{ padding: '6px 16px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' }}>Cancel</button>
+            <button onClick={() => deleteLoan(confirmDel)} style={{ padding: '6px 16px', borderRadius: 3, border: 'none', background: '#c47474', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700 }}>Delete</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const SortHdr = ({ field, label, align = 'left' }) => (
+    <th onClick={() => toggleSort(field)} style={{ padding: '0.55rem 0.85rem', textAlign: align, cursor: 'pointer', color: sortField === field ? TT_ORANGE : '#9aa0aa', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none' }}>
+      {label}{sortField === field ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
+
+  // ── Detail panel (expanded row) ──────────────────────────────────────────────
+  const Detail = ({ l }) => {
+    const Row = ({ k, v }) => (v == null || v === '' ? null : (
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '3px 0', borderBottom: '1px solid #23262e' }}>
+        <span style={{ fontSize: '0.7rem', color: '#5a6070', flexShrink: 0 }}>{k}</span>
+        <span style={{ fontSize: '0.76rem', color: '#c8cdd6', textAlign: 'right' }}>{v}</span>
+      </div>
+    ));
+    const Prose = ({ k, v }) => (!v ? null : (
+      <div style={{ marginBottom: '0.6rem' }}>
+        <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>{k}</div>
+        <div style={{ fontSize: '0.74rem', color: '#9aa0aa', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v}</div>
+      </div>
+    ));
+    const ts = l.type_specific && typeof l.type_specific === 'object' ? l.type_specific : {};
+    const tsEntries = Object.entries(ts).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
+    return (
+      <div style={{ borderTop: '1px solid #2e3340', padding: '1.1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
+        <div>
+          <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Loan Terms</div>
+          <Row k="Borrower" v={l.borrower_entity} />
+          <Row k="Units" v={l.unit_count} />
+          <Row k="Closing" v={fmtDate(l.closing_date)} />
+          <Row k="Loan Amount" v={fmtFull$(l.loan_amount)} />
+          <Row k="Loan Fee" v={l.loan_fee_amount != null ? `${fmtFull$(l.loan_fee_amount)}${l.loan_fee_pct != null ? ` (${fmtPct(l.loan_fee_pct)})` : ''}` : (l.loan_fee_pct != null ? fmtPct(l.loan_fee_pct) : null)} />
+          <Row k="Annual Fee" v={l.annual_fee_amount != null ? fmtFull$(l.annual_fee_amount) : null} />
+          <Row k="Rate" v={fmtRate(l)} />
+          <Row k="Rate Cap" v={l.rate_cap_pct != null ? fmtPct(l.rate_cap_pct) : null} />
+          <Row k="Initial Term" v={l.initial_term_months != null ? `${l.initial_term_months} mo` : null} />
+          <Row k="Maturity" v={fmtDate(l.maturity_date)} />
+          <Row k="LTC / LTV" v={(l.ltc_pct != null || l.ltv_pct != null) ? `${l.ltc_pct != null ? fmtPct(l.ltc_pct, 0) : '—'} / ${l.ltv_pct != null ? fmtPct(l.ltv_pct, 0) : '—'}` : null} />
+          <Prose k="Repayment" v={l.repayment_summary} />
+          <div style={{ marginTop: '0.5rem', fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.4rem' }}>Lender</div>
+          <Row k="Lead Lender" v={l.lead_lender} />
+          <Row k="Role" v={l.lead_lender_role} />
+          <Row k="Lead Commitment" v={l.lead_lender_commitment != null ? fmtFull$(l.lead_lender_commitment) : null} />
+          {(l.participants || []).map((p, i) => <Row key={i} k={`Participant — ${p.name || '?'}`} v={`${p.commitment != null ? fmt$(Number(p.commitment)) : ''}${p.pct != null ? ` (${p.pct}%)` : ''}`} />)}
+          <Prose k="Lender Contact" v={l.lender_contact} />
+        </div>
+        <div>
+          <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Guaranty & Covenants</div>
+          <Row k="Completion Guaranty" v={l.completion_guaranty_pct != null ? fmtPct(l.completion_guaranty_pct, 0) : null} />
+          <Row k="Repayment Guaranty" v={l.repayment_guaranty_pct != null ? fmtPct(l.repayment_guaranty_pct, 0) : null} />
+          <Row k="Guarantor" v={l.guarantor_entity} />
+          <Row k="TTH Min Net Worth" v={fmt$(l.min_net_worth)} />
+          <Row k="TTH Min Liquidity" v={fmt$(l.min_liquidity)} />
+          <Row k="DSCR Covenant" v={l.dscr_covenant != null ? `${Number(l.dscr_covenant).toFixed(2)}x` : null} />
+          <Row k="Debt Yield Covenant" v={l.debt_yield_covenant != null ? fmtPct(l.debt_yield_covenant) : null} />
+          <Row k="DSCR Test Freq." v={l.dscr_test_frequency} />
+          <Row k="Assumed Reserves" v={l.lender_assumed_reserves_per_unit != null ? `$${l.lender_assumed_reserves_per_unit}/unit` : null} />
+          <div style={{ marginTop: '0.5rem' }} />
+          <Prose k="Guaranty Reductions" v={l.guaranty_reduction_terms} />
+          <Prose k="DSCR Formula" v={l.dscr_formula} />
+          <Prose k="Debt Yield Formula" v={l.debt_yield_formula} />
+          <Prose k="Significant Covenants" v={l.significant_covenants} />
+        </div>
+        <div>
+          <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Extension / Prepay / Other</div>
+          <Row k="Extension" v={(l.extension_count != null || l.extension_term_months != null) ? `${l.extension_count ?? '?'} × ${l.extension_term_months ?? '?'} mo` : null} />
+          <Row k="Extension Fee" v={l.extension_fee_pct != null ? fmtPct(l.extension_fee_pct) : (l.extension_fee_amount != null ? fmtFull$(l.extension_fee_amount) : null)} />
+          <Row k="Extension Maturity" v={l.extension_maturity_date ? fmtDate(l.extension_maturity_date) : null} />
+          <Row k="Prepayment" v={l.prepayment_open ? 'Open, no penalty' : null} />
+          <Row k="Exit Fee" v={l.exit_fee_pct != null ? fmtPct(l.exit_fee_pct) : null} />
+          <Prose k="Extension Test" v={l.extension_test_summary} />
+          <Prose k="Extension Term Changes" v={l.extension_term_changes} />
+          <Prose k="Prepayment Terms" v={l.prepayment_terms} />
+          <Prose k="Reporting — Borrower" v={l.financial_reporting_borrower} />
+          <Prose k="Reporting — Guarantor" v={l.financial_reporting_guarantor} />
+          <Prose k="Miscellaneous" v={l.miscellaneous} />
+          <Prose k="Notes" v={l.notes} />
+          {tsEntries.length > 0 && (
+            <div style={{ marginTop: '0.5rem' }}>
+              <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, fontWeight: 700 }}>{LOAN_TYPE_LABEL[l.loan_type]}-specific</div>
+              {tsEntries.map(([k, v]) => (
+                <div key={k} style={{ marginBottom: 5 }}>
+                  <span style={{ fontSize: '0.62rem', color: '#5a6070' }}>{k}: </span>
+                  <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'pre-wrap' }}>{typeof v === 'object' ? JSON.stringify(v, null, 1) : String(v)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ padding: '1.5rem 0', position: 'relative' }}>
+      <EditModal />
+      <ImportModal />
+      <ConfirmDeleteModal />
+      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msg.isErr ? '#4a1a1a' : '#1a3a2a', border: `1px solid ${msg.isErr ? '#c47474' : '#6a9e7f'}`, color: msg.isErr ? '#c47474' : '#6a9e7f', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem' }}>{msg.text}</div>}
+
+      {/* ── Summary cards ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        {[
+          { label: 'Loans (filtered)', value: filtered.length, sub: `${constructionCount} const · ${refinanceCount} refi` },
+          { label: 'Total Loan Amount', value: fmt$(totalAmount), sub: 'across filtered loans' },
+          { label: `Maturing ${thisYear}`, value: maturingThisYear, sub: 'in current calendar year' },
+          { label: 'In Database', value: loans.length, sub: 'all loans' },
+        ].map(c => (
+          <div key={c.label} style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, padding: '0.9rem 1rem' }}>
+            <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.08em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#c8cdd6', lineHeight: 1.1 }}>{c.value}</div>
+            <div style={{ fontSize: '0.65rem', color: '#5a6070', marginTop: '0.2rem' }}>{c.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Filter bar ── */}
+      <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, padding: '0.85rem 1rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem' }}>
+        <div>
+          <label style={labelSt}>Type</label>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[['all', 'All'], ['construction', 'Const'], ['refinance', 'Refi']].map(([v, lbl]) => (
+              <button key={v} onClick={() => setFType(v)} style={{ padding: '5px 11px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: fType === v ? TT_ORANGE : '#2e3340', color: fType === v ? '#fff' : '#9aa0aa' }}>{lbl}</button>
+            ))}
+          </div>
+        </div>
+        <div><label style={labelSt}>Lender</label><input style={inputSt({ width: 130 })} value={fLender} onChange={e => setFLender(e.target.value)} placeholder="e.g. BOKF" /></div>
+        <div>
+          <label style={labelSt}>Maturity Year</label>
+          <select style={inputSt({ width: 110 })} value={fYear} onChange={e => setFYear(e.target.value)}>
+            <option value="all">All</option>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div><label style={labelSt}>Repay Guar ≥ %</label><input style={inputSt({ width: 90 })} type="number" value={fGuaranty} onChange={e => setFGuaranty(e.target.value)} placeholder="35" /></div>
+        <div><label style={labelSt}>TTH NW ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fNW} onChange={e => setFNW(e.target.value)} placeholder="75" /></div>
+        <div><label style={labelSt}>TTH Liq ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fLiq} onChange={e => setFLiq(e.target.value)} placeholder="15" /></div>
+        <button onClick={clearFilters} style={{ padding: '6px 12px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>Clear</button>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button onClick={exportPDF} style={{ padding: '6px 14px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export PDF</button>
+          <button onClick={() => requirePin(() => setShowImport(true))} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? 'rgba(200,121,65,0.18)' : '#2a2d35', color: pinUnlocked ? TT_ORANGE : '#4a4f5a', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600, outline: pinUnlocked ? '1px solid #c8794155' : 'none' }}>{pinUnlocked ? '⇪ Import Abstract' : '🔒 Import'}</button>
+          <button onClick={() => requirePin(startNew)} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700 }}>{pinUnlocked ? '+ Add Loan' : '🔒 Add Loan'}</button>
+        </div>
+      </div>
+
+      {/* ── Table ── */}
+      {loans.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+          <div style={{ fontSize: '2rem', opacity: 0.3, marginBottom: '1rem' }}>📄</div>
+          <div style={{ fontSize: '0.9rem', color: '#9aa0aa', fontWeight: 600, marginBottom: '0.5rem' }}>No loans yet</div>
+          <div style={{ fontSize: '0.75rem', color: '#4a4f5a' }}>Use “Import Abstract” to add your first loan, or run the backfill script.</div>
+        </div>
+      ) : (
+        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #2e3340' }}>
+                <SortHdr field="property_name" label="Property" />
+                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'left', color: '#9aa0aa', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Type</th>
+                <SortHdr field="lead_lender" label="Lender" />
+                <SortHdr field="maturity_date" label="Maturity" />
+                <SortHdr field="loan_amount" label="Loan Amount" align="right" />
+                <SortHdr field="repayment_guaranty_pct" label="Repay Guar" align="right" />
+                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: '#9aa0aa', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>DSCR</th>
+                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: '#9aa0aa', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Doc</th>
+                <th style={{ width: 70 }} />
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map(l => {
+                const isOpen = expandedId === l.id;
+                return (
+                  <React.Fragment key={l.id}>
+                    <tr style={{ borderBottom: isOpen ? 'none' : '1px solid #16191f', background: isOpen ? '#23262e' : 'transparent', cursor: 'pointer' }} onClick={() => setExpandedId(isOpen ? null : l.id)}>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.82rem', color: '#c8cdd6', fontWeight: 600 }}>
+                        <span style={{ color: TT_ORANGE, marginRight: 6, fontSize: '0.7rem' }}>{isOpen ? '▾' : '▸'}</span>
+                        {l.property_name || l.borrower_entity || '—'}
+                        {l.property_state && <span style={{ color: '#5a6070', fontWeight: 400 }}> · {l.property_state}</span>}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.85rem' }}>{typeBadge(l)}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#9aa0aa' }}>{l.lead_lender || '—'}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#9aa0aa' }}>{fmtDate(l.maturity_date)}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#c8cdd6', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtFull$(l.loan_amount)}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#9aa0aa', textAlign: 'right' }}>{l.repayment_guaranty_pct != null ? fmtPct(l.repayment_guaranty_pct, 0) : '—'}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#9aa0aa', textAlign: 'right' }}>{l.dscr_covenant != null ? `${Number(l.dscr_covenant).toFixed(2)}x` : '—'}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                        {l.source_doc_path
+                          ? <button onClick={() => downloadDoc(l)} title="Download source .docx" style={{ background: 'none', border: '1px solid #2e3340', borderRadius: 3, color: TT_ORANGE, cursor: 'pointer', padding: '3px 8px', fontSize: '0.68rem', fontFamily: 'inherit' }}>↓ .docx</button>
+                          : <span style={{ fontSize: '0.68rem', color: '#3a3f4a' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '0.65rem 0.5rem', whiteSpace: 'nowrap', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                        {pinUnlocked ? (
+                          <>
+                            <button onClick={() => startEdit(l)} title="Edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9aa0aa', fontSize: '0.75rem', padding: '2px 5px' }}>✏</button>
+                            <button onClick={() => setConfirmDel(l.id)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4747466', fontSize: '0.75rem', padding: '2px 5px' }}>✕</button>
+                          </>
+                        ) : (
+                          <button onClick={() => requirePin(() => startEdit(l))} title="Unlock to edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2a2d35', fontSize: '0.75rem', padding: '2px 5px' }}>🔒</button>
+                        )}
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr><td colSpan={9} style={{ padding: 0, background: '#1b1e25' }}><Detail l={l} /></td></tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+          {sorted.length === 0 && <div style={{ padding: '2rem', textAlign: 'center', color: '#4a4f5a', fontSize: '0.8rem' }}>No loans match the current filters.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("covenant");
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
@@ -5638,8 +6400,8 @@ export default function App() {
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinPendingAction, setPinPendingAction] = useState(null);
-  const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land'];
-  const [visibleTabs, setVisibleTabs] = useState({ calculator:true, matrix:true, covenant:true, leasing:true, pipeline:true, land:true });
+  const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land','loans'];
+  const [visibleTabs, setVisibleTabs] = useState({ calculator:true, matrix:true, covenant:true, leasing:true, pipeline:true, land:true, loans:true });
   const [showTabConfig, setShowTabConfig] = useState(false);
 
   const SB_URL = 'https://ngflppgqohmkkfiljqma.supabase.co';
@@ -5836,7 +6598,7 @@ export default function App() {
     setVisibleTabs(next);
     // If the active tab is being hidden, switch to first visible tab
     if (!next[activeTab]) {
-      const first = ['covenant','calculator','matrix','land','leasing','pipeline'].find(t => next[t]);
+      const first = ['covenant','calculator','matrix','land','leasing','pipeline','loans'].find(t => next[t]);
       if (first) setActiveTab(first);
     }
     try {
@@ -5937,6 +6699,7 @@ export default function App() {
           {visibleTabs.leasing    && <button className={`tab-btn ${activeTab === "leasing"    ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("leasing")}>Leasing Dashboard</button>}
           {visibleTabs.pipeline   && <button className={`tab-btn ${activeTab === "pipeline"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("pipeline")}>Lender Pipeline</button>}
           {visibleTabs.land       && <button className={`tab-btn ${activeTab === "land"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("land")}>Land Facility</button>}
+          {visibleTabs.loans      && <button className={`tab-btn ${activeTab === "loans"      ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("loans")}>Loans</button>}
           {/* Gear button */}
           <button
             onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
@@ -5947,7 +6710,7 @@ export default function App() {
           {showTabConfig && (
             <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: '#13151a', border: `1px solid ${TT_ORANGE}44`, borderRadius: 4, padding: '0.75rem 1rem', minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
               <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: '0.65rem' }}>Visible Tabs</div>
-              {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility']].map(([key, label]) => (
+              {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans']].map(([key, label]) => (
                 <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem', cursor: 'pointer' }}>
                   <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ accentColor: TT_ORANGE, width: 14, height: 14 }} />
                   <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? '#c8cdd6' : '#4a4f5a' }}>{label}</span>
@@ -5964,6 +6727,7 @@ export default function App() {
         {activeTab === "leasing"    && <LeasingTab />}
         {activeTab === "pipeline"   && <PipelineTab />}
         {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+        {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
 
         {/* ── Footer ── */}
         <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid #2e3340`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
