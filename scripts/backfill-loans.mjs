@@ -78,8 +78,14 @@ const norm = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 function parseAbstract(file) {
   const { flat, rows } = readDocx(file);
   const L = {}; // normalized label → value
-  for (const [k, v] of rows) L[norm(k)] = v;
-  const get = (...keys) => { for (const k of keys) { const hit = Object.keys(L).find(n => n === norm(k) || n.startsWith(norm(k))); if (hit) return L[hit]; } return null; };
+  for (const [k, v] of rows) { const n = norm(k); if (!(n in L)) L[n] = v; } // first row wins on dup labels
+  // Prefer an exact label match over a loose starts-with match, so the top stats
+  // strip ("LOAN AMOUNT $58,611,497" mashed into one cell) can't hijack a field.
+  const get = (...keys) => {
+    for (const k of keys) { const nk = norm(k); if (nk in L) return L[nk]; }
+    for (const k of keys) { const nk = norm(k); const hit = Object.keys(L).find(n => n.startsWith(nk)); if (hit) return L[hit]; }
+    return null;
+  };
 
   // header band
   const deSpaced = flat.map(l => l.replace(/\s+/g, ''));
