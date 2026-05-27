@@ -34,8 +34,12 @@ const decode = s => s
 
 const slugify = name => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 const num     = s => { const m = String(s).match(/-?[\d,]+(?:\.\d+)?/); return m ? Number(m[0].replace(/,/g, '')) : null; };
-const money   = s => { const m = String(s).match(/\$\s*([\d,]+(?:\.\d+)?)/); return m ? Number(m[1].replace(/,/g, '')) : num(s); };
-const dollars = s => { const m = String(s).match(/\$\s*([\d,]+(?:\.\d+)?)/); return m ? Number(m[1].replace(/,/g, '')) : null; }; // strict: null unless a $ is present
+// $-amounts, magnitude-aware: "$44.5MM" → 44500000, "$5M" → 5000000, "$1.2B" → 1.2e9.
+// The (?![A-Za-z]) guard stops the suffix from eating real words ("$5,000,000 monthly").
+const MAG = { MM: 1e6, M: 1e6, B: 1e9, K: 1e3 };
+const moneyAll = s => { const out = []; const re = /\$\s*([\d,]+(?:\.\d+)?)\s*(MM|M|B|K)?(?![A-Za-z])/gi; let m; while ((m = re.exec(String(s)))) { const suf = m[2] ? m[2].toUpperCase() : null; out.push(Number(m[1].replace(/,/g, '')) * (suf ? MAG[suf] : 1)); } return out; };
+const money   = s => { const a = moneyAll(s); return a.length ? a[0] : num(s); };
+const dollars = s => { const a = moneyAll(s); return a.length ? a[0] : null; }; // strict: null unless a $ is present
 const pct     = s => { const m = String(s).match(/([\d.]+)\s*%/); return m ? Number(m[1]) : null; };
 const int     = s => { const m = String(s).match(/-?\d+/); return m ? parseInt(m[0], 10) : null; };
 const MONTHS  = ['january','february','march','april','may','june','july','august','september','october','november','december'];
