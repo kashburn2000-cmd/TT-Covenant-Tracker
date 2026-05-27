@@ -5729,6 +5729,141 @@ const EMPTY_LOAN = {
   miscellaneous: '', notes: '', type_specific: {}, source_doc_path: '',
 };
 
+// Browser-side abstract parser — mirrors scripts/backfill-loans.mjs. Takes the
+// word/document.xml string from a .docx and returns a loans-row object so the
+// Import form can auto-fill from the Word doc (no JSON sidecar required).
+function parseAbstractXml(xml) {
+  const decode = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#160;/g, ' ').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n));
+  const num     = s => { const m = String(s).match(/-?[\d,]+(?:\.\d+)?/); return m ? Number(m[0].replace(/,/g, '')) : null; };
+  const money   = s => { const m = String(s).match(/\$\s*([\d,]+(?:\.\d+)?)/); return m ? Number(m[1].replace(/,/g, '')) : num(s); };
+  const dollars = s => { const m = String(s).match(/\$\s*([\d,]+(?:\.\d+)?)/); return m ? Number(m[1].replace(/,/g, '')) : null; };
+  const pctOf   = s => { const m = String(s).match(/([\d.]+)\s*%/); return m ? Number(m[1]) : null; };
+  const intOf   = s => { const m = String(s).match(/-?\d+/); return m ? parseInt(m[0], 10) : null; };
+  const MONTHS  = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const isoDates = s => {
+    const out = []; let m;
+    const re = /([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/g;
+    while ((m = re.exec(s))) { const mi = MONTHS.indexOf(m[1].toLowerCase()); if (mi >= 0) out.push(`${m[3]}-${String(mi + 1).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`); }
+    const re2 = /(\d{4})-(\d{2})-(\d{2})/g; while ((m = re2.exec(s))) out.push(`${m[1]}-${m[2]}-${m[3]}`);
+    return out;
+  };
+  const firstDate = s => isoDates(s)[0] || null;
+  const lastDate  = s => { const d = isoDates(s); return d.length ? d[d.length - 1] : null; };
+
+  const flat = decode(xml.replace(/<\/w:p>/g, '\n').replace(/<\/w:tr>/g, '\n').replace(/<[^>]+>/g, '')).split('\n').map(l => l.trim()).filter(Boolean);
+  const rows = [];
+  for (const tbl of xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g) || []) {
+    for (const tr of tbl.match(/<w:tr\b[\s\S]*?<\/w:tr>/g) || []) {
+      const cells = (tr.match(/<w:tc>[\s\S]*?<\/w:tc>/g) || []).map(tc =>
+        (tc.split('</w:p>').map(p => decode((p.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || []).map(t => t.replace(/<[^>]+>/g, '')).join(''))).filter(Boolean).join('\n')).trim());
+      if (cells.length >= 2 && cells[0]) rows.push([cells[0], cells.slice(1).join('\n').trim()]);
+    }
+  }
+  const L = {}; const norm = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  for (const [k, v] of rows) L[norm(k)] = v;
+  const get = (...keys) => { for (const k of keys) { const hit = Object.keys(L).find(n => n === norm(k) || n.startsWith(norm(k))); if (hit) return L[hit]; } return null; };
+
+  const deSpaced = flat.map(l => l.replace(/\s+/g, ''));
+  const titleIdx = deSpaced.findIndex(l => /REFINANCELOANABSTRACT|CONSTRUCTIONLOANABSTRACT/i.test(l));
+  const loan_type = titleIdx >= 0 && /REFINANCE/i.test(deSpaced[titleIdx]) ? 'refinance' : 'construction';
+  const borrower_entity = titleIdx >= 0 ? (flat[titleIdx + 1] || null) : (flat[0] || null);
+  const descLine = flat.find(l => /·|Closed/.test(l)) || '';
+  const segs = descLine.split('·').map(s => s.trim());
+  const unit_count = (descLine.match(/(\d+)\s*-?\s*unit/i) || [])[1] ? +(descLine.match(/(\d+)\s*-?\s*unit/i)[1]) : null;
+  let property_city = null, property_state = null;
+  const locSeg = segs.find(s => /,\s*[A-Z]{2}\b/.test(s));
+  if (locSeg) { const [c, st] = locSeg.split(','); property_city = c.trim(); property_state = (st || '').trim().slice(0, 2); }
+  const closing_date = firstDate(segs.find(s => /Closed/i.test(s)) || get('closing date') || '');
+
+  const row = { loan_type, borrower_entity, property_city, property_state, unit_count, closing_date, property_name: null, type_specific: {} };
+
+  const amt = get('loan amount');
+  if (amt) { row.loan_amount = money(amt); const ltc = amt.match(/([\d.]+)%\s*LTC/i); const ltv = amt.match(/([\d.]+)%\s*LTV/i); if (ltc) row.ltc_pct = +ltc[1]; if (ltv) row.ltv_pct = +ltv[1]; }
+  const fee = get('loan fee');
+  if (fee) { if (!/none|n\/a/i.test(fee)) { row.loan_fee_amount = money(fee); row.loan_fee_pct = pctOf(fee); } const af = fee.match(/\$([\d,]+)\s*\/?\s*yr/i); if (af) row.annual_fee_amount = num(af[1]); }
+  const rate = get('interest rate');
+  if (rate) {
+    row.rate_index = /fixed/i.test(rate) ? 'Fixed' : (/sofr/i.test(rate) ? 'SOFR' : (rate.split(/[+,]/)[0] || '').trim() || null);
+    const bps = rate.match(/\+\s*([\d.]+)\s*bps/i); const sp = rate.match(/\+\s*([\d.]+)\s*%/);
+    if (bps) row.rate_spread_bps = Math.round(+bps[1]); else if (sp) row.rate_spread_bps = Math.round(+sp[1] * 100);
+    const fl = rate.match(/([\d.]+)\s*%\s*(?:index\s*|sofr\s*)?floor/i); if (fl) row.rate_floor_pct = +fl[1];
+    const cap = rate.match(/([\d.]+)\s*%\s*(?:strike\s*)?(?:rate\s*)?cap/i); if (cap) row.rate_cap_pct = +cap[1];
+  }
+  row.repayment_summary = get('repayment');
+  const term = get('initial term'); if (term) row.initial_term_months = intOf(term);
+  row.maturity_date = firstDate(get('maturity date') || '');
+
+  const lender = get('lender');
+  if (lender) {
+    row.lead_lender = (lender.split(/\(|—|–|-\s|,?\s*\$/)[0] || '').trim() || null;
+    const role = lender.match(/\(([^)]+)\)/); if (role) row.lead_lender_role = role[1].trim();
+    row.lead_lender_commitment = dollars(lender);
+  }
+  const part = get('participant');
+  if (part && !/^none|n\/a$/i.test(part)) row.participants = [{ name: (part.split(/—|–|-\s|,?\s*\$/)[0] || '').trim(), commitment: dollars(part), pct: pctOf(part) }];
+
+  const guar = get('guarantors', 'guarantor');
+  if (guar) {
+    const comp = guar.match(/([\d.]+)\s*%\s*completion/i); if (comp) row.completion_guaranty_pct = +comp[1];
+    const rep = guar.match(/([\d.]+)\s*%\s*repayment/i); if (rep) row.repayment_guaranty_pct = +rep[1];
+    if (/non-recourse to tth/i.test(guar)) row.repayment_guaranty_pct = null;
+  }
+  row.guaranty_reduction_terms = get('guarantor reductions');
+
+  row.dscr_formula = get('dscr formula');
+  row.debt_yield_formula = get('debt yield formula');
+  const reserves = get('lender assumed reserves'); if (reserves && !/n\/a|none/i.test(reserves)) { const r = reserves.match(/\$?([\d.]+)\s*\/?\s*unit/i); if (r) row.lender_assumed_reserves_per_unit = +r[1]; }
+  const cov = get('financial other significant covenants', 'financial significant covenants');
+  row.significant_covenants = cov;
+  const covAll = [cov, guar].filter(Boolean).join(' ');
+  if (covAll) {
+    const nw = covAll.match(/\$?([\d.]+)\s*M[^./]*?(?:NW|net worth)/i); if (nw) row.min_net_worth = +nw[1] * 1e6;
+    const liq = covAll.match(/\$?([\d.]+)\s*M[^./]*?(?:liq|liquidity)/i); if (liq) row.min_liquidity = +liq[1] * 1e6;
+    const dscr = covAll.match(/DSCR\s*[>=≥]+\s*([\d.]+)/i); if (dscr) row.dscr_covenant = +dscr[1];
+    const dy = covAll.match(/Debt Yield\s*[<>=≥]+\s*([\d.]+)\s*%/i); if (dy) row.debt_yield_covenant = +dy[1];
+    const freq = covAll.match(/tested\s+(quarterly|monthly|annually)/i); if (freq) row.dscr_test_frequency = freq[1].toLowerCase();
+  }
+  row.financial_reporting_borrower = get('financial reporting borrower', 'reporting borrower');
+  row.financial_reporting_guarantor = get('financial reporting guarantors', 'reporting guarantor');
+
+  const exo = get('extension options');
+  if (exo && !/none|n\/a/i.test(exo)) { const m = exo.match(/(\d+)\s*[x×]\s*(\d+)/i); if (m) { row.extension_count = +m[1]; row.extension_term_months = +m[2]; } }
+  row.extension_term_changes = get('extension term');
+  row.extension_test_summary = get('extension test');
+  row.extension_maturity_date = lastDate(get('extension maturity date') || '');
+  const exf = get('extension fee'); if (exf && !/none|n\/a/i.test(exf)) { row.extension_fee_pct = pctOf(exf); row.extension_fee_amount = dollars(exf); }
+
+  const prepay = get('prepayment');
+  if (prepay) { row.prepayment_open = /open[^.]*without penalty|open at any time/i.test(prepay); row.prepayment_terms = /open[^.]*without penalty/i.test(prepay) ? null : prepay; }
+  const exit = get('exit fee'); if (exit && !/none|n\/a/i.test(exit)) row.exit_fee_pct = pctOf(exit);
+  row.lender_contact = get('lender contact');
+  row.miscellaneous = get('miscellaneous');
+
+  const keep = (key, ...labels) => { const v = get(...labels); if (v) row.type_specific[key] = v; };
+  if (loan_type === 'construction') {
+    row.type_specific.lender_required_completion_date = firstDate(get('lender required completion date') || '') || get('lender required completion date');
+    keep('development_fee_funding', 'development fee funding');
+    keep('non_standard_draw_requirements', 'non standard draw requirements');
+    keep('final_completion_draw_requirements', 'final construction completion draw requirements', 'final completion draw requirements');
+    keep('change_order_limits', 'change order limits');
+    const lc = get('letters of credit'); if (lc) row.type_specific.letters_of_credit = lc;
+    const pc = get('post closing items prior to draws', 'post closing items'); if (pc) row.type_specific.post_closing_items = pc.split('\n').map(s => s.trim()).filter(Boolean);
+  } else {
+    keep('lockbox_structure', 'lockbox structure');
+    const wf = get('cash management waterfall'); if (wf) row.type_specific.cash_management_waterfall = wf.split('\n').map(s => s.trim()).filter(Boolean);
+    keep('tax_insurance_escrow', 'tax insurance escrow', 'tax and insurance escrow');
+    keep('replacement_reserve', 'replacement reserve');
+    keep('required_repair_funds', 'required repair funds');
+    keep('cash_collateral_reserves', 'cash collateral holdback reserves', 'cash collateral reserve');
+    keep('excess_cash_reserve', 'excess cash reserve');
+    keep('securitization_transfer', 'securitization transfer', 'securitization');
+  }
+  for (const k of Object.keys(row.type_specific)) if (row.type_specific[k] == null || row.type_specific[k] === '') delete row.type_specific[k];
+  // drop null/empty keys so the auto-filled JSON stays readable
+  for (const k of Object.keys(row)) if (row[k] == null && k !== 'type_specific') delete row[k];
+  return row;
+}
+
 function LoansTab({ pinUnlocked, requirePin }) {
   const SB_URL     = 'https://ngflppgqohmkkfiljqma.supabase.co';
   const SB_KEY     = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
@@ -5901,6 +6036,26 @@ function LoansTab({ pinUnlocked, requirePin }) {
         a.target = '_blank'; a.rel = 'noopener'; a.click();
       } else { flash('Could not generate download link', true); }
     } catch (err) { flash('Download error: ' + err.message, true); }
+  }
+
+  // ── Auto-fill the Import JSON from an attached .docx (in-browser) ────────────
+  async function loadJSZip() {
+    if (window.JSZip) return window.JSZip;
+    await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+    return window.JSZip;
+  }
+  async function autofillFromDocx() {
+    if (!importFile) { flash('Attach a .docx first', true); return; }
+    try {
+      flash('Reading .docx…');
+      const JSZip = await loadJSZip();
+      const zip = await JSZip.loadAsync(await importFile.arrayBuffer());
+      const xmlFile = zip.file('word/document.xml');
+      if (!xmlFile) { flash('That file does not look like a Word .docx', true); return; }
+      const row = parseAbstractXml(await xmlFile.async('string'));
+      setImportJson(JSON.stringify(row, null, 2));
+      flash('✓ Fields extracted — review below, then Import');
+    } catch (e) { flash('Could not read .docx: ' + e.message, true); }
   }
 
   // ── Edit helpers ─────────────────────────────────────────────────────────────
@@ -6135,17 +6290,25 @@ function LoansTab({ pinUnlocked, requirePin }) {
             <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
           </div>
           <div style={{ fontSize: '0.72rem', color: '#7a8090', lineHeight: 1.5, marginBottom: '1rem' }}>
-            Paste the JSON sidecar your loan-abstract assistant produced, then attach the matching <code>.docx</code>. Re-importing the same document updates the existing record (no duplicates).
+            Easiest: attach the <code>.docx</code> and click <strong>Auto-fill</strong> — the fields are read straight from the document. Review them below, then Import. (Or paste a JSON sidecar from your abstract assistant if you have one.) Re-importing the same document updates the existing record — no duplicates.
           </div>
-          <label style={labelSt}>Abstract JSON</label>
-          <textarea style={inputSt({ minHeight: 220, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={importJson} onChange={e => setImportJson(e.target.value)} spellCheck={false} placeholder='{ "loan_type": "construction", "borrower_entity": "...", "loan_amount": 51694640, ... }' />
-          <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <label style={{ padding: '6px 14px', borderRadius: 3, cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: '#c8cdd6', outline: '1px solid #c8cdd633' }}>
-              {importFile ? '✓ ' + importFile.name : '↑ Attach source .docx'}
-              <input type="file" accept=".docx" onChange={e => setImportFile(e.target.files[0] || null)} style={{ display: 'none' }} />
-            </label>
-            {importFile && <button onClick={() => setImportFile(null)} style={{ background: 'none', border: 'none', color: '#c47474', cursor: 'pointer', fontSize: '0.72rem', fontFamily: 'inherit' }}>remove</button>}
+
+          {/* Step 1 — attach + auto-fill */}
+          <div style={{ background: '#13151a', border: '1px solid #2e3340', borderRadius: 4, padding: '0.85rem 1rem', marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.6rem' }}>Step 1 — Source document</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <label style={{ padding: '6px 14px', borderRadius: 3, cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: '#c8cdd6', outline: '1px solid #c8cdd633' }}>
+                {importFile ? '✓ ' + importFile.name : '↑ Attach .docx'}
+                <input type="file" accept=".docx" onChange={e => setImportFile(e.target.files[0] || null)} style={{ display: 'none' }} />
+              </label>
+              <button onClick={autofillFromDocx} disabled={!importFile} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', cursor: importFile ? 'pointer' : 'default', fontSize: '0.74rem', fontWeight: 700, fontFamily: 'inherit', background: importFile ? TT_ORANGE : '#2a2d35', color: importFile ? '#fff' : '#4a4f5a' }}>↳ Auto-fill fields from .docx</button>
+              {importFile && <button onClick={() => setImportFile(null)} style={{ background: 'none', border: 'none', color: '#c47474', cursor: 'pointer', fontSize: '0.72rem', fontFamily: 'inherit' }}>remove</button>}
+            </div>
           </div>
+
+          {/* Step 2 — review/paste JSON */}
+          <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.4rem' }}>Step 2 — Review fields (auto-filled or pasted)</div>
+          <textarea style={inputSt({ minHeight: 220, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={importJson} onChange={e => setImportJson(e.target.value)} spellCheck={false} placeholder='Click "Auto-fill" above, or paste JSON like: { "loan_type": "construction", "borrower_entity": "...", "loan_amount": 51694640 }' />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #2e3340' }}>
             <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
             <button onClick={importAbstract} disabled={saving} style={{ padding: '7px 22px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Importing…' : 'Import'}</button>
