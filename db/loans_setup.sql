@@ -111,10 +111,15 @@ create index if not exists loans_closing_date_idx    on public.loans (closing_da
 create index if not exists loans_type_specific_gin   on public.loans using gin (type_specific);
 create index if not exists loans_participants_gin    on public.loans using gin (participants);
 
--- Access: matches the rest of this app (publishable/anon key reads + writes,
--- PIN gating is client-side only). Tables created here have RLS disabled by
--- default. Only run this if your project tightened default privileges:
--- grant select, insert, update, delete on public.loans to anon, authenticated;
+-- Access: matches the rest of this app (publishable/anon key reads + writes;
+-- PIN gating is client-side only). Supabase enables RLS on new tables in many
+-- projects, which blocks the publishable key unless a policy exists — so enable
+-- RLS and add one permissive policy explicitly. (Idempotent; safe to re-run.)
+alter table public.loans enable row level security;
+drop policy if exists "loans anon all" on public.loans;
+create policy "loans anon all" on public.loans
+  for all to anon, authenticated
+  using (true) with check (true);
 
 
 -- ════════════════════════════════════════════════════════════════════════
