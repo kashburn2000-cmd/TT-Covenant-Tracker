@@ -1,0 +1,39 @@
+name: Keep Supabase Alive
+
+# Free-tier Supabase projects pause after 7 days with no database activity.
+# This runs a tiny query on a schedule so the project never pauses, even when
+# nobody visits the site.
+
+on:
+  schedule:
+    # Daily at 09:17 UTC. An off-the-hour minute avoids GitHub's top-of-hour
+    # congestion, which can delay or drop scheduled runs. Daily gives wide
+    # margin against the 7-day window even if a few runs are skipped.
+    - cron: '17 9 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query Supabase REST endpoint
+        env:
+          SB_URL: https://ngflppgqohmkkfiljqma.supabase.co
+          # Falls back to the publishable key already embedded in the client
+          # bundle. Override by setting a SUPABASE_KEY repo secret.
+          SB_KEY: ${{ secrets.SUPABASE_KEY || 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5' }}
+        run: |
+          set -euo pipefail
+          echo "Pinging Supabase to prevent free-tier pause..."
+          status=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
+            -H "apikey: $SB_KEY" \
+            -H "Authorization: Bearer $SB_KEY" \
+            "$SB_URL/rest/v1/properties?select=id&limit=1")
+          echo "HTTP $status"
+          cat /tmp/resp.txt
+          echo
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "::error::Supabase ping failed with HTTP $status"
+            exit 1
+          fi
+          echo "Supabase ping succeeded."
