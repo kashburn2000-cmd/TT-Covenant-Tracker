@@ -5550,8 +5550,129 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
     : `${r.covenantReq % 1 === 0 ? r.covenantReq : r.covenantReq.toFixed(2)}% Debt Yield`;
 
   // Rebuilds the on-screen table into a styled .xlsx — same colors, merges, fonts,
-  // and column order — so the download looks all but identical to this page.
+  // and column order — so the download looks all but identical to this page. A second
+  // "Inputs & Calc" tab carries every raw input plus live Excel formulas for the whole
+  // calc chain (rate → debt service → DSCR/DY → paydown); the Dashboard tab's loan,
+  // result, satisfied, and paydown cells are formulas that point back at it.
   const [xlState, setXlState] = useState('idle'); // idle | working | error
+  const INP = 'Inputs & Calc';
+  const INP_FIRST = 5; // first data row on the Inputs tab
+
+  function buildInputsSheet({ wb, argb, fill, lineBorder, box, numOrNull }) {
+    const ws = wb.addWorksheet(INP, { views: [{ showGridLines: false }] });
+    const NUM = '$#,##0', PCT = '0.000%', PCTLIT = '0.000"%"';
+    const widths = [16, 16, 7, 15, 14, 12, 9, 9, 11, 12, 9, 9, 9, 11, 10, 11, 12, 15, 17, 13, 14, 13, 10, 15];
+    widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    const COLS = widths.length; // 24
+
+    // Title + explanatory note.
+    ws.mergeCells(1, 1, 1, COLS);
+    const t = ws.getCell(1, 1);
+    t.value = `Covenant Dashboard — Inputs & Calculations · ${fmtTitle(asOf)}`;
+    t.font = { name: 'Calibri', bold: true, size: 14 };
+    ws.getRow(1).height = 20;
+    ws.mergeCells(2, 1, 2, COLS);
+    const note = ws.getCell(2, 1);
+    note.value = 'Blue columns are the entered inputs. Navy columns recalculate from them via live Excel formulas — edit any input to update. SOFR and 10-Year are the resolved curve values for each test date. Variable-rate loans show debt service / paydown as values (italic) since they derive from a T-3 rolling schedule.';
+    note.font = { name: 'Calibri', italic: true, size: 8, color: { argb: 'FF777777' } };
+    note.alignment = { wrapText: true, vertical: 'middle' };
+    ws.getRow(2).height = 26;
+
+    // Group banner row.
+    const bannerFill = '#2e75b6';
+    const banner = (c1, c2, label, hex) => {
+      ws.mergeCells(3, c1, 3, c2);
+      const c = ws.getCell(3, c1);
+      c.value = label;
+      c.font = { name: 'Calibri', bold: true, size: 9, color: { argb: 'FFFFFFFF' } };
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+      c.fill = fill(hex);
+      c.border = box({ style: 'thin', color: { argb: argb(hex) } });
+    };
+    banner(1, 13, 'INPUTS', bannerFill);
+    banner(14, 24, 'CALCULATED — live Excel formulas', C.navy);
+
+    // Column headers.
+    const headers = ['Property', 'Lender', 'Type', 'Loan Amount', 'Annual NOI', 'Covenant Req', 'Amort (yrs)', 'Spread %', 'Spread 10Y %', 'Sizing Rate %', 'SOFR', '10-Year', 'Variable?', 'SOFR Rate', '10Y Rate', 'Sizing Floor', 'Effective Rate', 'Effective Loan', 'Annual Debt Service', 'Current Value', 'Required NOI', 'NOI Variance', 'Satisfied', 'Potential Paydown'];
+    headers.forEach((h, i) => {
+      const c = ws.getCell(4, i + 1);
+      c.value = h;
+      c.font = { name: 'Calibri', bold: true, size: 8, color: { argb: 'FFFFFFFF' } };
+      c.fill = fill(i + 1 <= 13 ? bannerFill : C.navy);
+      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      c.border = box({ style: 'thin', color: { argb: argb(i + 1 <= 13 ? bannerFill : C.navy) } });
+    });
+    ws.getRow(4).height = 26;
+
+    const put = (rr, col, value, opts = {}) => {
+      const c = ws.getCell(rr, col);
+      c.value = value;
+      c.font = { name: 'Calibri', size: 9, italic: !!opts.italic, color: { argb: argb(C.txt) } };
+      c.alignment = { horizontal: opts.align || 'left', vertical: 'middle' };
+      if (opts.numFmt) c.numFmt = opts.numFmt;
+      if (opts.note) c.note = opts.note;
+      c.border = box(lineBorder);
+      return c;
+    };
+    const fx = (formula, result) => ({ formula, result });
+    const VAR_NOTE = 'Variable-rate loan: annual debt service derives from the trailing-3-month (T-3) rolling loan schedule with per-month SOFR, so it is entered as a value rather than a live formula.';
+
+    rows.forEach((r, i) => {
+      const rr = INP_FIRST + i;
+      const isDscr = r.covenantType === 'dscr';
+      const loan = numOrNull(r.loanAmount);
+      const noi = numOrNull(r.noi);
+      const req = numOrNull(r.covenantReq);
+      const amortRaw = parseInt(r.amort, 10);
+      const amort = Number.isFinite(amortRaw) ? amortRaw : 0;
+      const spread = numOrNull(r.spread);
+      const spread10y = numOrNull(r.spread10y);
+      const sizingRate = numOrNull(r.sizingRate);
+      const variable = r.variableLoan === true;
+      const reqFmt = isDscr ? '0.00' : '0.00"%"';
+      const resFmt = isDscr ? '0.000' : '0.00"%"';
+
+      // Inputs (blue).
+      put(rr, 1, r.property);
+      put(rr, 2, r.lender);
+      put(rr, 3, r.covenantType, { align: 'center' });
+      put(rr, 4, loan, { align: 'right', numFmt: NUM });
+      put(rr, 5, noi, { align: 'right', numFmt: NUM });
+      put(rr, 6, req, { align: 'right', numFmt: reqFmt });
+      put(rr, 7, amort, { align: 'right', numFmt: '0' });
+      put(rr, 8, spread, { align: 'right', numFmt: PCTLIT });
+      put(rr, 9, spread10y, { align: 'right', numFmt: PCTLIT });
+      put(rr, 10, sizingRate, { align: 'right', numFmt: PCTLIT });
+      put(rr, 11, r.sofr, { align: 'right', numFmt: PCT });
+      put(rr, 12, r.ten_y, { align: 'right', numFmt: PCT });
+      put(rr, 13, variable ? 'Yes' : 'No', { align: 'center' });
+
+      // Calculated (navy) — live formulas.
+      put(rr, 14, fx(`=K${rr}+H${rr}/100`, r.sofr + spread / 100), { align: 'right', numFmt: PCT });
+      put(rr, 15, fx(`=IF(I${rr}="","",L${rr}+I${rr}/100)`, spread10y != null ? r.ten_y + spread10y / 100 : null), { align: 'right', numFmt: PCT });
+      put(rr, 16, fx(`=IF(J${rr}="","",J${rr}/100)`, sizingRate != null ? sizingRate / 100 : null), { align: 'right', numFmt: PCT });
+      put(rr, 17, fx(`=MAX(N${rr},O${rr},P${rr})`, r.rate), { align: 'right', numFmt: PCT });
+      if (variable) {
+        put(rr, 18, r.effectiveLoan, { align: 'right', numFmt: NUM, italic: true });
+        put(rr, 19, r.ads, { align: 'right', numFmt: NUM, italic: true, note: VAR_NOTE });
+      } else {
+        put(rr, 18, fx(`=D${rr}`, loan), { align: 'right', numFmt: NUM });
+        put(rr, 19, fx(`=IF(G${rr}=0,R${rr}*Q${rr},-PMT(Q${rr}/12,G${rr}*12,R${rr})*12)`, r.ads), { align: 'right', numFmt: NUM });
+      }
+      put(rr, 20, fx(`=IF(C${rr}="dscr",E${rr}/S${rr},E${rr}/R${rr}*100)`, r.currentVal), { align: 'right', numFmt: resFmt });
+      put(rr, 21, fx(`=IF(C${rr}="dscr",F${rr}*S${rr},F${rr}/100*R${rr})`, r.requiredNOI), { align: 'right', numFmt: NUM });
+      put(rr, 22, fx(`=E${rr}-U${rr}`, r.noiVariance), { align: 'right', numFmt: NUM });
+      put(rr, 23, fx(`=IF(T${rr}>=F${rr},"TRUE","FALSE")`, r.satisfied ? 'TRUE' : 'FALSE'), { align: 'center' });
+      if (variable) {
+        put(rr, 24, r.paydown > 0 ? r.paydown : 0, { align: 'right', numFmt: NUM, italic: true, note: VAR_NOTE });
+      } else {
+        put(rr, 24, fx(`=IF(T${rr}>=F${rr},0,IF(C${rr}="dscr",MAX(0,R${rr}-(E${rr}/F${rr})*(R${rr}/S${rr})),MAX(0,R${rr}-E${rr}/(F${rr}/100))))`, r.paydown > 0 ? r.paydown : 0), { align: 'right', numFmt: NUM });
+      }
+    });
+
+    ws.views = [{ showGridLines: false, state: 'frozen', xSplit: 3, ySplit: 4 }];
+  }
+
   async function downloadExcel() {
     setXlState('working');
     try {
@@ -5561,6 +5682,11 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       const lineBorder = { style: 'thin', color: { argb: argb(C.line) } };
       const navyBorder = { style: 'thin', color: { argb: argb(C.navy) } };
       const box = b => ({ top: b, left: b, bottom: b, right: b });
+      const numOrNull = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+
+      // Each Dashboard row maps to its row on the Inputs tab (same order as `rows`).
+      const inpRowOf = new Map();
+      rows.forEach((r, i) => inpRowOf.set(r, INP_FIRST + i));
 
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Covenant Dashboard', { views: [{ showGridLines: false }] });
@@ -5644,17 +5770,19 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
           });
           set(4, r.property, {});
           set(5, r.lender, {});
-          set(6, r.loanAmount, { align: 'right', numFmt: '$#,##0.00' });
+          const ir = inpRowOf.get(r);                  // matching Inputs-tab row
+          const resFmt = r.covenantType === 'dscr' ? '0.000' : '0.00"%"';
+          set(6, { formula: `'${INP}'!D${ir}`, result: numOrNull(r.loanAmount) }, { align: 'right', numFmt: '$#,##0.00' });
           set(7, reqText(r), { align: 'center' });
           set(8, prior ? fmtResult(prior.val, r.covenantType) : '—', { align: 'center' });
           set(9, arrow, { align: 'center', font: { name: 'Calibri', size: 9, bold: true, color: { argb: argb(arrowColor) } } });
-          set(10, fmtResult(cur, r.covenantType), { align: 'center' });
-          set(11, statusText, {
+          set(10, { formula: `'${INP}'!T${ir}`, result: cur }, { align: 'center', numFmt: resFmt });
+          set(11, waived ? 'WAIVED' : { formula: `'${INP}'!W${ir}`, result: statusText }, {
             align: 'center',
             fill: fill(ok ? C.okBg : C.failBg),
             font: { name: 'Calibri', size: 9, bold: true, italic: waived, color: { argb: argb(ok ? C.okTxt : C.failTxt) } },
           });
-          set(12, r.paydown > 0 ? r.paydown : 0, { align: 'right', numFmt: '$#,##0' });
+          set(12, { formula: `'${INP}'!X${ir}`, result: r.paydown > 0 ? r.paydown : 0 }, { align: 'right', numFmt: '$#,##0' });
           rIdx++;
         });
 
@@ -5672,12 +5800,33 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
         yc.alignment = { horizontal: 'center', vertical: 'middle', textRotation: 90 };
       });
 
+      // Keep the SATISFIED colors live: recolor green/red from the formula result.
+      const lastData = rIdx - 1;
+      if (lastData >= headRow + 1) {
+        const tl = `K${headRow + 1}`; // top-left of range; expression refs are relative
+        const dxf = (bg, txt, italic = false) => ({
+          fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: argb(bg) } },
+          font: { color: { argb: argb(txt) }, bold: true, italic },
+        });
+        ws.addConditionalFormatting({
+          ref: `K${headRow + 1}:K${lastData}`,
+          rules: [
+            { type: 'expression', formulae: [`ISNUMBER(SEARCH("FALSE",${tl}))`], style: dxf(C.failBg, C.failTxt), priority: 1 },
+            { type: 'expression', formulae: [`ISNUMBER(SEARCH("WAIVED",${tl}))`], style: dxf(C.okBg, C.okTxt, true), priority: 2 },
+            { type: 'expression', formulae: [`ISNUMBER(SEARCH("TRUE",${tl}))`], style: dxf(C.okBg, C.okTxt), priority: 3 },
+          ],
+        });
+      }
+
       // Footer note.
       const footRow = rIdx + 1;
       ws.mergeCells(footRow, 1, footRow, COLS);
       const foot = ws.getCell(footRow, 1);
-      foot.value = `Generated live from the Covenant Tracker · ${fmtMDY(asOf)}`;
+      foot.value = `Generated live from the Covenant Tracker · ${fmtMDY(asOf)} · see the "${INP}" tab for inputs & formulas`;
       foot.font = { name: 'Calibri', size: 8, color: { argb: 'FF999999' } };
+
+      // ── Tab 2: Inputs & Calc — raw inputs + the full calc chain as live formulas ──
+      buildInputsSheet({ wb, argb, fill, lineBorder, box, numOrNull });
 
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
