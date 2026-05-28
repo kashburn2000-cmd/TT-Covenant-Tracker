@@ -6190,6 +6190,77 @@ function LoansTab({ pinUnlocked, requirePin }) {
     } catch (err) { console.error(err); flash('PDF error: ' + err.message, true); }
   }
 
+  // ── Covenant-focused .xlsx export of the filtered list ───────────────────────
+  function exportXLSX() {
+    const XLSX = window.XLSX;
+    if (!XLSX) { flash('Excel engine still loading — try again in a moment.', true); return; }
+    const toSerial = (iso) => {
+      if (!iso || typeof iso !== 'string') return '';
+      const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return '';
+      const [, y, mo, d] = m.map(Number);
+      return Math.round((Date.UTC(y, mo - 1, d) - Date.UTC(1899, 11, 30)) / 86400000);
+    };
+    const num = (v) => (v == null || v === '' ? '' : Number(v));
+    const pct = (v) => (v == null || v === '' ? '' : Number(v) / 100); // stored as whole-number percents
+
+    const headers = [
+      'Property', 'Loan Type', 'Lead Lender', 'Loan Amount', 'Closing Date', 'Maturity Date',
+      'DSCR Covenant', 'DSCR Test Frequency', 'DSCR Formula',
+      'Debt Yield Covenant', 'Debt Yield Formula',
+      'TTH Min Net Worth', 'TTH Min Liquidity',
+      'Repayment Guaranty %', 'Completion Guaranty %', 'Guarantor',
+      'Significant Covenants', 'Financial Reporting — Borrower', 'Financial Reporting — Guarantor',
+    ];
+    const rows = sorted.map(l => [
+      l.property_name || l.borrower_entity || '',
+      LOAN_TYPE_LABEL[l.loan_type] || l.loan_type || '',
+      l.lead_lender || '',
+      num(l.loan_amount),
+      toSerial(l.closing_date),
+      toSerial(l.maturity_date),
+      num(l.dscr_covenant),
+      l.dscr_test_frequency || '',
+      l.dscr_formula || '',
+      pct(l.debt_yield_covenant),
+      l.debt_yield_formula || '',
+      num(l.min_net_worth),
+      num(l.min_liquidity),
+      pct(l.repayment_guaranty_pct),
+      pct(l.completion_guaranty_pct),
+      l.guarantor_entity || 'TTH',
+      l.significant_covenants || '',
+      l.financial_reporting_borrower || '',
+      l.financial_reporting_guarantor || '',
+    ]);
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+    const NUM = '#,##0';
+    const setZ = (col, rowIdx, z) => {
+      const ref = XLSX.utils.encode_cell({ c: col, r: rowIdx + 1 });
+      const cell = ws[ref];
+      if (cell && cell.v != null && cell.v !== '') cell.z = z;
+    };
+    rows.forEach((_, i) => {
+      setZ(3, i, NUM);                 // Loan Amount
+      setZ(4, i, 'm/d/yyyy');          // Closing Date
+      setZ(5, i, 'm/d/yyyy');          // Maturity Date
+      setZ(6, i, '0.00"x"');           // DSCR Covenant
+      setZ(9, i, '0.00%');             // Debt Yield Covenant
+      setZ(11, i, NUM);                // Min Net Worth
+      setZ(12, i, NUM);                // Min Liquidity
+      setZ(13, i, '0.00%');            // Repayment Guaranty
+      setZ(14, i, '0.00%');            // Completion Guaranty
+    });
+    ws['!cols'] = [22, 13, 18, 15, 13, 13, 13, 16, 28, 14, 28, 16, 16, 16, 16, 12, 40, 30, 30].map(wch => ({ wch }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Loan Covenants');
+    const now = new Date();
+    XLSX.writeFile(wb, `TT_Loan_Covenants_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}.xlsx`);
+    flash('✓ Excel exported');
+  }
+
   // ── Styles ───────────────────────────────────────────────────────────────────
   const inputSt = (extra = {}) => ({ background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#c8cdd6', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', ...extra });
   const labelSt = { fontSize: '0.6rem', color: '#5a6070', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
@@ -6487,6 +6558,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
         <button onClick={clearFilters} style={{ padding: '6px 12px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>Clear</button>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans" style={{ padding: '6px 14px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export Excel</button>
           <button onClick={exportPDF} style={{ padding: '6px 14px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export PDF</button>
           <button onClick={() => requirePin(() => setShowImport(true))} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? 'rgba(200,121,65,0.18)' : '#2a2d35', color: pinUnlocked ? TT_ORANGE : '#4a4f5a', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600, outline: pinUnlocked ? '1px solid #c8794155' : 'none' }}>{pinUnlocked ? '⇪ Import Abstract' : '🔒 Import'}</button>
           <button onClick={() => requirePin(startNew)} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700 }}>{pinUnlocked ? '+ Add Loan' : '🔒 Add Loan'}</button>
