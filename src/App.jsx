@@ -4142,8 +4142,8 @@ function PipelineTab() {
   // ── Main render ────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: '1.5rem 0', position: 'relative' }}>
-      <EditModal />
-      <ConfirmDeleteModal />
+      {EditModal()}
+      {ConfirmDeleteModal()}
 
       {/* ── Empty state ── */}
       {deals.length === 0 && (
@@ -6695,9 +6695,9 @@ function LoansTab({ pinUnlocked, requirePin }) {
 
   return (
     <div style={{ padding: '1.5rem 0', position: 'relative' }}>
-      <EditModal />
-      <ImportModal />
-      <ConfirmDeleteModal />
+      {EditModal()}
+      {ImportModal()}
+      {ConfirmDeleteModal()}
       {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msg.isErr ? '#4a1a1a' : '#1a3a2a', border: `1px solid ${msg.isErr ? '#c47474' : '#6a9e7f'}`, color: msg.isErr ? '#c47474' : '#6a9e7f', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem' }}>{msg.text}</div>}
 
       {/* ── Summary cards ── */}
