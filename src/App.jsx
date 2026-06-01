@@ -6810,17 +6810,26 @@ function LoansTab({ pinUnlocked, requirePin }) {
           </div>
         </div>
 
-        {/* detail panel for the clicked loan */}
+        {/* detail modal for the clicked loan */}
         {selectedLoan && (
-          <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, marginTop: '0.75rem', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 1rem', borderBottom: '1px solid #2e3340' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c8cdd6' }}>
-                {selectedLoan.property_name || selectedLoan.borrower_entity}
-                <span style={{ marginLeft: 8 }}>{typeBadge(selectedLoan)}</span>
-              </span>
-              <button onClick={() => setExpandedId(null)} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
+          <div onClick={() => setExpandedId(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2rem 1rem', overflowY: 'auto' }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, width: '100%', maxWidth: 980, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.9rem 1.25rem', borderBottom: '1px solid #2e3340' }}>
+                <span style={{ fontSize: '1rem', fontWeight: 700, color: '#c8cdd6' }}>
+                  {selectedLoan.property_name || selectedLoan.borrower_entity}
+                  <span style={{ marginLeft: 8 }}>{typeBadge(selectedLoan)}</span>
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  {pinUnlocked && (
+                    <button onClick={() => startEdit(selectedLoan)} style={{ background: 'none', border: '1px solid #2e3340', borderRadius: 3, color: '#9aa0aa', cursor: 'pointer', padding: '4px 10px', fontSize: '0.7rem', fontFamily: 'inherit' }}>✏ Edit</button>
+                  )}
+                  <button onClick={() => setExpandedId(null)} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+                </div>
+              </div>
+              <Detail l={selectedLoan} />
             </div>
-            <Detail l={selectedLoan} />
           </div>
         )}
       </div>
