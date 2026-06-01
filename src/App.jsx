@@ -260,7 +260,50 @@ const TEN_YEAR_CURVE = [
 // Mutable active 10-year curve — overridable from Supabase
 let ACTIVE_10Y_CURVE = TEN_YEAR_CURVE;
 
+// ─── Cached forward-curve interpolation ──────────────────────────────────────
+// getSofr/get10Y are called many times per render (once per covenant row, plus
+// once per month inside every variable-loan schedule). Re-parsing the curve's
+// ISO date strings into epoch millis on each call is wasteful, so the parsed
+// points are memoized and only rebuilt when the underlying (mutable) curve
+// reference changes — e.g. after a Supabase upload swaps in a new ACTIVE curve.
+function interpCurve(pts, t) {
+  if (t <= pts[0].t) return pts[0].v;
+  if (t >= pts[pts.length - 1].t) return pts[pts.length - 1].v;
+  for (let i = 0; i < pts.length - 1; i++) {
+    if (t >= pts[i].t && t <= pts[i + 1].t) {
+      const frac = (t - pts[i].t) / (pts[i + 1].t - pts[i].t);
+      return pts[i].v + frac * (pts[i + 1].v - pts[i].v);
+    }
+  }
+  return pts[0].v;
+}
 
+let _sofrSrc = null, _sofrPts = null;
+function getSofr(date) {
+  if (_sofrSrc !== ACTIVE_SOFR_CURVE) {
+    _sofrSrc = ACTIVE_SOFR_CURVE;
+    _sofrPts = ACTIVE_SOFR_CURVE.map(p => ({ t: new Date(p.date).getTime(), v: p.sofr }));
+  }
+  return interpCurve(_sofrPts, new Date(date).getTime());
+}
+
+let _tenYSrc = null, _tenYPts = null;
+function get10Y(date) {
+  if (_tenYSrc !== ACTIVE_10Y_CURVE) {
+    _tenYSrc = ACTIVE_10Y_CURVE;
+    _tenYPts = ACTIVE_10Y_CURVE.map(p => ({ t: new Date(p.date).getTime(), v: p.rate }));
+  }
+  return interpCurve(_tenYPts, new Date(date).getTime());
+}
+
+// ─── Supabase config (shared by every tab) ───────────────────────────────────
+const SB_URL = 'https://ngflppgqohmkkfiljqma.supabase.co';
+const SB_KEY = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
+const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+
+// 12 blank rows for a new variable-loan balance schedule. Never mutated in place
+// (edits build a fresh array), so it is safe to share this template by reference.
+const EMPTY_LOAN_SCHEDULE = Array.from({ length: 12 }, () => ({ month: '', balance: '' }));
 
 const DY_THRESHOLDS = [0.08, 0.085, 0.09, 0.095, 0.10];
 
@@ -413,17 +456,17 @@ function PinModal({ onSuccess, onClose }) {
 }
 
 
+const DY_ROWS = [];
+for (let dy = 14; dy >= 6; dy -= 0.5) DY_ROWS.push(parseFloat(dy.toFixed(1)));
+
+const AMORT_COLS = [
+  { label: "I/O", years: 0 },
+  { label: "30 Year", years: 30 },
+  { label: "35 Year", years: 35 },
+];
+
 function MatrixTab({ thresholds }) {
   const [rate, setRate] = useState("6.75");
-
-  const DY_ROWS = [];
-  for (let dy = 14; dy >= 6; dy -= 0.5) DY_ROWS.push(parseFloat(dy.toFixed(1)));
-
-  const AMORT_COLS = [
-    { label: "I/O", years: 0 },
-    { label: "30 Year", years: 30 },
-    { label: "35 Year", years: 35 },
-  ];
 
   const parsed = parseFloat(rate);
   const validRate = !isNaN(parsed) && parsed > 0 && parsed < 30;
@@ -554,19 +597,7 @@ function CalculatorTab({ thresholds }) {
   const [targetDY,   setTargetDY]   = useState("");
   const [targetDSCR, setTargetDSCR] = useState("");
 
-  const sofrRate = useMemo(() => {
-    const d = new Date(pickedDate).getTime();
-    const points = ACTIVE_SOFR_CURVE.map(p => ({ t: new Date(p.date).getTime(), sofr: p.sofr }));
-    if (d <= points[0].t) return points[0].sofr;
-    if (d >= points[points.length - 1].t) return points[points.length - 1].sofr;
-    for (let i = 0; i < points.length - 1; i++) {
-      if (d >= points[i].t && d <= points[i + 1].t) {
-        const frac = (d - points[i].t) / (points[i + 1].t - points[i].t);
-        return points[i].sofr + frac * (points[i + 1].sofr - points[i].sofr);
-      }
-    }
-    return points[0].sofr;
-  }, [pickedDate]);
+  const sofrRate = useMemo(() => getSofr(pickedDate), [pickedDate]);
 
   const allInRate = sofrRate + spread / 100;
   const minDate   = ACTIVE_SOFR_CURVE[0].date;
@@ -1085,36 +1116,6 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const SOFR_MIN = ACTIVE_SOFR_CURVE[0].date;
   const SOFR_MAX = ACTIVE_SOFR_CURVE[ACTIVE_SOFR_CURVE.length - 1].date;
 
-  function getSofr(date) {
-    const d = new Date(date).getTime();
-    const pts = ACTIVE_SOFR_CURVE.map(p => ({ t: new Date(p.date).getTime(), sofr: p.sofr }));
-    if (d <= pts[0].t) return pts[0].sofr;
-    if (d >= pts[pts.length - 1].t) return pts[pts.length - 1].sofr;
-    for (let i = 0; i < pts.length - 1; i++) {
-      if (d >= pts[i].t && d <= pts[i + 1].t) {
-        const frac = (d - pts[i].t) / (pts[i + 1].t - pts[i].t);
-        return pts[i].sofr + frac * (pts[i + 1].sofr - pts[i].sofr);
-      }
-    }
-    return pts[0].sofr;
-  }
-
-  function get10Y(date) {
-    const d = new Date(date).getTime();
-    const pts = ACTIVE_10Y_CURVE.map(p => ({ t: new Date(p.date).getTime(), rate: p.rate }));
-    if (d <= pts[0].t) return pts[0].rate;
-    if (d >= pts[pts.length - 1].t) return pts[pts.length - 1].rate;
-    for (let i = 0; i < pts.length - 1; i++) {
-      if (d >= pts[i].t && d <= pts[i + 1].t) {
-        const frac = (d - pts[i].t) / (pts[i + 1].t - pts[i].t);
-        return pts[i].rate + frac * (pts[i + 1].rate - pts[i].rate);
-      }
-    }
-    return pts[0].rate;
-  }
-
-  const EMPTY_LOAN_SCHEDULE = Array.from({ length: 12 }, () => ({ month: '', balance: '' }));
-
   const EMPTY_FORM = {
     property: '', lender: '', loanAmount: '', noi: '',
     spread: '2.50', spread10y: '', sizingRate: '',
@@ -1125,11 +1126,6 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     variableLoan: false, loanCommitment: '', loanSchedule: EMPTY_LOAN_SCHEDULE,
     actualEarlyTermMonths: [], oneTimeExpenseMonths: [], stdEarlyTerm: '', replacementReserves: '',
   };
-
-  // ── Supabase config ──────────────────────────────────────────────────────────
-  const SB_URL = 'https://ngflppgqohmkkfiljqma.supabase.co';
-  const SB_KEY = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
-  const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 
   // Map camelCase ↔ snake_case for Supabase
   function toDb(p) {
@@ -1316,7 +1312,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const col = key => visibleCols[key];
 
   // ── Load properties and settings from Supabase on mount ─────────────────
-  const [_init] = useState(() => { setTimeout(() => { loadProperties(); loadSettings(); }, 0); return true; });
+  useEffect(() => { loadProperties(); loadSettings(); }, []);
 
   async function loadProperties() {
     setDbLoading(true);
@@ -1385,15 +1381,17 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     // test date, compute monthly interest for each (balance × rate / 12 using
     // that month's SOFR), sum and annualize × 4.
     let ads, variableLoanDetail = null;
+    // Parse the variable-loan balance schedule once (entries before the test
+    // date, newest first). Reused for both the T-3 interest calc and the
+    // effective loan balance below.
+    const parsedSchedule = (p.variableLoan && p.loanSchedule)
+      ? p.loanSchedule
+          .filter(e => e.month && e.balance !== '' && e.balance != null)
+          .map(e => ({ date: new Date(e.month + '-01T00:00:00'), balance: parseFloat(e.balance) }))
+          .filter(e => e.date < new Date(p.covenantDate + 'T00:00:00'))
+          .sort((a, b) => b.date - a.date)
+      : [];
     if (p.variableLoan && p.loanSchedule && p.loanSchedule.length > 0) {
-      const testDate = new Date(p.covenantDate + 'T00:00:00');
-      // Parse schedule entries into { date, balance } sorted descending
-      const parsedSchedule = p.loanSchedule
-        .filter(e => e.month && e.balance !== '' && e.balance != null)
-        .map(e => ({ date: new Date(e.month + '-01T00:00:00'), balance: parseFloat(e.balance) }))
-        .filter(e => e.date < testDate)
-        .sort((a, b) => b.date - a.date);
-
       const t3 = parsedSchedule.slice(0, 3);
       if (t3.length > 0) {
         const monthlyInterests = t3.map(entry => {
@@ -1426,15 +1424,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     }
 
     // For paydown calcs and display, use the effective loan balance
-    const effectiveLoan = (p.variableLoan && p.loanSchedule) ? (() => {
-      const testDate = new Date(p.covenantDate + 'T00:00:00');
-      const sorted = (p.loanSchedule || [])
-        .filter(e => e.month && e.balance !== '' && e.balance != null)
-        .map(e => ({ date: new Date(e.month + '-01T00:00:00'), balance: parseFloat(e.balance) }))
-        .filter(e => e.date < testDate)
-        .sort((a, b) => b.date - a.date);
-      return sorted.length > 0 ? sorted[0].balance : loan;
-    })() : loan;
+    const effectiveLoan = (p.variableLoan && p.loanSchedule && parsedSchedule.length > 0)
+      ? parsedSchedule[0].balance
+      : loan;
 
     const currentVal = p.covenantType === 'dscr' ? noi / ads : (noi / effectiveLoan) * 100;
     const satisfied = currentVal >= req;
@@ -3683,9 +3675,6 @@ function slugify(name) {
 }
 
 function PipelineTab() {
-  const SB_URL     = 'https://ngflppgqohmkkfiljqma.supabase.co';
-  const SB_KEY     = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
-  const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 
   const [deals,       setDeals]       = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -4368,9 +4357,6 @@ const PIPELINE_STATIC_DATA = [
 // Tracks the Simmons Bank $45M guidance line — individual draws, payoff status,
 // utilization vs. internal threshold, and a 12-month exposure planning timeline.
 function LandFacilityTab({ pinUnlocked, requirePin }) {
-  const SB_URL     = 'https://ngflppgqohmkkfiljqma.supabase.co';
-  const SB_KEY     = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
-  const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 
   const FACILITY_MAX = 45000000; // $45M hard cap from agreement
 
@@ -4581,8 +4567,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           fillColor: [19, 21, 26], textColor: C_LIGHT, lineColor: [30, 35, 48], lineWidth: 0.5,
         },
         headStyles: {
-          fillColor: C_DARK, textColor: C_ORANGE, fontStyle: 'bold', fontSize: 7,
-          textColor: [74, 79, 90],
+          fillColor: C_DARK, textColor: [74, 79, 90], fontStyle: 'bold', fontSize: 7,
         },
         columnStyles: {
           0: { fontStyle: 'bold', cellWidth: 140 },
@@ -5076,9 +5061,6 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
 
 // ── Leasing Tab ───────────────────────────────────────────────────────────────
 function LeasingTab() {
-  const SB_URL     = 'https://ngflppgqohmkkfiljqma.supabase.co';
-  const SB_KEY     = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
-  const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 
   const [leasingData, setLeasingData]  = useState(null);   // parsed rows
   const [asOfDate,    setAsOfDate]     = useState(null);
@@ -6058,9 +6040,6 @@ function parseAbstractXml(xml) {
 }
 
 function LoansTab({ pinUnlocked, requirePin }) {
-  const SB_URL     = 'https://ngflppgqohmkkfiljqma.supabase.co';
-  const SB_KEY     = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
-  const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
   const BUCKET     = 'loan-docs';
 
   const [loans, setLoans]         = useState([]);
@@ -6994,12 +6973,17 @@ export default function App() {
   const [visibleTabs, setVisibleTabs] = useState({ calculator:false, matrix:false, covenant:true, leasing:false, pipeline:false, land:false, loans:true });
   const [showTabConfig, setShowTabConfig] = useState(false);
 
-  const SB_URL = 'https://ngflppgqohmkkfiljqma.supabase.co';
-  const SB_KEY = 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5';
-  const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
-
   // Load SOFR and 10-year curves from Supabase on mount (overrides hardcoded if present)
-  useState(() => { setTimeout(loadSofrCurve, 0); });
+  useEffect(() => { loadSofrCurve(); }, []);
+
+  // Load SheetJS (for xlsx parsing) once on mount, if not already present.
+  useEffect(() => {
+    const SRC = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    if (window.XLSX || document.querySelector(`script[src="${SRC}"]`)) return;
+    const s = document.createElement('script');
+    s.src = SRC;
+    document.head.appendChild(s);
+  }, []);
 
   async function loadSofrCurve() {
     try {
@@ -7222,14 +7206,6 @@ export default function App() {
       position: "relative",
     }}>
       <style>{SHARED_STYLES}</style>
-
-      {/* Load SheetJS for xlsx parsing */}
-      {!window.XLSX && (() => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-        document.head.appendChild(s);
-        return null;
-      })()}
 
       {/* ── PIN Modal ── */}
       {showPinModal && (
