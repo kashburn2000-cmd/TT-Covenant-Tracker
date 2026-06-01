@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 
 // Prior-Test comparison only counts monthly (big) snapshots, never interim edits.
 // Legacy snapshots (is_monthly null) predate this flag, so they still count.
@@ -350,6 +350,24 @@ function PinModal({ onSuccess, onClose }) {
       }
     }
   }
+
+  // Allow typing the PIN with the keyboard
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        handleDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        setDigits(p => p.slice(0, -1));
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [digits]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
