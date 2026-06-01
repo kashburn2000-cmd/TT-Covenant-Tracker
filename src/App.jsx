@@ -6068,6 +6068,11 @@ function LoansTab({ pinUnlocked, requirePin }) {
   const [sortField, setSortField] = useState('maturity_date');
   const [sortDir, setSortDir]     = useState('asc');
 
+  // view: table vs calendar, and the month the calendar is showing
+  const [viewMode, setViewMode]   = useState('table');   // 'table' | 'calendar'
+  const [calRef, setCalRef]       = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); });
+  const [calTypes, setCalTypes]   = useState({ closing: true, maturity: true, extension: true, covenant: true });
+
   function flash(text, isErr = false) { setMsg({ text, isErr }); setTimeout(() => setMsg(''), 4000); }
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -6288,6 +6293,49 @@ function LoansTab({ pinUnlocked, requirePin }) {
     else { setSortField(f); setSortDir('asc'); }
   }
   function clearFilters() { setFType('all'); setFLender(''); setFYear('all'); setFGuaranty(''); setFNW(''); setFLiq(''); }
+
+  // ── Calendar event model ─────────────────────────────────────────────────────
+  // Each calendar event is { iso:'YYYY-MM-DD', type, loan, name }. Maturities, closings
+  // and extension maturities come straight off the loan; covenant test dates are derived
+  // from the DSCR test frequency, stepping forward from the closing date to maturity.
+  const CAL_EVENT_META = {
+    closing:   { label: 'Closing',        fg: '#4fa3c8', bg: 'rgba(79,163,200,0.16)' },
+    maturity:  { label: 'Maturity',       fg: '#c87941', bg: 'rgba(200,121,65,0.20)' },
+    extension: { label: 'Ext. Maturity',  fg: '#9b8fc0', bg: 'rgba(155,143,192,0.18)' },
+    covenant:  { label: 'Covenant Test',  fg: '#6a9e7f', bg: 'rgba(106,158,127,0.16)' },
+  };
+  const isoOf  = d => (typeof d === 'string' ? d.slice(0, 10) : '');
+  const parseISO = d => { const m = (d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12) : null; };
+  const dateToISO = dt => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  function freqStepMonths(freq) {
+    const f = (freq || '').toLowerCase();
+    if (!f) return null;
+    if (f.includes('quarter')) return 3;
+    if (f.includes('semi') || f.includes('biann') || f.includes('bi-ann') || f.includes('bi ann')) return 6;
+    if (f.includes('month')) return 1;
+    if (f.includes('annual') || f.includes('year')) return 12;
+    return null;
+  }
+
+  const calEvents = [];
+  filtered.forEach(l => {
+    const name = l.property_name || l.borrower_entity || 'Loan';
+    if (l.closing_date)            calEvents.push({ iso: isoOf(l.closing_date),            type: 'closing',   loan: l, name });
+    if (l.maturity_date)           calEvents.push({ iso: isoOf(l.maturity_date),           type: 'maturity',  loan: l, name });
+    if (l.extension_maturity_date) calEvents.push({ iso: isoOf(l.extension_maturity_date), type: 'extension', loan: l, name });
+    const step  = freqStepMonths(l.dscr_test_frequency);
+    const start = parseISO(l.closing_date);
+    const end   = parseISO(l.extension_maturity_date) || parseISO(l.maturity_date);
+    const hasCovenant = l.dscr_covenant != null || l.debt_yield_covenant != null;
+    if (step && start && end && hasCovenant) {
+      for (let n = 1; n < 400; n++) {
+        const t = new Date(start.getFullYear(), start.getMonth() + step * n, start.getDate(), 12);
+        if (t > end) break;
+        calEvents.push({ iso: dateToISO(t), type: 'covenant', loan: l, name, freq: l.dscr_test_frequency });
+      }
+    }
+  });
+  const calEventsShown = calEvents.filter(e => calTypes[e.type]);
 
   const thisYear = new Date().getFullYear();
   const totalAmount = filtered.reduce((s, l) => s + (Number(l.loan_amount) || 0), 0);
@@ -6675,6 +6723,110 @@ function LoansTab({ pinUnlocked, requirePin }) {
     );
   };
 
+  // ── Calendar (month grid) ─────────────────────────────────────────────────────
+  const CalendarView = () => {
+    const y = calRef.getFullYear(), m = calRef.getMonth();
+    const monthLabel = calRef.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const firstDow   = new Date(y, m, 1).getDay();            // 0=Sun
+    const daysInMo   = new Date(y, m + 1, 0).getDate();
+    const todayISO   = dateToISO(new Date());
+
+    const byDay = {};
+    calEventsShown.forEach(e => { if (e.iso.slice(0, 7) === `${y}-${String(m + 1).padStart(2, '0')}`) (byDay[e.iso] ||= []).push(e); });
+    const monthCount = Object.values(byDay).reduce((s, a) => s + a.length, 0);
+
+    // ordered list of cells: leading blanks + day numbers, padded to full weeks
+    const cells = [];
+    for (let i = 0; i < firstDow; i++) cells.push(null);
+    for (let d = 1; d <= daysInMo; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+
+    const navMonth = delta => setCalRef(new Date(y, m + delta, 1));
+    const goToday  = () => { const n = new Date(); setCalRef(new Date(n.getFullYear(), n.getMonth(), 1)); };
+
+    const navBtn = { padding: '5px 12px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' };
+    const dowSt  = { padding: '0.4rem 0.5rem', textAlign: 'center', color: '#6a7080', fontWeight: 600, letterSpacing: '0.06em', fontSize: '0.58rem', textTransform: 'uppercase' };
+
+    const selectedLoan = expandedId != null ? loans.find(l => l.id === expandedId) : null;
+
+    return (
+      <div>
+        {/* calendar header: month nav + legend */}
+        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, padding: '0.7rem 1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button onClick={() => navMonth(-1)} style={navBtn} title="Previous month">‹</button>
+            <button onClick={goToday} style={navBtn}>Today</button>
+            <button onClick={() => navMonth(1)} style={navBtn} title="Next month">›</button>
+          </div>
+          <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#c8cdd6', minWidth: 170 }}>{monthLabel}</div>
+          <div style={{ fontSize: '0.68rem', color: '#5a6070' }}>{monthCount} event{monthCount === 1 ? '' : 's'} this month</div>
+          <div style={{ flex: 1 }} />
+          {/* legend doubles as type toggles */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+            {Object.entries(CAL_EVENT_META).map(([k, meta]) => {
+              const on = calTypes[k];
+              return (
+                <button key={k} onClick={() => setCalTypes(t => ({ ...t, [k]: !t[k] }))}
+                  title={on ? 'Click to hide' : 'Click to show'}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', fontWeight: 600,
+                    border: `1px solid ${on ? meta.fg + '66' : '#2e3340'}`, background: on ? meta.bg : 'transparent', color: on ? meta.fg : '#4a4f5a' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: on ? meta.fg : '#3a3f4a' }} />
+                  {meta.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* month grid */}
+        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #2e3340' }}>
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} style={dowSt}>{d}</div>)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+            {cells.map((d, i) => {
+              if (d == null) return <div key={i} style={{ minHeight: 92, borderRight: (i % 7 !== 6) ? '1px solid #16191f' : 'none', borderBottom: '1px solid #16191f', background: '#191c22' }} />;
+              const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+              const evts = byDay[iso] || [];
+              const isToday = iso === todayISO;
+              return (
+                <div key={i} style={{ minHeight: 92, padding: '4px 4px 6px', borderRight: (i % 7 !== 6) ? '1px solid #16191f' : 'none', borderBottom: '1px solid #16191f', background: isToday ? 'rgba(200,121,65,0.06)' : 'transparent', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div style={{ fontSize: '0.66rem', fontWeight: isToday ? 700 : 500, color: isToday ? TT_ORANGE : '#6a7080', alignSelf: 'flex-end', padding: '1px 4px', borderRadius: 3, background: isToday ? 'rgba(200,121,65,0.16)' : 'transparent' }}>{d}</div>
+                  {evts.map((e, j) => {
+                    const meta = CAL_EVENT_META[e.type];
+                    return (
+                      <button key={j} onClick={() => setExpandedId(prev => prev === e.loan.id ? null : e.loan.id)}
+                        title={`${meta.label}: ${e.name}${e.freq ? ` (${e.freq})` : ''}`}
+                        style={{ textAlign: 'left', border: 'none', cursor: 'pointer', borderLeft: `3px solid ${meta.fg}`, background: meta.bg, color: meta.fg,
+                          borderRadius: 2, padding: '2px 5px', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, lineHeight: 1.25,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+                        {e.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* detail panel for the clicked loan */}
+        {selectedLoan && (
+          <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, marginTop: '0.75rem', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 1rem', borderBottom: '1px solid #2e3340' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c8cdd6' }}>
+                {selectedLoan.property_name || selectedLoan.borrower_entity}
+                <span style={{ marginLeft: 8 }}>{typeBadge(selectedLoan)}</span>
+              </span>
+              <button onClick={() => setExpandedId(null)} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
+            </div>
+            <Detail l={selectedLoan} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={{ padding: '1.5rem 0', position: 'relative' }}>
       <EditModal />
@@ -6700,6 +6852,14 @@ function LoansTab({ pinUnlocked, requirePin }) {
 
       {/* ── Filter bar ── */}
       <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, padding: '0.85rem 1rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem' }}>
+        <div>
+          <label style={labelSt}>View</label>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {[['table', '☰ Table'], ['calendar', '📅 Calendar']].map(([v, lbl]) => (
+              <button key={v} onClick={() => setViewMode(v)} style={{ padding: '5px 11px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: viewMode === v ? TT_ORANGE : '#2e3340', color: viewMode === v ? '#fff' : '#9aa0aa' }}>{lbl}</button>
+            ))}
+          </div>
+        </div>
         <div>
           <label style={labelSt}>Type</label>
           <div style={{ display: 'flex', gap: 4 }}>
@@ -6729,13 +6889,15 @@ function LoansTab({ pinUnlocked, requirePin }) {
         </div>
       </div>
 
-      {/* ── Table ── */}
+      {/* ── Body: table or calendar ── */}
       {loans.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
           <div style={{ fontSize: '2rem', opacity: 0.3, marginBottom: '1rem' }}>📄</div>
           <div style={{ fontSize: '0.9rem', color: '#9aa0aa', fontWeight: 600, marginBottom: '0.5rem' }}>No loans yet</div>
           <div style={{ fontSize: '0.75rem', color: '#4a4f5a' }}>Use “Import Abstract” to add your first loan, or run the backfill script.</div>
         </div>
+      ) : viewMode === 'calendar' ? (
+        <CalendarView />
       ) : (
         <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
