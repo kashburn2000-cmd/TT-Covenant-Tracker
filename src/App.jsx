@@ -321,8 +321,8 @@ function calcADS(loan, rate, amortYears) {
 }
 
 function dscrColor(v, t) {
-  if (v >= t.low) return "#6a9e7f";
-  return "#c47474";
+  if (v >= t.low) return "var(--pass)";
+  return "var(--fail)";
 }
 function dscrClass(v, t) {
   if (v >= t.low) return "green";
@@ -330,9 +330,9 @@ function dscrClass(v, t) {
 }
 const DEFAULT_THRESHOLDS = { high: 1.25, mid: 1.10, low: 1.00 };
 
-// TT Brand colors: navy #16191f, orange #c87941, white
-const TT_NAVY   = "#16191f";
-const TT_ORANGE = "#c87941";
+// TT Brand colors: navy var(--bg), orange var(--accent), white
+const TT_NAVY   = "var(--bg)";
+const TT_ORANGE = "var(--accent)";
 
 // ── Edit PIN — change this to your desired PIN ────────────────────────────────
 const EDIT_PIN = "1234";
@@ -340,27 +340,27 @@ const EDIT_PIN = "1234";
 const SHARED_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap');
   * { box-sizing: border-box; }
-  input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: #2a2d35; outline: none; }
+  input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: var(--disabled); outline: none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: ${TT_ORANGE}; cursor: pointer; }
-  .card { background: #1e2128; border: 1px solid #2e3340; border-radius: 4px; padding: 1.5rem; }
-  .label { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: #9aa0aa; margin-bottom: 0.5rem; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem; box-shadow: var(--shadow); }
+  .label { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
   .metric { font-size: 1.9rem; font-weight: 700; text-shadow: 0 0 20px rgba(255,255,255,0.1); }
   .pill { display: inline-block; padding: 2px 10px; border-radius: 2px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; }
-  .green  { background: rgba(106,158,127,0.15);  color: #6a9e7f; }
-  .yellow { background: rgba(138,122,66,0.15);  color: #8a7a42; }
-  .red    { background: rgba(160,82,82,0.15); color: #c47474; }
-  .blue   { background: rgba(200,121,65,0.15);   color: ${TT_ORANGE}; }
+  .green  { background: rgba(106,158,127,0.15);  color: var(--pass); }
+  .yellow { background: rgba(138,122,66,0.15);  color: var(--warn); }
+  .red    { background: rgba(160,82,82,0.15); color: var(--fail); }
+  .blue   { background: rgba(99, 102, 241,0.15);   color: ${TT_ORANGE}; }
   input[type=number], select, input[type=date] {
-    background: #13151a; border: 1px solid #2e3340; border-radius: 3px;
-    color: #e8eaed; padding: 0.5rem 0.75rem; font-family: inherit;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 3px;
+    color: var(--text); padding: 0.5rem 0.75rem; font-family: inherit;
     font-size: 0.85rem; width: 100%; outline: none;
   }
   input[type=number]:focus, select:focus, input[type=date]:focus { border-color: ${TT_ORANGE}; }
-  .sub  { font-size: 0.75rem; color: #9aa0aa; margin-top: 0.25rem; line-height: 1.5; }
-  .note { font-size: 0.7rem;  color: #4a4f5a;  margin-top: 0.4rem;  line-height: 1.6; }
-  th { padding: 0.5rem 0.85rem; text-align: left; color: #9aa0aa; font-weight: 400;
+  .sub  { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.5; }
+  .note { font-size: 0.7rem;  color: var(--faint);  margin-top: 0.4rem;  line-height: 1.6; }
+  th { padding: 0.5rem 0.85rem; text-align: left; color: var(--muted); font-weight: 400;
        letter-spacing: 0.08em; font-size: 0.66rem; text-transform: uppercase; }
-  td { padding: 0.65rem 0.85rem; font-size: 0.82rem; border-bottom: 1px solid #16191f; color: #e8eaed; }
+  td { padding: 0.65rem 0.85rem; font-size: 0.82rem; border-bottom: 1px solid var(--bg); color: var(--text); }
   tr:last-child td { border-bottom: none; }
   .section-title { font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase;
                    color: ${TT_ORANGE}; margin-bottom: 1rem; }
@@ -368,12 +368,12 @@ const SHARED_STYLES = `
              font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
              border-bottom: 2px solid transparent; background: transparent; transition: all 0.15s; }
   .tab-active   { color: ${TT_ORANGE}; border-bottom-color: ${TT_ORANGE}; }
-  .tab-inactive { color: #4a4f5a; }
-  .tab-inactive:hover { color: #9aa0aa; }
-  .mx-high { background: rgba(106,158,127,0.18);  color: #6a9e7f; font-weight: 700; }
-  .mx-mid  { background: rgba(138,122,66,0.13);  color: #8a7a42; font-weight: 600; }
-  .mx-low  { background: rgba(160,82,82,0.13); color: #c47474; font-weight: 600; }
-  .mx-vlow { background: rgba(160,82,82,0.28); color: #c47474; font-weight: 700; }
+  .tab-inactive { color: var(--faint); }
+  .tab-inactive:hover { color: var(--muted); }
+  .mx-high { background: rgba(106,158,127,0.18);  color: var(--pass); font-weight: 700; }
+  .mx-mid  { background: rgba(138,122,66,0.13);  color: var(--warn); font-weight: 600; }
+  .mx-low  { background: rgba(160,82,82,0.13); color: var(--fail); font-weight: 600; }
+  .mx-vlow { background: rgba(160,82,82,0.28); color: var(--fail); font-weight: 700; }
 `;
 
 // ── PIN Modal ─────────────────────────────────────────────────────────────────
@@ -415,7 +415,7 @@ function PinModal({ onSuccess, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderTop: `3px solid ${TT_ORANGE}`, borderRadius: 6, padding: '2rem', width: 280, textAlign: 'center' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderTop: `3px solid ${TT_ORANGE}`, borderRadius: 6, padding: '2rem', width: 280, textAlign: 'center' }}>
         <div style={{ fontSize: '0.65rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: TT_ORANGE, marginBottom: '1.25rem', fontWeight: 600 }}>
           Enter PIN to Edit
         </div>
@@ -425,7 +425,7 @@ function PinModal({ onSuccess, onClose }) {
             <div key={i} style={{
               width: 14, height: 14, borderRadius: '50%',
               background: i < digits.length ? TT_ORANGE : 'transparent',
-              border: `2px solid ${i < digits.length ? TT_ORANGE : '#4a4f5a'}`,
+              border: `2px solid ${i < digits.length ? TT_ORANGE : 'var(--faint)'}`,
               transition: 'all 0.1s',
               transform: shake ? 'translateX(4px)' : 'none',
             }} />
@@ -436,9 +436,9 @@ function PinModal({ onSuccess, onClose }) {
           {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d, i) => (
             <button key={i} onClick={() => d === '⌫' ? setDigits(p => p.slice(0,-1)) : d && handleDigit(d)}
               style={{
-                padding: '0.75rem', borderRadius: 4, border: '1px solid #2e3340',
-                background: d ? '#13151a' : 'transparent',
-                color: d === '⌫' ? '#9aa0aa' : '#e8eaed',
+                padding: '0.75rem', borderRadius: 4, border: '1px solid var(--border)',
+                background: d ? 'var(--panel2)' : 'transparent',
+                color: d === '⌫' ? 'var(--muted)' : 'var(--text)',
                 fontSize: d === '⌫' ? '1rem' : '1.1rem', fontWeight: 600,
                 cursor: d ? 'pointer' : 'default', fontFamily: 'inherit',
                 opacity: d ? 1 : 0,
@@ -447,7 +447,7 @@ function PinModal({ onSuccess, onClose }) {
             </button>
           ))}
         </div>
-        <button onClick={onClose} style={{ fontSize: '0.7rem', color: '#4a4f5a', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: '0.25rem' }}>
+        <button onClick={onClose} style={{ fontSize: '0.7rem', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: '0.25rem' }}>
           Cancel
         </button>
       </div>
@@ -508,7 +508,7 @@ function MatrixTab({ thresholds }) {
           />
           {validRate && (
             <div className="sub" style={{ marginTop: "0.5rem" }}>
-              Generating matrix at <strong style={{ color: "#8a7a42" }}>{parsed.toFixed(2)}%</strong>
+              Generating matrix at <strong style={{ color: "var(--warn)" }}>{parsed.toFixed(2)}%</strong>
             </div>
           )}
         </div>
@@ -516,24 +516,24 @@ function MatrixTab({ thresholds }) {
 
       {validRate ? (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ padding: "1rem 1.25rem 0.65rem", borderBottom: "1px solid #2e3340" }}>
-            <div style={{ fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "#6a9e7f", marginBottom: "0.2rem" }}>
+          <div style={{ padding: "1rem 1.25rem 0.65rem", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--pass)", marginBottom: "0.2rem" }}>
               DY vs DSCR Comparison Matrix
             </div>
-            <div style={{ fontSize: "0.72rem", color: "#4a4f5a" }}>
-              Fixed rate: <strong style={{ color: "#8a7a42" }}>{parsed.toFixed(2)}%</strong>
+            <div style={{ fontSize: "0.72rem", color: "var(--faint)" }}>
+              Fixed rate: <strong style={{ color: "var(--warn)" }}>{parsed.toFixed(2)}%</strong>
               &nbsp;·&nbsp;DSCR = Debt Yield ÷ Annual Debt Service Constant
             </div>
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 400 }}>
               <thead>
-                <tr style={{ borderBottom: "2px solid #2e3340", background: "#16191f" }}>
-                  <th style={{ padding: "0.65rem 1.25rem", textAlign: "left", width: 100, color: "#c8cdd6", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                <tr style={{ borderBottom: "2px solid var(--border)", background: "var(--bg)" }}>
+                  <th style={{ padding: "0.65rem 1.25rem", textAlign: "left", width: 100, color: "var(--text2)", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                     Debt Yield
                   </th>
                   {AMORT_COLS.map(col => (
-                    <th key={col.label} style={{ padding: "0.65rem 1rem", textAlign: "center", color: "#c8cdd6", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    <th key={col.label} style={{ padding: "0.65rem 1rem", textAlign: "center", color: "var(--text2)", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                       {col.label}
                     </th>
                   ))}
@@ -559,7 +559,7 @@ function MatrixTab({ thresholds }) {
               </tbody>
             </table>
           </div>
-          <div style={{ display: "flex", gap: "1.5rem", padding: "0.85rem 1.25rem", borderTop: "1px solid #2e3340", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "1.5rem", padding: "0.85rem 1.25rem", borderTop: "1px solid var(--border)", flexWrap: "wrap" }}>
             {[
               { cls: "mx-high", label: `≥ ${thresholds.high.toFixed(2)}x — Strong` },
               { cls: "mx-mid",  label: `${thresholds.mid.toFixed(2)} – ${thresholds.high.toFixed(2)}x — Adequate` },
@@ -568,13 +568,13 @@ function MatrixTab({ thresholds }) {
             ].map(({ cls, label }) => (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
                 <div className={cls} style={{ width: 24, height: 12, borderRadius: 2 }} />
-                <span style={{ fontSize: "0.68rem", color: "#4a4f5a" }}>{label}</span>
+                <span style={{ fontSize: "0.68rem", color: "var(--faint)" }}>{label}</span>
               </div>
             ))}
           </div>
         </div>
       ) : (
-        <div className="card" style={{ textAlign: "center", padding: "3rem 2rem", color: "#4a4f5a" }}>
+        <div className="card" style={{ textAlign: "center", padding: "3rem 2rem", color: "var(--faint)" }}>
           <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>📊</div>
           <div style={{ fontSize: "0.85rem" }}>Enter an interest rate above to generate the matrix</div>
           <div style={{ fontSize: "0.75rem", color: "#334155", marginTop: "0.4rem" }}>
@@ -648,9 +648,9 @@ function CalculatorTab({ thresholds }) {
     <button onClick={() => setLocked(id)} style={{
       padding: "3px 14px", borderRadius: "3px", border: "none", cursor: "pointer",
       fontFamily: "inherit", fontSize: "0.72rem", fontWeight: 600, letterSpacing: "0.05em",
-      background: locked === id ? "rgba(96,165,250,0.2)" : "#2e3340",
-      color: locked === id ? "#c8cdd6" : "#4a4f5a",
-      outline: locked === id ? "1px solid #c8cdd6" : "1px solid #2e3340",
+      background: locked === id ? "rgba(96,165,250,0.2)" : "var(--border)",
+      color: locked === id ? "var(--text2)" : "var(--faint)",
+      outline: locked === id ? "1px solid var(--text2)" : "1px solid var(--border)",
     }}>🔒 {label}</button>
   );
 
@@ -660,16 +660,16 @@ function CalculatorTab({ thresholds }) {
       <div className="section-title">Deal Inputs</div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
-        <span style={{ fontSize: "0.7rem", color: "#4a4f5a", letterSpacing: "0.08em" }}>LOCK:</span>
+        <span style={{ fontSize: "0.7rem", color: "var(--faint)", letterSpacing: "0.08em" }}>LOCK:</span>
         {lockBtn("loan", "Loan Amount")}
         {lockBtn("noi", "NOI")}
-        <span style={{ fontSize: "0.68rem", color: "#4a4f5a" }}>
+        <span style={{ fontSize: "0.68rem", color: "var(--faint)" }}>
           Lock one value, then enter a target DY or DSCR to back-solve the other
         </span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-        <div className="card" style={{ borderColor: locked === "loan" ? "#c8cdd655" : "#2e3340" }}>
+        <div className="card" style={{ borderColor: locked === "loan" ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <div className="label" style={{ margin: 0 }}>Loan Amount</div>
             {locked === "loan" && <span className="pill blue">🔒 Locked</span>}
@@ -678,14 +678,14 @@ function CalculatorTab({ thresholds }) {
           <input type="range" min={20000000} max={75000000} step={500000}
             value={Math.min(Math.max(loanAmount, 20000000), 75000000)}
             onChange={e => setLoanAmount(+e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#9aa0aa", marginTop: "0.3rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--muted)", marginTop: "0.3rem" }}>
             <span>$20M</span>
-            <span style={{ color: "#6a9e7f", fontWeight: 600 }}>{formatCurrency(loanAmount)}</span>
+            <span style={{ color: "var(--pass)", fontWeight: 600 }}>{formatCurrency(loanAmount)}</span>
             <span>$75M</span>
           </div>
         </div>
 
-        <div className="card" style={{ borderColor: locked === "noi" ? "#c8cdd655" : "#2e3340" }}>
+        <div className="card" style={{ borderColor: locked === "noi" ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <div className="label" style={{ margin: 0 }}>Net Operating Income (NOI)</div>
             {locked === "noi" && <span className="pill blue">🔒 Locked</span>}
@@ -694,9 +694,9 @@ function CalculatorTab({ thresholds }) {
           <input type="range" min={500000} max={10000000} step={25000}
             value={Math.min(Math.max(noi, 500000), 10000000)}
             onChange={e => setNoi(+e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#9aa0aa", marginTop: "0.3rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--muted)", marginTop: "0.3rem" }}>
             <span>$500K</span>
-            <span style={{ color: "#6a9e7f", fontWeight: 600 }}>{formatCurrency(noi)}</span>
+            <span style={{ color: "var(--pass)", fontWeight: 600 }}>{formatCurrency(noi)}</span>
             <span>$10M</span>
           </div>
         </div>
@@ -704,18 +704,18 @@ function CalculatorTab({ thresholds }) {
 
       {/* Target Back-Solve */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-        <div className="card" style={{ borderColor: targetDY ? "#6a9e7f55" : "#2e3340" }}>
+        <div className="card" style={{ borderColor: targetDY ? "color-mix(in srgb, var(--pass) 33%, transparent)" : "var(--border)" }}>
           <div className="label">Target Debt Yield (%)</div>
           <input type="number" value={targetDY} step={0.1} min={0} max={30} placeholder="e.g. 9.00"
             onChange={e => { setTargetDY(e.target.value); setTargetDSCR(""); }}
             style={{ marginBottom: "0.5rem" }} />
           {solvedFromDY ? (
             <div style={{ marginTop: "0.25rem" }}>
-              <div style={{ fontSize: "0.68rem", color: "#4a4f5a", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
+              <div style={{ fontSize: "0.68rem", color: "var(--faint)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
                 → {solvedFromDY.label}
               </div>
-              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#6a9e7f" }}>{solvedFromDY.value}</div>
-              <div style={{ fontSize: "0.68rem", color: "#4a4f5a", marginTop: "0.25rem" }}>
+              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--pass)" }}>{solvedFromDY.value}</div>
+              <div style={{ fontSize: "0.68rem", color: "var(--faint)", marginTop: "0.25rem" }}>
                 At {parseFloat(targetDY).toFixed(2)}% DY · {locked === "loan" ? `Loan fixed at ${formatCurrency(loanAmount)}` : `NOI fixed at ${formatCurrency(noi)}`}
               </div>
             </div>
@@ -724,18 +724,18 @@ function CalculatorTab({ thresholds }) {
           )}
         </div>
 
-        <div className="card" style={{ borderColor: targetDSCR ? "#c8cdd655" : "#2e3340" }}>
+        <div className="card" style={{ borderColor: targetDSCR ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
           <div className="label">Target DSCR (x)</div>
           <input type="number" value={targetDSCR} step={0.05} min={0} max={10} placeholder="e.g. 1.25"
             onChange={e => { setTargetDSCR(e.target.value); setTargetDY(""); }}
             style={{ marginBottom: "0.5rem" }} />
           {solvedFromDSCR ? (
             <div style={{ marginTop: "0.25rem" }}>
-              <div style={{ fontSize: "0.68rem", color: "#4a4f5a", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
+              <div style={{ fontSize: "0.68rem", color: "var(--faint)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
                 → {solvedFromDSCR.label}
               </div>
-              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#c8cdd6" }}>{solvedFromDSCR.value}</div>
-              <div style={{ fontSize: "0.68rem", color: "#4a4f5a", marginTop: "0.25rem" }}>
+              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text2)" }}>{solvedFromDSCR.value}</div>
+              <div style={{ fontSize: "0.68rem", color: "var(--faint)", marginTop: "0.25rem" }}>
                 At {parseFloat(targetDSCR).toFixed(2)}x · {(allInRate * 100).toFixed(3)}% all-in · {amort === 0 ? "I/O" : `${amort}yr amort`}
               </div>
             </div>
@@ -753,7 +753,7 @@ function CalculatorTab({ thresholds }) {
           <input type="date" value={pickedDate} min={minDate} max={maxDate}
             onChange={e => setPickedDate(e.target.value)}
             style={{ marginBottom: "0.6rem", colorScheme: "dark" }} />
-          <div className="sub">1-Mo Term SOFR: <strong style={{ color: "#c8cdd6" }}>{formatPct(sofrRate, 4)}</strong></div>
+          <div className="sub">1-Mo Term SOFR: <strong style={{ color: "var(--text2)" }}>{formatPct(sofrRate, 4)}</strong></div>
           <div className="note">Pick your closing or rate lock date. Rate is interpolated from the Chatham curve ({minDate} – {maxDate}).</div>
         </div>
 
@@ -762,13 +762,13 @@ function CalculatorTab({ thresholds }) {
           <input type="number" value={spread} step={0.05} min={0} max={10}
             onChange={e => setSpread(+e.target.value)} style={{ marginBottom: "0.75rem" }} />
           <input type="range" min={0.5} max={6} step={0.05} value={spread} onChange={e => setSpread(+e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#9aa0aa", marginTop: "0.3rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--muted)", marginTop: "0.3rem" }}>
             <span>0.50%</span>
-            <span style={{ color: "#c8cdd6", fontWeight: 600 }}>{spread.toFixed(2)}%</span>
+            <span style={{ color: "var(--text2)", fontWeight: 600 }}>{spread.toFixed(2)}%</span>
             <span>6.00%</span>
           </div>
           <div className="sub" style={{ marginTop: "0.5rem" }}>
-            All-in Rate: <strong style={{ color: "#c8cdd6" }}>{formatPct(allInRate, 4)}</strong>
+            All-in Rate: <strong style={{ color: "var(--text2)" }}>{formatPct(allInRate, 4)}</strong>
           </div>
         </div>
 
@@ -779,7 +779,7 @@ function CalculatorTab({ thresholds }) {
             <option value={35}>35 Years</option>
             <option value={0}>Interest Only (I/O)</option>
           </select>
-          <div className="sub">Ann. Debt Service: <strong style={{ color: "#8a7a42" }}>{formatCurrency(ads)}</strong></div>
+          <div className="sub">Ann. Debt Service: <strong style={{ color: "var(--warn)" }}>{formatCurrency(ads)}</strong></div>
           <div className="note">{amort === 0 ? "I/O: Debt service = Loan × All-in Rate only" : `P&I: Monthly payment × 12 over ${amort}-yr schedule`}</div>
         </div>
       </div>
@@ -787,9 +787,9 @@ function CalculatorTab({ thresholds }) {
       {/* ── Results ── */}
       <div className="section-title">Results</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-        <div className="card" style={{ borderColor: "#6a9e7f" }}>
+        <div className="card" style={{ borderColor: "var(--pass)" }}>
           <div className="label">Debt Yield</div>
-          <div className="metric" style={{ color: "#6a9e7f" }}>{currentDY}%</div>
+          <div className="metric" style={{ color: "var(--pass)" }}>{currentDY}%</div>
           <div className="sub">NOI ÷ Loan Amount</div>
           <div style={{ marginTop: "0.5rem" }}>
             <span className={+currentDY >= 9 ? "pill green" : +currentDY >= 7 ? "pill yellow" : "pill red"}>
@@ -799,7 +799,7 @@ function CalculatorTab({ thresholds }) {
           <div className="note">Rate-agnostic — independent of loan structure</div>
         </div>
 
-        <div className="card" style={{ borderColor: dscrColor(dscr, thresholds) + "55" }}>
+        <div className="card" style={{ borderColor: `color-mix(in srgb, ${dscrColor(dscr, thresholds)} 33%, transparent)` }}>
           <div className="label">DSCR</div>
           <div className="metric" style={{ color: dscrColor(dscr, thresholds) }}>{dscr.toFixed(3)}x</div>
           <div className="sub">NOI ÷ Annual Debt Service</div>
@@ -814,17 +814,17 @@ function CalculatorTab({ thresholds }) {
         <div className="card">
           <div className="label">Rate Composition</div>
           <div style={{ marginTop: "0.4rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid #2e3340" }}>
-              <span style={{ fontSize: "0.78rem", color: "#c8cdd6" }}>1-Mo Term SOFR</span>
-              <span style={{ fontSize: "0.78rem", color: "#c8cdd6", fontWeight: 600 }}>{formatPct(sofrRate, 4)}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+              <span style={{ fontSize: "0.78rem", color: "var(--text2)" }}>1-Mo Term SOFR</span>
+              <span style={{ fontSize: "0.78rem", color: "var(--text2)", fontWeight: 600 }}>{formatPct(sofrRate, 4)}</span>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid #2e3340" }}>
-              <span style={{ fontSize: "0.78rem", color: "#c8cdd6" }}>Spread</span>
-              <span style={{ fontSize: "0.78rem", color: "#c8cdd6", fontWeight: 600 }}>+ {spread.toFixed(2)}%</span>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
+              <span style={{ fontSize: "0.78rem", color: "var(--text2)" }}>Spread</span>
+              <span style={{ fontSize: "0.78rem", color: "var(--text2)", fontWeight: 600 }}>+ {spread.toFixed(2)}%</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0 0" }}>
               <span style={{ fontSize: "0.82rem", color: "#ffffff", fontWeight: 600 }}>All-in Rate</span>
-              <span style={{ fontSize: "0.82rem", color: "#8a7a42", fontWeight: 700 }}>{formatPct(allInRate, 4)}</span>
+              <span style={{ fontSize: "0.82rem", color: "var(--warn)", fontWeight: 700 }}>{formatPct(allInRate, 4)}</span>
             </div>
           </div>
           <div className="note" style={{ marginTop: "0.6rem" }}>SOFR date: {pickedDate}</div>
@@ -835,13 +835,13 @@ function CalculatorTab({ thresholds }) {
       <div className="section-title">Minimum Loan Sizing by DY Threshold</div>
       <div className="card" style={{ marginBottom: "1.5rem" }}>
         <div className="sub" style={{ marginBottom: "1rem" }}>
-          Maximum loan a lender would approve at each DY floor given your NOI of <strong style={{ color: "#6a9e7f" }}>{formatCurrency(noi)}</strong>.
-          DSCR calculated at <strong style={{ color: "#8a7a42" }}>{formatPct(allInRate, 4)}</strong> {amort === 0 ? "I/O" : `/ ${amort}yr amort`}.
-          Current loan: <strong style={{ color: "#c8cdd6" }}>{formatCurrency(loanAmount)}</strong>.
+          Maximum loan a lender would approve at each DY floor given your NOI of <strong style={{ color: "var(--pass)" }}>{formatCurrency(noi)}</strong>.
+          DSCR calculated at <strong style={{ color: "var(--warn)" }}>{formatPct(allInRate, 4)}</strong> {amort === 0 ? "I/O" : `/ ${amort}yr amort`}.
+          Current loan: <strong style={{ color: "var(--text2)" }}>{formatCurrency(loanAmount)}</strong>.
         </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
-            <tr style={{ borderBottom: "1px solid #2e3340" }}>
+            <tr style={{ borderBottom: "1px solid var(--border)" }}>
               {["DY Floor", "Max Loan Amount", "vs. Your Loan", "Implied DSCR", "Status"].map(h => (
                 <th key={h}>{h}</th>
               ))}
@@ -854,7 +854,7 @@ function CalculatorTab({ thresholds }) {
               return (
                 <tr key={dy}>
                   <td style={{ color: "#ffffff", fontWeight: 600 }}>{(dy * 100).toFixed(1)}%</td>
-                  <td style={{ color: "#6a9e7f", fontWeight: 600 }}>{formatCurrency(maxLoan)}</td>
+                  <td style={{ color: "var(--pass)", fontWeight: 600 }}>{formatCurrency(maxLoan)}</td>
                   <td>
                     {under
                       ? <span className="pill green">✓ Under by {formatCurrency(diff)}</span>
@@ -1090,10 +1090,10 @@ function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate, adjust
 function MathLine({ label, value, eq, color }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.2rem' }}>
-      <span style={{ fontSize: '0.68rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>{label}</span>
+      <span style={{ fontSize: '0.68rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{label}</span>
       <div style={{ textAlign: 'right' }}>
-        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: color || '#e8eaed' }}>{value}</span>
-        {eq && <div style={{ fontSize: '0.6rem', color: '#4a4f5a' }}>{eq}</div>}
+        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: color || 'var(--text)' }}>{value}</span>
+        {eq && <div style={{ fontSize: '0.6rem', color: 'var(--faint)' }}>{eq}</div>}
       </div>
     </div>
   );
@@ -1972,7 +1972,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const pageH = doc.internal.pageSize.getHeight();
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const TT_ORANGE = [200, 121, 65];
+      const TT_ORANGE = [99, 102, 241];
       const TT_DARK   = [22, 25, 31];
       const TT_LIGHT  = [200, 205, 214];
       const TT_GRAY   = [74, 79, 90];
@@ -2016,7 +2016,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         doc.text(text, pillX + 7, pillY + 1);
       };
 
-      doc.setFillColor(200, 121, 65);
+      doc.setFillColor(99, 102, 241);
       // Draw pills right to left
       const totalPaydown = activeRows.reduce((s, r) => s + r.paydown, 0);
       // Failing pill
@@ -2184,7 +2184,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             // Paydown — amber if needed
             const pdIdx = visibleDefs.findIndex(c => c.key === 'paydown');
             if (pdIdx !== -1 && data.column.index === pdIdx && row.paydown > 0) {
-              data.cell.styles.textColor = [200, 121, 65];
+              data.cell.styles.textColor = [99, 102, 241];
               data.cell.styles.fontStyle = 'bold';
             }
           }
@@ -2215,8 +2215,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
   const fmtDate = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
   const daysUntil = d => { try { return Math.ceil((new Date(d + 'T00:00:00') - new Date()) / 86400000); } catch { return null; } };
 
-  const inputStyle = { width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit' };
-  const labelStyle = { fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', marginBottom: '0.3rem', display: 'block' };
+  const inputStyle = { width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit' };
+  const labelStyle = { fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block' };
 
   return (
     <div>
@@ -2227,22 +2227,22 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
       {/* ── DB Loading / Error states ── */}
       {dbLoading && (
-        <div style={{ textAlign: 'center', padding: '3rem', color: '#9aa0aa', fontSize: '0.85rem' }}>
+        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)', fontSize: '0.85rem' }}>
           <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>⟳</div>
           Loading properties from database...
         </div>
       )}
       {dbError && (
         <div style={{ padding: '1rem', marginBottom: '1rem', background: 'rgba(160,82,82,0.08)', border: '1px solid rgba(160,82,82,0.25)', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.78rem', color: '#c47474' }}>⚠ {dbError}</span>
-          <button onClick={loadProperties} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: 'rgba(160,82,82,0.15)', color: '#c47474' }}>Retry</button>
+          <span style={{ fontSize: '0.78rem', color: 'var(--fail)' }}>⚠ {dbError}</span>
+          <button onClick={loadProperties} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: 'rgba(160,82,82,0.15)', color: 'var(--fail)' }}>Retry</button>
         </div>
       )}
       {!dbLoading && (
       <div>
       {/* ── Dashboard header + prominent Doc View ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div style={{ fontSize: '0.7rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 600 }}>
+        <div style={{ fontSize: '0.7rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
           Covenant Compliance Dashboard
         </div>
         <button onClick={openDocView} title="View the dashboard styled like the executive Excel doc" style={{
@@ -2257,26 +2257,26 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           <div className="card" style={{ textAlign: 'center' }}>
             <div style={labelStyle}>Total Properties</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#c8cdd6' }}>{summary.total}</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text2)' }}>{summary.total}</div>
           </div>
           <div className="card" style={{ textAlign: 'center' }}>
             <div style={labelStyle}>Passing</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#6a9e7f' }}>{summary.passing}</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--pass)' }}>{summary.passing}</div>
           </div>
           <div className="card" style={{ textAlign: 'center' }}>
             <div style={labelStyle}>Failing</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#c47474' }}>{summary.failing}</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--fail)' }}>{summary.failing}</div>
           </div>
           <div className="card" style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowPaydown(v => !v)}>
             <div style={{ ...labelStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
               Potential Maximum Paydown
-              <span style={{ fontSize: '0.95rem', color: showPaydown ? '#c87941' : '#4a4f5a' }}>
+              <span style={{ fontSize: '0.95rem', color: showPaydown ? 'var(--accent)' : 'var(--faint)' }}>
                 {showPaydown ? '👁' : '👁'}
               </span>
             </div>
             {showPaydown
-              ? <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#c87941' }}>{formatCurrency(summary.totalPaydown)}</div>
-              : <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#4a4f5a', letterSpacing: '0.2em' }}>••••••••</div>
+              ? <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent)' }}>{formatCurrency(summary.totalPaydown)}</div>
+              : <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--faint)', letterSpacing: '0.2em' }}>••••••••</div>
             }
           </div>
       </div>
@@ -2284,46 +2284,46 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       {/* ── Last Updated Banner ── */}
       {lastUpdated && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'rgba(106,158,127,0.08)', border: '1px solid rgba(106,158,127,0.2)', borderRadius: 3 }}>
-          <span style={{ fontSize: '0.7rem', color: '#6a9e7f' }}>✓</span>
+          <span style={{ fontSize: '0.7rem', color: 'var(--pass)' }}>✓</span>
           <span style={{ fontSize: '0.72rem', color: '#5a9a8a' }}>NOI last updated from forecast file:</span>
-          <span style={{ fontSize: '0.72rem', color: '#6a9e7f', fontWeight: 600 }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--pass)', fontWeight: 600 }}>
             {lastUpdated.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} at {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
           </span>
           {forecastMonth && (
             <>
               <span style={{ fontSize: '0.68rem', color: '#2a5a4a' }}>·</span>
               <span style={{ fontSize: '0.72rem', color: '#5a9a8a' }}>Using</span>
-              <span style={{ fontSize: '0.72rem', color: '#6a9e7f', fontWeight: 600 }}>{forecastMonth} reforecast</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--pass)', fontWeight: 600 }}>{forecastMonth} reforecast</span>
             </>
           )}
         </div>
       )}
       {!lastUpdated && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'rgba(160,82,82,0.06)', border: '1px solid rgba(160,82,82,0.15)', borderRadius: 3 }}>
-          <span style={{ fontSize: '0.7rem', color: '#c47474' }}>⚠</span>
+          <span style={{ fontSize: '0.7rem', color: 'var(--fail)' }}>⚠</span>
           <span style={{ fontSize: '0.72rem', color: '#7a5a5a' }}>NOI not yet updated this session —</span>
-          <span style={{ fontSize: '0.72rem', color: '#c47474' }}>upload a forecast file to refresh figures</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--fail)' }}>upload a forecast file to refresh figures</span>
         </div>
       )}
       {/* ── Debt Fund Settings Panel ── */}
-      <div className="card" style={{ marginBottom: '1rem', borderColor: '#2e3340', borderLeft: '3px solid #c8cdd6', padding: '0.85rem 1.1rem' }}>
+      <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--border)', borderLeft: '3px solid var(--text2)', padding: '0.85rem 1.1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600, whiteSpace: 'nowrap' }}>
             Debt Fund Assumptions
           </div>
 
           {/* DSCR / DY mode toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#9aa0aa' }}>Size by</span>
-            <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid #2e3340' }}>
+            <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Size by</span>
+            <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid var(--border)' }}>
               {['DSCR', 'DY'].map(opt => {
                 const active = dfMode === opt.toLowerCase();
                 return (
                   <button key={opt} onClick={() => setDfMode(opt.toLowerCase())} style={{
                     padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                     fontSize: '0.7rem', fontWeight: 600,
-                    background: active ? 'rgba(200,121,65,0.2)' : '#13151a',
-                    color: active ? '#c87941' : '#4a4f5a',
+                    background: active ? 'rgba(99, 102, 241,0.2)' : 'var(--panel2)',
+                    color: active ? 'var(--accent)' : 'var(--faint)',
                   }}>{opt}</button>
                 );
               })}
@@ -2333,14 +2333,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           {/* DSCR input — shown in DSCR mode */}
           {dfMode === 'dscr' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Min DSCR</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Min DSCR</span>
               <input
                 type="number" step="0.01" value={dfDSCRInput}
                 onChange={e => setDfDSCRInput(e.target.value)}
                 onBlur={() => { const v = parseFloat(dfDSCRInput); if (!isNaN(v) && v > 0) setDfDSCR(String(v)); }}
-                style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+                style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
               />
-              <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>x</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>x</span>
             </div>
           )}
 
@@ -2348,52 +2348,52 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           {dfMode === 'dy' && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>As-Is DY (T1 at test date)</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>As-Is DY (T1 at test date)</span>
                 <input
                   type="number" step="0.01" value={dfDYAsIsInput}
                   onChange={e => setDfDYAsIsInput(e.target.value)}
                   onBlur={() => { const v = parseFloat(dfDYAsIsInput); if (!isNaN(v) && v > 0) setDfDYAsIs(String(v)); }}
-                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
                 />
-                <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>%</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Stabilized DY (first mo. &gt;92% occ)</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Stabilized DY (first mo. &gt;92% occ)</span>
                 <input
                   type="number" step="0.01" value={dfDYStabInput}
                   onChange={e => setDfDYStabInput(e.target.value)}
                   onBlur={() => { const v = parseFloat(dfDYStabInput); if (!isNaN(v) && v > 0) setDfDYStab(String(v)); }}
-                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
                 />
-                <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>%</span>
               </div>
             </>
           )}
 
           {dfMode === 'dscr' && <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>Rate: SOFR +</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Rate: SOFR +</span>
             <input
               type="number" step="0.01" value={dfSpreadInput}
               onChange={e => setDfSpreadInput(e.target.value)}
               onBlur={() => { const v = parseFloat(dfSpreadInput); if (!isNaN(v) && v >= 0) setDfSpread(String(v)); }}
-              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
             />
-            <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>%</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>%</span>
           </div>}
 
           {/* I/O Toggle — only relevant in DSCR mode */}
           {dfMode === 'dscr' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span style={{ fontSize: '0.7rem', color: '#9aa0aa' }}>Amortization</span>
-              <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid #2e3340' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Amortization</span>
+              <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid var(--border)' }}>
                 {['I/O', 'Amort'].map(opt => {
                   const active = opt === 'I/O' ? dfIO : !dfIO;
                   return (
                     <button key={opt} onClick={() => setDfIO(opt === 'I/O')} style={{
                       padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                       fontSize: '0.7rem', fontWeight: 600,
-                      background: active ? 'rgba(200,205,214,0.15)' : '#13151a',
-                      color: active ? '#c8cdd6' : '#4a4f5a',
+                      background: active ? 'rgba(200,205,214,0.15)' : 'var(--panel2)',
+                      color: active ? 'var(--text2)' : 'var(--faint)',
                     }}>{opt}</button>
                   );
                 })}
@@ -2404,9 +2404,9 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     type="number" step="1" min="1" max="40" value={dfAmortInput}
                     onChange={e => setDfAmortInput(e.target.value)}
                     onBlur={() => { const v = parseInt(dfAmortInput); if (!isNaN(v) && v > 0) setDfAmort(String(v)); }}
-                    style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', fontFamily: 'inherit', textAlign: 'center' }}
+                    style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
                   />
-                  <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>yr</span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>yr</span>
                 </div>
               )}
             </div>
@@ -2418,14 +2418,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       {/* ── Toolbar ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.68rem', color: '#9aa0aa', letterSpacing: '0.08em' }}>SORT:</span>
+          <span style={{ fontSize: '0.68rem', color: 'var(--muted)', letterSpacing: '0.08em' }}>SORT:</span>
           {[['covenantDate','Date'],['property','Property'],['satisfied','Status']].map(([f,l]) => (
             <button key={f} onClick={() => setSortField(f)} style={{
               padding: '3px 10px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
               fontSize: '0.7rem', fontWeight: 600,
-              background: sortField === f ? 'rgba(200,121,65,0.2)' : '#1e2128',
-              color: sortField === f ? '#c87941' : '#9aa0aa',
-              outline: sortField === f ? '1px solid #c8794155' : '1px solid #2e3340',
+              background: sortField === f ? 'rgba(99, 102, 241,0.2)' : 'var(--panel)',
+              color: sortField === f ? 'var(--accent)' : 'var(--muted)',
+              outline: sortField === f ? '1px solid color-mix(in srgb, var(--accent) 33%, transparent)' : '1px solid var(--border)',
             }}>{l}</button>
           ))}
         </div>
@@ -2439,7 +2439,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
               placeholder="e.g. February 2026"
               style={{
                 padding: '4px 8px', borderRadius: 2, fontSize: '0.72rem', fontFamily: 'inherit',
-                background: '#13151a', border: '1px solid #2e3340', color: '#e8eaed',
+                background: 'var(--panel2)', border: '1px solid var(--border)', color: 'var(--text)',
                 width: 140, outline: 'none',
               }}
             />
@@ -2448,8 +2448,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           {pinUnlocked ? (
             <label style={{
               padding: '5px 14px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,205,214,0.12)', color: '#c8cdd6',
-              outline: '1px solid #c8cdd644', display: 'inline-block',
+              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,205,214,0.12)', color: 'var(--text2)',
+              outline: '1px solid color-mix(in srgb, var(--text2) 27%, transparent)', display: 'inline-block',
             }}>
               ↑ Upload Forecast
               <input type="file" accept=".xlsx" onChange={handleFileUpload} style={{ display: 'none' }} />
@@ -2457,34 +2457,34 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           ) : (
             <button onClick={() => requirePin(() => {})} style={{
               padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,205,214,0.05)', color: '#4a4f5a',
-              outline: '1px solid #4a4f5a33',
+              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,205,214,0.05)', color: 'var(--faint)',
+              outline: '1px solid color-mix(in srgb, var(--faint) 20%, transparent)',
             }}>🔒 Upload Forecast</button>
           )}
-          {exportMsg && <span style={{ fontSize: '0.7rem', color: '#6a9e7f' }}>{exportMsg}</span>}
-          {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? '#6a9e7f' : '#c8cdd6' }}>{uploadStatus}</span>}
+          {exportMsg && <span style={{ fontSize: '0.7rem', color: 'var(--pass)' }}>{exportMsg}</span>}
+          {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? 'var(--pass)' : 'var(--text2)' }}>{uploadStatus}</span>}
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowExportMenu(v => !v)} style={{
               padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
               fontSize: '0.72rem', fontWeight: 600, background: showExportMenu ? 'rgba(106,158,127,0.25)' : 'rgba(106,158,127,0.15)',
-              color: '#6a9e7f', outline: '1px solid #6a9e7f44',
+              color: 'var(--pass)', outline: '1px solid color-mix(in srgb, var(--pass) 27%, transparent)',
             }}>↓ Export ▾</button>
             {showExportMenu && (
               <div style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 100,
-                background: '#16191f', border: '1px solid #2e3340', borderRadius: 4,
+                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4,
                 padding: '0.35rem 0', minWidth: 150, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
               }}>
                 {[
-                  ['Excel', () => exportXLSX(), '#6a9e7f', "Drops straight into the workbook's Covenant Dashboard Export tab"],
-                  ['CSV', () => exportCSV(), '#6a9e7f', ''],
-                  ['PDF', () => exportPDF(), '#c87941', ''],
+                  ['Excel', () => exportXLSX(), 'var(--pass)', "Drops straight into the workbook's Covenant Dashboard Export tab"],
+                  ['CSV', () => exportCSV(), 'var(--pass)', ''],
+                  ['PDF', () => exportPDF(), 'var(--accent)', ''],
                 ].map(([label, fn, color, tip]) => (
                   <div key={label} title={tip} onClick={() => { fn(); setShowExportMenu(false); }} style={{
                     display: 'flex', alignItems: 'center', gap: '0.5rem',
                     padding: '0.4rem 0.95rem', cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, color,
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#1e2128'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--panel)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <span style={{ opacity: 0.7 }}>↓</span>{label}
                   </div>
@@ -2496,32 +2496,32 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <button onClick={() => setShowColPicker(v => !v)} style={{
               padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
               fontSize: '0.72rem', fontWeight: 600, background: showColPicker ? 'rgba(200,205,214,0.15)' : 'rgba(200,205,214,0.10)',
-              color: '#c8cdd6', outline: '1px solid #c8cdd644',
+              color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 27%, transparent)',
             }}>⊞ Columns</button>
             {showColPicker && (
               <div style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 100,
-                background: '#16191f', border: '1px solid #2e3340', borderRadius: 4,
+                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4,
                 padding: '0.6rem 0', minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
               }}>
-                <div style={{ padding: '0.25rem 0.85rem 0.5rem', fontSize: '0.6rem', letterSpacing: '0.12em', color: '#4a4f5a', textTransform: 'uppercase', borderBottom: '1px solid #2e3340', marginBottom: '0.4rem' }}>Toggle Columns</div>
+                <div style={{ padding: '0.25rem 0.85rem 0.5rem', fontSize: '0.6rem', letterSpacing: '0.12em', color: 'var(--faint)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', marginBottom: '0.4rem' }}>Toggle Columns</div>
                 {ALL_COLS.map(c => (
                   <div key={c.key} onClick={() => toggleCol(c.key)} style={{
                     display: 'flex', alignItems: 'center', gap: '0.6rem',
                     padding: '0.35rem 0.85rem', cursor: 'pointer',
                     background: 'transparent',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#1e2128'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--panel)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                     <div style={{
                       width: 14, height: 14, borderRadius: 2, flexShrink: 0,
-                      background: visibleCols[c.key] ? '#c8cdd6' : 'transparent',
-                      border: `1px solid ${visibleCols[c.key] ? '#c8cdd6' : '#2e5a7a'}`,
+                      background: visibleCols[c.key] ? 'var(--text2)' : 'transparent',
+                      border: `1px solid ${visibleCols[c.key] ? 'var(--text2)' : '#2e5a7a'}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: '#13151a', fontWeight: 900 }}>✓</span>}
+                      {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: 'var(--panel2)', fontWeight: 900 }}>✓</span>}
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: visibleCols[c.key] ? '#d0e8ff' : '#4a4f5a' }}>{c.label}</span>
+                    <span style={{ fontSize: '0.75rem', color: visibleCols[c.key] ? '#d0e8ff' : 'var(--faint)' }}>{c.label}</span>
                   </div>
                 ))}
               </div>
@@ -2531,31 +2531,31 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <button onClick={() => setShowHidden(v => !v)} title="Hidden tests are kept in the database but excluded from the dashboard, summary and exports" style={{
               padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
               fontSize: '0.72rem', fontWeight: 600, background: showHidden ? 'rgba(154,160,170,0.22)' : 'rgba(154,160,170,0.10)',
-              color: '#9aa0aa', outline: '1px solid #9aa0aa44',
+              color: 'var(--muted)', outline: '1px solid color-mix(in srgb, var(--muted) 27%, transparent)',
             }}>{showHidden ? '🙈 Hide Hidden' : `👁 Show Hidden (${hiddenCount})`}</button>
           )}
           <button onClick={() => requirePin(() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); })} style={{
             padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: '0.72rem', fontWeight: 600,
-            background: showForm ? 'rgba(224,92,32,0.25)' : 'rgba(200,121,65,0.15)',
-            color: pinUnlocked ? '#c87941' : '#7a4a30', outline: '1px solid #c8794155',
+            background: showForm ? 'rgba(224,92,32,0.25)' : 'rgba(99, 102, 241,0.15)',
+            color: pinUnlocked ? 'var(--accent)' : '#7a4a30', outline: '1px solid color-mix(in srgb, var(--accent) 33%, transparent)',
           }}>{showForm ? '✕ Cancel' : (pinUnlocked ? '+ Add Property' : '🔒 Add Property')}</button>
         </div>
       </div>
 
       {/* ── Upload Results Review ── */}
       {showUploadResults && (
-        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid #c8cdd6' }}>
+        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid var(--text2)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 600 }}>
+            <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
               {uploadMode === 'prior' ? 'Upload Preview — Set as Prior Test' : 'Upload Preview — Review NOI Updates'}
             </div>
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
               <label
                 title="Update current NOI: overwrite live figures with this forecast (the normal monthly update). Set as Prior Test only: record this forecast as the last test result baseline without changing current NOI — use it to backfill an earlier forecast for the comparison column."
-                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', fontWeight: 600, color: '#9aa0aa' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted)' }}
               >
-                <select value={uploadMode} onChange={e => setUploadMode(e.target.value)} style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 2, color: '#c8cdd6', padding: '4px 8px', fontSize: '0.7rem', fontFamily: 'inherit', cursor: 'pointer' }}>
+                <select value={uploadMode} onChange={e => setUploadMode(e.target.value)} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text2)', padding: '4px 8px', fontSize: '0.7rem', fontFamily: 'inherit', cursor: 'pointer' }}>
                   <option value="current">Update current NOI</option>
                   <option value="prior">Set as Prior Test only</option>
                 </select>
@@ -2563,54 +2563,54 @@ Req: ${formatCurrency(r.requiredNOI)}`,
               {uploadMode === 'current' && (
                 <label
                   title="Checked: this upload is the official monthly report and becomes the baseline for the Prior Test comparison. Uncheck for a small interim update so it does not overwrite last month's result."
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: monthlyUpload ? '#c87941' : '#9aa0aa' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: monthlyUpload ? 'var(--accent)' : 'var(--muted)' }}
                 >
-                  <input type="checkbox" checked={monthlyUpload} onChange={e => setMonthlyUpload(e.target.checked)} style={{ accentColor: '#c87941', cursor: 'pointer' }} />
+                  <input type="checkbox" checked={monthlyUpload} onChange={e => setMonthlyUpload(e.target.checked)} style={{ accentColor: 'var(--accent)', cursor: 'pointer' }} />
                   Monthly baseline update
                 </label>
               )}
-              <button onClick={() => setShowUploadResults(false)} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: '#1e2128', color: '#9aa0aa', outline: '1px solid #2e3340' }}>Dismiss</button>
-              <button onClick={() => uploadMode === 'prior' ? applyAsPriorTest() : applyUploadResults()} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, background: '#c8cdd6', color: '#13151a' }}>{uploadMode === 'prior' ? 'Set as Prior Test' : 'Apply All Updates'}</button>
+              <button onClick={() => setShowUploadResults(false)} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: 'var(--panel)', color: 'var(--muted)', outline: '1px solid var(--border)' }}>Dismiss</button>
+              <button onClick={() => uploadMode === 'prior' ? applyAsPriorTest() : applyUploadResults()} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, background: 'var(--text2)', color: 'var(--panel2)' }}>{uploadMode === 'prior' ? 'Set as Prior Test' : 'Apply All Updates'}</button>
             </div>
           </div>
           {uploadMode === 'prior' && (
-            <div style={{ fontSize: '0.7rem', color: '#9aa0aa', marginBottom: '0.85rem', padding: '0.5rem 0.65rem', background: '#1e2128', borderRadius: 3, borderLeft: '3px solid #c87941' }}>
-              Records this forecast as the <strong style={{ color: '#c8cdd6' }}>Prior Test</strong> result{(forecastMonthInput.trim() || forecastMonth) ? <> dated <strong style={{ color: '#c8cdd6' }}>{forecastMonthInput.trim() || forecastMonth}</strong></> : null}. Current live NOI figures are left unchanged.
+            <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '0.85rem', padding: '0.5rem 0.65rem', background: 'var(--panel)', borderRadius: 3, borderLeft: '3px solid var(--accent)' }}>
+              Records this forecast as the <strong style={{ color: 'var(--text2)' }}>Prior Test</strong> result{(forecastMonthInput.trim() || forecastMonth) ? <> dated <strong style={{ color: 'var(--text2)' }}>{forecastMonthInput.trim() || forecastMonth}</strong></> : null}. Current live NOI figures are left unchanged.
             </div>
           )}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #2e3340' }}>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {['Property','Status','Matched Sheet','T-Periods','Old NOI','New NOI','Change'].map(h => (
-                  <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400 }}>{h}</th>
+                  <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {uploadResults.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid #16191f' }}>
+                <tr key={r.id} style={{ borderBottom: '1px solid var(--bg)' }}>
                   <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#ffffff', fontSize: '0.82rem' }}>{r.property}</td>
                   <td style={{ padding: '0.5rem 0.75rem' }}>
                     <span style={{
                       padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 600,
                       background: r.status === 'matched' ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)',
-                      color: r.status === 'matched' ? '#6a9e7f' : '#c47474',
+                      color: r.status === 'matched' ? 'var(--pass)' : 'var(--fail)',
                     }}>
                       {r.status === 'matched' ? `✓ Matched (${Math.round(r.score*100)}%)` : r.status === 'no_match' ? '✗ No match' : '⚠ Insufficient data'}
                     </span>
                   </td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: '#9aa0aa', maxWidth: 200 }}>
+                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: 'var(--muted)', maxWidth: 200 }}>
                     {r.matchedSheet ? r.matchedSheet.replace(/^Budget Analysis - /, '').replace(/ - \d{4}.*$/, '') : '—'}
                   </td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: '#9aa0aa' }}>
+                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: 'var(--muted)' }}>
                     {r.incomeMonths ? `T${r.incomeMonths} Inc / T${r.expenseMonths} Exp` : '—'}
                   </td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: '#9aa0aa' }}>{r.oldNOI != null ? formatCurrency(r.oldNOI) : '—'}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: r.newNOI != null ? '#6a9e7f' : '#9aa0aa', fontWeight: 600 }}>{r.newNOI != null ? formatCurrency(r.newNOI) : '—'}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: 'var(--muted)' }}>{r.oldNOI != null ? formatCurrency(r.oldNOI) : '—'}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: r.newNOI != null ? 'var(--pass)' : 'var(--muted)', fontWeight: 600 }}>{r.newNOI != null ? formatCurrency(r.newNOI) : '—'}</td>
                   <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem' }}>
                     {r.oldNOI != null && r.newNOI != null ? (() => {
                       const delta = r.newNOI - r.oldNOI;
-                      return <span style={{ color: delta >= 0 ? '#6a9e7f' : '#c47474' }}>{delta >= 0 ? '+' : ''}{formatCurrency(delta)}</span>;
+                      return <span style={{ color: delta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>{delta >= 0 ? '+' : ''}{formatCurrency(delta)}</span>;
                     })() : '—'}
                   </td>
                 </tr>
@@ -2622,8 +2622,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
       {/* ── Add / Edit Form ── */}
       {showForm && (
-        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid #c87941' }}>
-          <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c87941', marginBottom: '1rem', fontWeight: 600 }}>
+        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid var(--accent)' }}>
+          <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '1rem', fontWeight: 600 }}>
             {editId !== null ? 'Edit Property' : 'Add New Property'}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
@@ -2700,9 +2700,9 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <div>
               <label style={labelStyle}>Covenant Test Date (SOFR lookup + NOI trailing period)</label>
               <input type="date" value={form.covenantDate} min={SOFR_MIN} max={SOFR_MAX} onChange={e => setF('covenantDate', e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
-              {form.covenantDate && <div style={{ fontSize: '0.68rem', color: '#9aa0aa', marginTop: '0.25rem' }}>
-                SOFR: <strong style={{ color: '#c8cdd6' }}>{(getSofr(form.covenantDate)*100).toFixed(4)}%</strong>
-                &nbsp;· All-in: <strong style={{ color: '#c87941' }}>{((getSofr(form.covenantDate) + parseFloat(form.spread||0)/100)*100).toFixed(4)}%</strong>
+              {form.covenantDate && <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                SOFR: <strong style={{ color: 'var(--text2)' }}>{(getSofr(form.covenantDate)*100).toFixed(4)}%</strong>
+                &nbsp;· All-in: <strong style={{ color: 'var(--accent)' }}>{((getSofr(form.covenantDate) + parseFloat(form.spread||0)/100)*100).toFixed(4)}%</strong>
               </div>}
             </div>
             <div>
@@ -2711,14 +2711,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             </div>
           </div>
           {/* ── Variable Loan Balance Toggle ── */}
-          <div style={{ marginBottom: '1rem', paddingTop: '0.5rem', borderTop: '1px solid #2e3340' }}>
+          <div style={{ marginBottom: '1rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
               <div
                 onClick={() => setF('variableLoan', !form.variableLoan)}
-                style={{ width: 36, height: 20, borderRadius: 10, background: form.variableLoan ? '#c87941' : '#2e3340', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
-                <div style={{ position: 'absolute', top: 3, left: form.variableLoan ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: '#e8eaed', transition: 'left 0.2s' }} />
+                style={{ width: 36, height: 20, borderRadius: 10, background: form.variableLoan ? 'var(--accent)' : 'var(--border)', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: 3, left: form.variableLoan ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: 'var(--text)', transition: 'left 0.2s' }} />
               </div>
-              <span style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: form.variableLoan ? '#c87941' : '#9aa0aa', fontWeight: 600 }}>Variable Loan Balance</span>
+              <span style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: form.variableLoan ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>Variable Loan Balance</span>
             </label>
           </div>
 
@@ -2727,16 +2727,16 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
               <div
                 onClick={() => setF('waived', !form.waived)}
-                style={{ width: 36, height: 20, borderRadius: 10, background: form.waived ? '#6a9e7f' : '#2e3340', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
-                <div style={{ position: 'absolute', top: 3, left: form.waived ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: '#e8eaed', transition: 'left 0.2s' }} />
+                style={{ width: 36, height: 20, borderRadius: 10, background: form.waived ? 'var(--pass)' : 'var(--border)', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
+                <div style={{ position: 'absolute', top: 3, left: form.waived ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: 'var(--text)', transition: 'left 0.2s' }} />
               </div>
-              <span style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: form.waived ? '#6a9e7f' : '#9aa0aa', fontWeight: 600 }}>Covenant Waived</span>
+              <span style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: form.waived ? 'var(--pass)' : 'var(--muted)', fontWeight: 600 }}>Covenant Waived</span>
             </label>
-            <div style={{ fontSize: '0.66rem', color: '#6a7079', marginTop: '0.3rem' }}>Lender has waived this test — shows WAIVED instead of FAIL on the dashboard and Doc View.</div>
+            <div style={{ fontSize: '0.66rem', color: 'var(--faint2)', marginTop: '0.3rem' }}>Lender has waived this test — shows WAIVED instead of FAIL on the dashboard and Doc View.</div>
           </div>
 
           {form.variableLoan && (
-            <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: '#16191f', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #c87941' }}>
+            <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)', borderLeft: '3px solid var(--accent)' }}>
               {/* Commitment field — replaces loan amount display */}
               <div style={{ marginBottom: '0.85rem' }}>
                 <label style={labelStyle}>Loan Commitment (Total Facility, $)</label>
@@ -2747,13 +2747,13 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   onChange={e => setF('loanCommitment', e.target.value)}
                   style={inputStyle}
                 />
-                <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginTop: '0.25rem' }}>
+                <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: '0.25rem' }}>
                   The total facility size. The drawn balance schedule below drives the DSCR calculation.
                 </div>
               </div>
 
               {/* 12-row schedule */}
-              <div style={{ fontSize: '0.58rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9aa0aa', marginBottom: '0.5rem', fontWeight: 600 }}>Loan Balance Schedule (12 months)</div>
+              <div style={{ fontSize: '0.58rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Loan Balance Schedule (12 months)</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
                 {(form.loanSchedule || []).map((entry, i) => (
                   <div key={i} style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
@@ -2781,7 +2781,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   </div>
                 ))}
               </div>
-              <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginTop: '0.5rem' }}>
+              <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: '0.5rem' }}>
                 Enter months in any order. The 3 entries immediately before the test date will be used for T-3 interest calculation.
               </div>
             </div>
@@ -2816,18 +2816,18 @@ Req: ${formatCurrency(r.requiredNOI)}`,
               setF('oneTimeExpenseMonths', arr);
             };
             return (
-              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: '#16191f', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #6a9e7f' }}>
-                <div style={{ fontSize: '0.58rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#6a9e7f', marginBottom: '0.75rem', fontWeight: 600 }}>NOI Adjustments</div>
+              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)', borderLeft: '3px solid var(--pass)' }}>
+                <div style={{ fontSize: '0.58rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--pass)', marginBottom: '0.75rem', fontWeight: 600 }}>NOI Adjustments</div>
 
                 {/* Section: Less Actual Early Term — one per income month */}
                 <div style={{ marginBottom: '0.85rem' }}>
-                  <div style={{ fontSize: '0.62rem', color: '#9aa0aa', fontWeight: 600, marginBottom: '0.35rem' }}>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
                     Less: Actual Early Term Income — per trailing income month ($)
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: `repeat(${nInc}, 1fr)`, gap: '0.5rem' }}>
                     {Array.from({ length: nInc }, (_, idx) => (
                       <div key={idx}>
-                        <label style={{ ...labelStyle, color: '#6a7080' }}>{monthLabel(idx)}</label>
+                        <label style={{ ...labelStyle, color: 'var(--faint2)' }}>{monthLabel(idx)}</label>
                         <input type="number" min="0"
                           value={(form.actualEarlyTermMonths || [])[idx] ?? ''}
                           placeholder="0"
@@ -2840,13 +2840,13 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                 {/* Section: Less One-Time Expenses — one per expense month */}
                 <div style={{ marginBottom: '0.85rem' }}>
-                  <div style={{ fontSize: '0.62rem', color: '#9aa0aa', fontWeight: 600, marginBottom: '0.35rem' }}>
+                  <div style={{ fontSize: '0.62rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
                     Less: One-Time Expenses — per trailing expense month ($)
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: `repeat(${nExp}, 1fr)`, gap: '0.5rem' }}>
                     {Array.from({ length: nExp }, (_, idx) => (
                       <div key={idx}>
-                        <label style={{ ...labelStyle, color: '#6a7080' }}>{monthLabel(idx)}</label>
+                        <label style={{ ...labelStyle, color: 'var(--faint2)' }}>{monthLabel(idx)}</label>
                         <input type="number" min="0"
                           value={(form.oneTimeExpenseMonths || [])[idx] ?? ''}
                           placeholder="0"
@@ -2858,18 +2858,18 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 </div>
 
                 {/* Fixed fields */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid #2e3340' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
                   <div>
                     <label style={labelStyle}>Add: Standardized Early Term (monthly $)</label>
                     <input type="number" value={form.stdEarlyTerm ?? ''} placeholder="e.g. 40250" min="0"
                       onChange={e => setF('stdEarlyTerm', e.target.value)} style={inputStyle} />
-                    <div style={{ fontSize: '0.6rem', color: '#4a4f5a', marginTop: '0.2rem' }}>T-12 normalized avg — added back to adj income avg</div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--faint)', marginTop: '0.2rem' }}>T-12 normalized avg — added back to adj income avg</div>
                   </div>
                   <div>
                     <label style={labelStyle}>Add: Replacement Reserves (monthly $)</label>
                     <input type="number" value={form.replacementReserves ?? ''} placeholder="e.g. 52979" min="0"
                       onChange={e => setF('replacementReserves', e.target.value)} style={inputStyle} />
-                    <div style={{ fontSize: '0.6rem', color: '#4a4f5a', marginTop: '0.2rem' }}>Fixed monthly reserve — added to adj expense avg</div>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--faint)', marginTop: '0.2rem' }}>Fixed monthly reserve — added to adj expense avg</div>
                   </div>
                 </div>
               </div>
@@ -2881,7 +2881,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <input type="text" value={form.note || ''} placeholder="e.g. NOI: T1 Dec 2026 annualized"
               onChange={e => setF('note', e.target.value)} style={inputStyle} />
           </div>
-          <button onClick={saveForm} style={{ padding: '6px 20px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, background: '#c87941', color: '#fff' }}>
+          <button onClick={saveForm} style={{ padding: '6px 20px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, background: 'var(--accent)', color: '#fff' }}>
             {editId !== null ? 'Save Changes' : 'Add Property'}
           </button>
         </div>
@@ -2892,20 +2892,20 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
             <thead>
-              <tr style={{ background: '#13151a', borderBottom: '2px solid #2e3340' }}>
+              <tr style={{ background: 'var(--panel2)', borderBottom: '2px solid var(--border)' }}>
                 {/* Test Date — always visible, far left */}
-                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Test Date</th>
-                {col('testType')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Type</th>}
-                {col('property')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Property / Lender</th>}
-                {col('covenant')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Requirement</th>}
-                {col('noiPeriods') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Periods</th>}
-                {col('rate')       && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Rate</th>}
-                {col('result')     && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Our Calc → Req</th>}
-                {col('priorResult') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Prior Test</th>}
-                {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Annual NOI</th>}
-                {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Variance</th>}
-                {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, whiteSpace: 'nowrap' }}>Paydown</th>}
-                {col('dfPaydown') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#c8cdd6', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown ({dfMode === 'dy' ? `${dfDYAsIs}% as-is / ${dfDYStab}% stab` : `${dfDSCR}x DSCR`})</th>}
+                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Test Date</th>
+                {col('testType')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Type</th>}
+                {col('property')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Property / Lender</th>}
+                {col('covenant')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Requirement</th>}
+                {col('noiPeriods') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Periods</th>}
+                {col('rate')       && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Rate</th>}
+                {col('result')     && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Our Calc → Req</th>}
+                {col('priorResult') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Prior Test</th>}
+                {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Annual NOI</th>}
+                {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Variance</th>}
+                {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Paydown</th>}
+                {col('dfPaydown') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown ({dfMode === 'dy' ? `${dfDYAsIs}% as-is / ${dfDYStab}% stab` : `${dfDSCR}x DSCR`})</th>}
                 <th style={{ padding: '0.65rem 0.4rem' }}></th>
               </tr>
             </thead>
@@ -2914,23 +2914,23 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 const days = daysUntil(r.covenantDate);
                 const isUrgent = days !== null && days <= 30 && days >= 0;
                 const isPast = days !== null && days < 0;
-                const metColor = r.satisfied ? '#6a9e7f' : '#c47474';
-                const dateColor = isUrgent ? '#8a7a42' : isPast ? '#c47474' : '#c8cdd6';
+                const metColor = r.satisfied ? 'var(--pass)' : 'var(--fail)';
+                const dateColor = isUrgent ? 'var(--warn)' : isPast ? 'var(--fail)' : 'var(--text2)';
                 const delta = r.currentVal - r.covenantReq;
                 const isFundRow = r.isFund || r.property === '2022 Fund';
                 const fundProps = r.fundProperties || [];
                 return (
                   <React.Fragment key={r.id}>
-                  <tr style={{ background: i % 2 === 0 ? 'transparent' : '#13151a', borderBottom: isFundRow && expandedFund ? 'none' : '1px solid #16191f', opacity: r.hidden ? 0.5 : 1 }}>
+                  <tr style={{ background: i % 2 === 0 ? 'transparent' : 'var(--panel2)', borderBottom: isFundRow && expandedFund ? 'none' : '1px solid var(--bg)', opacity: r.hidden ? 0.5 : 1 }}>
 
                     {/* ── Test Date — always first ── */}
-                    <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap', borderRight: '1px solid #2e3340' }}>
+                    <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 700, color: dateColor }}>
                         {isUrgent ? '⚠ ' : isPast ? '✗ ' : ''}{fmtDate(r.covenantDate)}
                       </div>
-                      {r.hidden && <div style={{ display: 'inline-block', marginTop: '0.25rem', padding: '1px 6px', borderRadius: 2, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.08em', background: 'rgba(154,160,170,0.15)', color: '#9aa0aa' }}>HIDDEN</div>}
+                      {r.hidden && <div style={{ display: 'inline-block', marginTop: '0.25rem', padding: '1px 6px', borderRadius: 2, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.08em', background: 'rgba(154,160,170,0.15)', color: 'var(--muted)' }}>HIDDEN</div>}
                       {days !== null && (
-                        <div style={{ fontSize: '0.65rem', color: isUrgent ? '#8a7a42' : isPast ? '#c4747455' : '#4a4f5a' }}>
+                        <div style={{ fontSize: '0.65rem', color: isUrgent ? 'var(--warn)' : isPast ? 'color-mix(in srgb, var(--fail) 33%, transparent)' : 'var(--faint)' }}>
                           {isPast ? `${Math.abs(days)}d ago` : `${days}d away`}
                         </div>
                       )}
@@ -2943,8 +2943,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                           display: 'inline-block', padding: '2px 10px', borderRadius: 2,
                           fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em',
                           background: r.testType === 'Maturity' ? 'rgba(167,139,250,0.18)' : 'rgba(224,92,32,0.18)',
-                          color: r.testType === 'Maturity' ? '#c8cdd6' : '#c87941',
-                          border: r.testType === 'Maturity' ? '1px solid #c8cdd644' : '1px solid #c8794144',
+                          color: r.testType === 'Maturity' ? 'var(--text2)' : 'var(--accent)',
+                          border: r.testType === 'Maturity' ? '1px solid color-mix(in srgb, var(--text2) 27%, transparent)' : '1px solid color-mix(in srgb, var(--accent) 27%, transparent)',
                         }}>{r.testType || 'Covenant'}</span>
                       </td>
                     )}
@@ -2954,25 +2954,25 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       <td style={{ padding: '0.65rem 0.75rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                           {isFundRow && (
-                            <button onClick={() => setExpandedFund(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c87941', fontSize: '0.7rem', padding: '0 2px', lineHeight: 1 }} title="Expand properties">
+                            <button onClick={() => setExpandedFund(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '0.7rem', padding: '0 2px', lineHeight: 1 }} title="Expand properties">
                               {expandedFund ? '▼' : '▶'}
                             </button>
                           )}
                           <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.85rem' }}>{r.property}</div>
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: '#9aa0aa', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.lender}</div>
-                        <div style={{ fontSize: '0.7rem', color: '#4a4f5a', marginLeft: isFundRow ? '1.1rem' : 0 }}>{formatCurrency(r.loanAmount)}</div>
-                        {r.note && <div style={{ fontSize: '0.63rem', color: '#8a7a42', marginTop: '0.2rem', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.note}</div>}
+                        <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.lender}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--faint)', marginLeft: isFundRow ? '1.1rem' : 0 }}>{formatCurrency(r.loanAmount)}</div>
+                        {r.note && <div style={{ fontSize: '0.63rem', color: 'var(--warn)', marginTop: '0.2rem', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.note}</div>}
                       </td>
                     )}
 
                     {/* ── Requirement + Pass/Fail ── */}
                     {col('covenant') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.78rem', color: '#c8cdd6', fontWeight: 600 }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text2)', fontWeight: 600 }}>
                           {r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x DSCR` : `${r.covenantReq.toFixed(2)}% DY`}
                         </div>
-                        <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: r.waived ? 'rgba(106,158,127,0.15)' : r.satisfied ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: r.waived ? '#6a9e7f' : r.satisfied ? '#6a9e7f' : '#c47474', fontStyle: r.waived ? 'italic' : 'normal' }}>
+                        <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: r.waived ? 'rgba(106,158,127,0.15)' : r.satisfied ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: r.waived ? 'var(--pass)' : r.satisfied ? 'var(--pass)' : 'var(--fail)', fontStyle: r.waived ? 'italic' : 'normal' }}>
                           {r.waived ? '◐ WAIVED' : r.satisfied ? '✓ PASS' : '✗ FAIL'}
                         </span>
                       </td>
@@ -2981,23 +2981,23 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     {/* ── NOI Periods ── */}
                     {col('noiPeriods') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>Inc: <strong style={{ color: '#c8cdd6' }}>T{r.incomeMonths}</strong></div>
-                        <div style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>Exp: <strong style={{ color: '#c8cdd6' }}>T{r.expenseMonths}</strong></div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Inc: <strong style={{ color: 'var(--text2)' }}>T{r.incomeMonths}</strong></div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Exp: <strong style={{ color: 'var(--text2)' }}>T{r.expenseMonths}</strong></div>
                       </td>
                     )}
 
                     {/* ── Rate ── */}
                     {col('rate') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#c87941', fontWeight: 600 }}>{(r.rate*100).toFixed(3)}%</div>
-                        <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600 }}>{(r.rate*100).toFixed(3)}%</div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>
                           {r.rateWinner
                             ? (r.rateWinner.label === 'SOFR'        ? `SOFR +${r.spread}%`
                               : r.rateWinner.label === '10 Year'    ? `10yr +${r.spread10y}%`
                               : `Sizing: ${r.sizingRate}%`)
                             : `${(r.sofr*100).toFixed(3)}% + ${r.spread}%`}
                         </div>
-                        <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>{r.amort === 0 ? 'I/O' : `${r.amort}yr`}</div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>{r.amort === 0 ? 'I/O' : `${r.amort}yr`}</div>
                       </td>
                     )}
 
@@ -3008,12 +3008,12 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                           <span style={{ fontSize: '1rem', fontWeight: 700, color: metColor }}>
                             {r.covenantType === 'dscr' ? r.currentVal.toFixed(3)+'x' : r.currentVal.toFixed(2)+'%'}
                           </span>
-                          <span style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>vs</span>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#9aa0aa' }}>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>vs</span>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--muted)' }}>
                             {r.covenantType === 'dscr' ? r.covenantReq.toFixed(2)+'x' : r.covenantReq.toFixed(2)+'%'}
                           </span>
                         </div>
-                        <span style={{ display: 'inline-block', marginTop: '0.2rem', padding: '1px 7px', borderRadius: 2, fontSize: '0.72rem', fontWeight: 600, background: delta >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: delta >= 0 ? '#6a9e7f' : '#c47474' }}>
+                        <span style={{ display: 'inline-block', marginTop: '0.2rem', padding: '1px 7px', borderRadius: 2, fontSize: '0.72rem', fontWeight: 600, background: delta >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: delta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
                           {delta >= 0 ? '+' : ''}{r.covenantType === 'dscr' ? delta.toFixed(3)+'x' : delta.toFixed(2)+'%'}
                         </span>
                       </td>
@@ -3031,7 +3031,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       }
                       if (!prior) return (
                         <td style={{ padding: '0.65rem 0.75rem' }}>
-                          <span style={{ fontSize: '0.7rem', color: '#2e3340' }}>—</span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--border)' }}>—</span>
                         </td>
                       );
                       const priorVal = parseFloat(prior.result);
@@ -3044,16 +3044,16 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       return (
                         <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: priorPass ? '#6a9e7f' : '#c47474' }}>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: priorPass ? 'var(--pass)' : 'var(--fail)' }}>
                               {r.covenantType === 'dscr' ? priorVal.toFixed(3)+'x' : priorVal.toFixed(2)+'%'}
                             </span>
                             {trend !== null && (
-                              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: trend >= 0 ? '#6a9e7f' : '#c47474' }}>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: trend >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
                                 {trend >= 0 ? '▲' : '▼'}{r.covenantType === 'dscr' ? Math.abs(trend).toFixed(3)+'x' : Math.abs(trend).toFixed(2)+'%'}
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginTop: '0.15rem' }}>{priorLabel}</div>
+                          <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: '0.15rem' }}>{priorLabel}</div>
                         </td>
                       );
                     })()}
@@ -3061,15 +3061,15 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     {/* ── Annual NOI ── */}
                     {col('noi') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#c8cdd6', fontWeight: 600 }}>{formatCurrency(r.noi)}</div>
-                        <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>Req: {formatCurrency(r.requiredNOI)}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 600 }}>{formatCurrency(r.noi)}</div>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>Req: {formatCurrency(r.requiredNOI)}</div>
                       </td>
                     )}
 
                     {/* ── NOI Variance ── */}
                     {col('noiVariance') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.75rem', fontWeight: 600, background: r.noiVariance >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: r.noiVariance >= 0 ? '#6a9e7f' : '#c47474' }}>
+                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.75rem', fontWeight: 600, background: r.noiVariance >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: r.noiVariance >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
                           {r.noiVariance >= 0 ? '+' : ''}{formatCurrency(r.noiVariance)}
                         </span>
                       </td>
@@ -3081,15 +3081,15 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       const isOverridden = disp !== null && disp !== undefined;
                       const overrideTip = isOverridden ? 'Click to cycle (overridden)' : 'Click to override display';
                       function paydownContent() {
-                        if (r.waived) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#6a9e7f', fontStyle: 'italic' }}>Waived</span>;
-                        if (disp === 'TBD') return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
-                        if (disp === 'dash') return <span style={{ fontSize: '0.85rem', color: '#4a4f5a' }}>—</span>;
+                        if (r.waived) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--pass)', fontStyle: 'italic' }}>Waived</span>;
+                        if (disp === 'TBD') return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
+                        if (disp === 'dash') return <span style={{ fontSize: '0.85rem', color: 'var(--faint)' }}>—</span>;
                         if (r.paydown > 0) {
                           if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999)
-                            return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
-                          return <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c87941' }}>{formatCurrency(r.paydown)}</div>;
+                            return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
+                          return <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent)' }}>{formatCurrency(r.paydown)}</div>;
                         }
-                        return <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>;
+                        return <span style={{ fontSize: '0.75rem', color: 'var(--pass)' }}>None</span>;
                       }
                       return (
                         <td style={{ padding: '0.65rem 0.75rem' }}>
@@ -3099,7 +3099,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                               style={{ cursor: 'pointer' }}
                               title={overrideTip}
                             >{paydownContent()}</span>
-                            {isOverridden && <span title="Display overridden — click value to cycle" style={{ width: 5, height: 5, borderRadius: '50%', background: '#c87941', display: 'inline-block', flexShrink: 0 }} />}
+                            {isOverridden && <span title="Display overridden — click value to cycle" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', flexShrink: 0 }} />}
                           </div>
                         </td>
                       );
@@ -3141,16 +3141,16 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       function renderCell(paydown, noi, sublabel) {
                         // Check override first
                         const disp = r.paydownDisplay;
-                        if (disp === 'TBD') return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
-                        if (disp === 'dash') return <span style={{ fontSize: '0.85rem', color: '#4a4f5a' }}>—</span>;
-                        if (isTBD) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
-                        if (!noi || noi <= 0) return <span style={{ fontSize: '0.75rem', color: '#4a4f5a' }}>No NOI</span>;
-                        if (paydown >= loan * 0.999) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c47474' }}>TBD</span>;
-                        if (paydown <= 0) return <span style={{ fontSize: '0.75rem', color: '#6a9e7f' }}>None</span>;
+                        if (disp === 'TBD') return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
+                        if (disp === 'dash') return <span style={{ fontSize: '0.85rem', color: 'var(--faint)' }}>—</span>;
+                        if (isTBD) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
+                        if (!noi || noi <= 0) return <span style={{ fontSize: '0.75rem', color: 'var(--faint)' }}>No NOI</span>;
+                        if (paydown >= loan * 0.999) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
+                        if (paydown <= 0) return <span style={{ fontSize: '0.75rem', color: 'var(--pass)' }}>None</span>;
                         return (
                           <div>
-                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c8cdd6' }}>{formatCurrency(paydown)}</div>
-                            <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginTop: 1 }}>{sublabel}</div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text2)' }}>{formatCurrency(paydown)}</div>
+                            <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: 1 }}>{sublabel}</div>
                           </div>
                         );
                       }
@@ -3175,7 +3175,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                   style={{ cursor: 'pointer' }}
                                   title={isOverridden ? 'Click to cycle (overridden)' : 'Click to override display'}
                                 >{renderCell(paydownWinner, noiWinner, labelWinner)}</span>
-                                {isOverridden && <span title="Display overridden — click value to cycle" style={{ width: 5, height: 5, borderRadius: '50%', background: '#c87941', display: 'inline-block', flexShrink: 0 }} />}
+                                {isOverridden && <span title="Display overridden — click value to cycle" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', flexShrink: 0 }} />}
                               </div>
                             </td>
                           )}
@@ -3185,11 +3185,11 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                     {/* ── Actions ── */}
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#9aa0aa' : '#2a2d35', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
-                      <button onClick={() => requirePin(() => toggleHidden(r.id, r.hidden))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? (r.hidden ? '#6a9e7f' : '#9aa0aa') : '#2a2d35', fontSize: '0.78rem', padding: '2px 5px' }} title={pinUnlocked ? (r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)') : 'Unlock to hide'}>{r.hidden ? '↩' : '⊘'}</button>
-                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? '#c4747444' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
-                      <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? '#c87941' : '#4a4f5a' }} title="Show calculation">∑</button>
-                      <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? '#6a9e7f' : '#4a4f5a' }} title="History &amp; notes">⏱</button>
+                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'var(--muted)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
+                      <button onClick={() => requirePin(() => toggleHidden(r.id, r.hidden))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? (r.hidden ? 'var(--pass)' : 'var(--muted)') : 'var(--disabled)', fontSize: '0.78rem', padding: '2px 5px' }} title={pinUnlocked ? (r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)') : 'Unlock to hide'}>{r.hidden ? '↩' : '⊘'}</button>
+                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'color-mix(in srgb, var(--fail) 27%, transparent)' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
+                      <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? 'var(--accent)' : 'var(--faint)' }} title="Show calculation">∑</button>
+                      <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? 'var(--pass)' : 'var(--faint)' }} title="History &amp; notes">⏱</button>
                     </td>
                   </tr>
 
@@ -3200,26 +3200,26 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     const dyActual = (r.noi / (r.effectiveLoan || r.loanAmount)) * 100;
                     return (
                       <tr>
-                        <td colSpan={colCount} style={{ padding: 0, background: '#16191f' }}>
-                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: '#1e2128', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #c87941' }}>
-                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#c87941', marginBottom: '0.75rem', fontWeight: 600 }}>Calculation Breakdown — {r.property}</div>
+                        <td colSpan={colCount} style={{ padding: 0, background: 'var(--bg)' }}>
+                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: 'var(--panel)', borderRadius: 4, border: '1px solid var(--border)', borderLeft: '3px solid var(--accent)' }}>
+                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '0.75rem', fontWeight: 600 }}>Calculation Breakdown — {r.property}</div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem 1.5rem' }}>
 
                               {/* Inputs */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Inputs</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Inputs</div>
                                 {r.variableLoan && r.loanCommitment
                                   ? <MathLine label="Commitment" value={formatCurrency(r.loanCommitment)} />
                                   : <MathLine label="Loan Amount" value={formatCurrency(r.loanAmount)} />}
                                 {r.variableLoan && r.effectiveLoan && r.effectiveLoan !== r.loanAmount &&
-                                  <MathLine label="Drawn Balance (latest)" value={formatCurrency(r.effectiveLoan)} color="#c87941" />}
+                                  <MathLine label="Drawn Balance (latest)" value={formatCurrency(r.effectiveLoan)} color="var(--accent)" />}
                                 <MathLine label="NOI" value={formatCurrency(r.noi)} />
                                 <MathLine label="Amortization" value={r.variableLoan ? 'I/O (variable balance)' : r.amort === 0 ? 'I/O' : `${r.amort} years`} />
                               </div>
 
                               {/* What-if NOI */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>What-if NOI</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>What-if NOI</div>
                                 {(() => {
                                   const wiRaw = whatIfNOI[r.id];
                                   const wiNOI = wiRaw !== undefined && wiRaw !== '' ? parseFloat(wiRaw) : null;
@@ -3237,16 +3237,16 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                         value={wiRaw ?? ''}
                                         placeholder={`Current: ${formatCurrency(r.noi)}`}
                                         onChange={e => setWhatIfNOI(prev => ({ ...prev, [r.id]: e.target.value }))}
-                                        style={{ width: '100%', background: '#16191f', border: '1px solid #2e3340', borderRadius: 2, color: '#e8eaed', padding: '4px 6px', fontSize: '0.75rem', fontFamily: 'inherit', marginBottom: '0.4rem', boxSizing: 'border-box' }}
+                                        style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text)', padding: '4px 6px', fontSize: '0.75rem', fontFamily: 'inherit', marginBottom: '0.4rem', boxSizing: 'border-box' }}
                                       />
                                       {wiVal !== null && !isNaN(wiVal) && (
                                         <div>
                                           <MathLine
                                             label={r.covenantType === 'dscr' ? 'What-if DSCR' : 'What-if DY'}
                                             value={r.covenantType === 'dscr' ? `${wiVal.toFixed(4)}x` : `${wiVal.toFixed(4)}%`}
-                                            color={wiSatisfied ? '#6a9e7f' : '#c47474'}
+                                            color={wiSatisfied ? 'var(--pass)' : 'var(--fail)'}
                                           />
-                                          <div style={{ borderTop: '1px solid #1a1d24', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
+                                          <div style={{ borderTop: '1px solid var(--panel3)', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
                                             {thresholds.map(t => {
                                               const noiNeeded = r.covenantType === 'dscr' ? t.req * r.ads : (t.req / 100) * (r.effectiveLoan || r.loanAmount);
                                               const delta = wiNOI - noiNeeded;
@@ -3255,7 +3255,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                                   label={`NOI for ${t.label}`}
                                                   value={formatCurrency(noiNeeded)}
                                                   eq={`${delta >= 0 ? '+' : ''}${formatCurrency(delta)}`}
-                                                  color={delta >= 0 ? '#6a9e7f' : '#c47474'}
+                                                  color={delta >= 0 ? 'var(--pass)' : 'var(--fail)'}
                                                 />
                                               );
                                             })}
@@ -3264,7 +3264,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                       )}
                                       {wiRaw !== undefined && wiRaw !== '' && (
                                         <button onClick={() => setWhatIfNOI(prev => { const n = {...prev}; delete n[r.id]; return n; })}
-                                          style={{ fontSize: '0.6rem', color: '#4a4f5a', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: '0.2rem' }}>
+                                          style={{ fontSize: '0.6rem', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: '0.2rem' }}>
                                           ✕ Clear
                                         </button>
                                       )}
@@ -3275,17 +3275,17 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                               {/* Rate Prongs */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Rate Selection (highest wins)</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Rate Selection (highest wins)</div>
                                 {r.rateCandidates ? r.rateCandidates.map((c, i) => {
                                   const isWinner = c.label === r.rateWinner?.label;
                                   return (
                                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                                      <span style={{ fontSize: '0.68rem', color: isWinner ? '#c87941' : '#9aa0aa', whiteSpace: 'nowrap' }}>
+                                      <span style={{ fontSize: '0.68rem', color: isWinner ? 'var(--accent)' : 'var(--muted)', whiteSpace: 'nowrap' }}>
                                         {isWinner ? '▶ ' : '  '}{c.label}
                                       </span>
                                       <div style={{ textAlign: 'right' }}>
-                                        <span style={{ fontSize: '0.75rem', fontWeight: isWinner ? 700 : 400, color: isWinner ? '#c87941' : '#4a4f5a' }}>{(c.rate*100).toFixed(4)}%</span>
-                                        <div style={{ fontSize: '0.6rem', color: '#4a4f5a' }}>{c.detail}</div>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: isWinner ? 700 : 400, color: isWinner ? 'var(--accent)' : 'var(--faint)' }}>{(c.rate*100).toFixed(4)}%</span>
+                                        <div style={{ fontSize: '0.6rem', color: 'var(--faint)' }}>{c.detail}</div>
                                       </div>
                                     </div>
                                   );
@@ -3296,17 +3296,17 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                     <MathLine label="All-in Rate" value={`${(r.rate * 100).toFixed(4)}%`} eq="SOFR + Spread" />
                                   </>
                                 )}
-                                <div style={{ borderTop: '1px solid #2e3340', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
-                                  <MathLine label="Covenant Rate" value={`${(r.rate*100).toFixed(4)}%`} color="#c87941" />
+                                <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
+                                  <MathLine label="Covenant Rate" value={`${(r.rate*100).toFixed(4)}%`} color="var(--accent)" />
                                 </div>
                               </div>
 
                               {/* Debt Service */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Debt Service</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Debt Service</div>
                                 {r.variableLoan && r.variableLoanDetail ? (
                                   <>
-                                    <div style={{ fontSize: '0.6rem', color: '#c87941', marginBottom: '0.3rem', fontWeight: 600 }}>T-3 Rolling Interest</div>
+                                    <div style={{ fontSize: '0.6rem', color: 'var(--accent)', marginBottom: '0.3rem', fontWeight: 600 }}>T-3 Rolling Interest</div>
                                     {r.variableLoanDetail.months.map((m, i) => {
                                       const label = m.date instanceof Date
                                         ? m.date.toLocaleString('default', { month: 'short', year: 'numeric' })
@@ -3317,9 +3317,9 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                           eq={`${formatCurrency(m.balance)} × ${(m.rate*100).toFixed(3)}% / 12`} />
                                       );
                                     })}
-                                    <div style={{ borderTop: '1px solid #2e3340', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
+                                    <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
                                       <MathLine label="Avg Monthly Interest" value={formatCurrency(r.variableLoanDetail.annualizedADS / 12)} eq="sum ÷ 3 months" />
-                                      <MathLine label="Annualized DS (× 12)" value={formatCurrency(r.variableLoanDetail.annualizedADS)} color="#c87941" />
+                                      <MathLine label="Annualized DS (× 12)" value={formatCurrency(r.variableLoanDetail.annualizedADS)} color="var(--accent)" />
                                     </div>
                                   </>
                                 ) : r.amort === 0 ? (
@@ -3337,19 +3337,19 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                               {/* Covenant Result */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'Debt Yield'}</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'Debt Yield'}</div>
                                 {r.covenantType === 'dscr' ? (
                                   <>
                                     <MathLine label="DSCR" value={`${r.currentVal.toFixed(4)}x`} eq={`${formatCurrency(r.noi)} ÷ ${formatCurrency(r.ads)}`} />
                                     <MathLine label="Requirement" value={`${r.covenantReq.toFixed(2)}x`} />
-                                    <MathLine label="Variance" value={`${r.currentVal >= r.covenantReq ? '+' : ''}${(r.currentVal - r.covenantReq).toFixed(4)}x`} color={r.currentVal >= r.covenantReq ? '#6a9e7f' : '#c47474'} />
+                                    <MathLine label="Variance" value={`${r.currentVal >= r.covenantReq ? '+' : ''}${(r.currentVal - r.covenantReq).toFixed(4)}x`} color={r.currentVal >= r.covenantReq ? 'var(--pass)' : 'var(--fail)'} />
                                     <MathLine label="Required NOI" value={formatCurrency(r.requiredNOI)} eq={`${r.covenantReq}x × ${formatCurrency(r.ads)}`} />
                                   </>
                                 ) : (
                                   <>
                                     <MathLine label="Debt Yield" value={`${dyActual.toFixed(4)}%`} eq={`${formatCurrency(r.noi)} ÷ ${formatCurrency(r.loanAmount)}`} />
                                     <MathLine label="Requirement" value={`${r.covenantReq.toFixed(2)}%`} />
-                                    <MathLine label="Variance" value={`${dyActual >= r.covenantReq ? '+' : ''}${(dyActual - r.covenantReq).toFixed(4)}%`} color={dyActual >= r.covenantReq ? '#6a9e7f' : '#c47474'} />
+                                    <MathLine label="Variance" value={`${dyActual >= r.covenantReq ? '+' : ''}${(dyActual - r.covenantReq).toFixed(4)}%`} color={dyActual >= r.covenantReq ? 'var(--pass)' : 'var(--fail)'} />
                                     <MathLine label="Required NOI" value={formatCurrency(r.requiredNOI)} eq={`${r.covenantReq}% × ${formatCurrency(r.loanAmount)}`} />
                                   </>
                                 )}
@@ -3358,97 +3358,97 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                               {/* Paydown */}
                               {!r.satisfied && (
                                 <div>
-                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Paydown to Clear</div>
-                                  <MathLine label="NOI Shortfall" value={formatCurrency(r.noiVariance)} color="#c47474" />
-                                  <MathLine label="Required Paydown" value={r.paydown >= r.loanAmount * 0.999 ? 'TBD' : formatCurrency(r.paydown)} color="#c87941" />
+                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Paydown to Clear</div>
+                                  <MathLine label="NOI Shortfall" value={formatCurrency(r.noiVariance)} color="var(--fail)" />
+                                  <MathLine label="Required Paydown" value={r.paydown >= r.loanAmount * 0.999 ? 'TBD' : formatCurrency(r.paydown)} color="var(--accent)" />
                                   {r.paydown < r.loanAmount * 0.999 && <MathLine label="New Loan Balance" value={formatCurrency(r.loanAmount - r.paydown)} eq="after paydown" />}
                                   {r.covenantType === 'dscr' && r.paydown < r.loanAmount * 0.999 && (
-                                    <MathLine label="Verify DSCR" value={`${(r.noi / calcADS(r.loanAmount - r.paydown, r.rate, r.amort)).toFixed(4)}x`} eq="NOI ÷ new ADS" color="#6a9e7f" />
+                                    <MathLine label="Verify DSCR" value={`${(r.noi / calcADS(r.loanAmount - r.paydown, r.rate, r.amort)).toFixed(4)}x`} eq="NOI ÷ new ADS" color="var(--pass)" />
                                   )}
                                 </div>
                               )}
 
                               {/* NOI Calculation Detail */}
                               {r.noiDetail && (
-                                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #2e3340', paddingTop: '0.6rem', marginTop: '0.2rem' }}>
-                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: '#4a4f5a', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: '0.6rem', marginTop: '0.2rem' }}>
+                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
                                     NOI Build-up {r.noiDetail.fallback ? '— Dec fallback (2027 test date)' : ''}
                                   </div>
                                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
                                     {/* Income side */}
                                     <div>
-                                      <div style={{ fontSize: '0.62rem', color: '#6a9e7f', fontWeight: 600, marginBottom: '0.3rem' }}>Income (T{r.incomeMonths})</div>
+                                      <div style={{ fontSize: '0.62rem', color: 'var(--pass)', fontWeight: 600, marginBottom: '0.3rem' }}>Income (T{r.incomeMonths})</div>
                                       {r.noiDetail.incomeRows.map((row, i) => (
                                         <div key={i}>
                                           <MathLine label={row.label} value={formatCurrency(row.value)} />
                                           {row.earlyTermAdj > 0 && (
-                                            <MathLine label="  Less: Actual Early Term" value={`(${formatCurrency(row.earlyTermAdj)})`} color="#c47474" />
+                                            <MathLine label="  Less: Actual Early Term" value={`(${formatCurrency(row.earlyTermAdj)})`} color="var(--fail)" />
                                           )}
                                           {row.earlyTermAdj > 0 && (
-                                            <MathLine label="  Adj Income" value={formatCurrency(row.adjValue)} color="#9aa0aa" />
+                                            <MathLine label="  Adj Income" value={formatCurrency(row.adjValue)} color="var(--muted)" />
                                           )}
                                         </div>
                                       ))}
                                       {r.noiDetail.incomeRows.length > 1 && (
-                                        <MathLine label={r.noiDetail.hasAdj ? 'Adj Average' : 'Average'} value={formatCurrency(r.noiDetail.avgIncome)} color="#c8cdd6" />
+                                        <MathLine label={r.noiDetail.hasAdj ? 'Adj Average' : 'Average'} value={formatCurrency(r.noiDetail.avgIncome)} color="var(--text2)" />
                                       )}
-                                      <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgIncome * r.noiDetail.annualizer)} color="#6a9e7f" />
+                                      <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgIncome * r.noiDetail.annualizer)} color="var(--pass)" />
                                     </div>
                                     {/* Expense side */}
                                     <div>
-                                      <div style={{ fontSize: '0.62rem', color: '#c47474', fontWeight: 600, marginBottom: '0.3rem' }}>Expenses (T{r.expenseMonths})</div>
+                                      <div style={{ fontSize: '0.62rem', color: 'var(--fail)', fontWeight: 600, marginBottom: '0.3rem' }}>Expenses (T{r.expenseMonths})</div>
                                       {r.noiDetail.expenseRows.map((row, i) => (
                                         <div key={i}>
                                           <MathLine label={row.label} value={formatCurrency(row.value)} />
                                           {row.oneTimeAdj > 0 && (
-                                            <MathLine label="  Less: One-Time Expenses" value={`(${formatCurrency(row.oneTimeAdj)})`} color="#c47474" />
+                                            <MathLine label="  Less: One-Time Expenses" value={`(${formatCurrency(row.oneTimeAdj)})`} color="var(--fail)" />
                                           )}
                                           {row.oneTimeAdj > 0 && (
-                                            <MathLine label="  Adj Expense" value={formatCurrency(row.adjValue)} color="#9aa0aa" />
+                                            <MathLine label="  Adj Expense" value={formatCurrency(row.adjValue)} color="var(--muted)" />
                                           )}
                                         </div>
                                       ))}
                                       {r.noiDetail.expenseRows.length > 1 && (
-                                        <MathLine label={r.noiDetail.hasAdj ? 'Adj Average' : 'Average'} value={formatCurrency(r.noiDetail.avgExpense)} color="#c8cdd6" />
+                                        <MathLine label={r.noiDetail.hasAdj ? 'Adj Average' : 'Average'} value={formatCurrency(r.noiDetail.avgExpense)} color="var(--text2)" />
                                       )}
-                                      <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgExpense * r.noiDetail.annualizer)} color="#c47474" />
+                                      <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgExpense * r.noiDetail.annualizer)} color="var(--fail)" />
                                     </div>
                                   </div>
                                   {/* NOI Adjustments summary — fixed items */}
                                   {r.noiDetail.hasAdj && (
-                                    <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #2e3340', marginTop: '0.5rem', paddingTop: '0.5rem' }}>
-                                      <div style={{ fontSize: '0.62rem', color: '#6a9e7f', fontWeight: 600, marginBottom: '0.3rem' }}>NOI Adjustments</div>
+                                    <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', marginTop: '0.5rem', paddingTop: '0.5rem' }}>
+                                      <div style={{ fontSize: '0.62rem', color: 'var(--pass)', fontWeight: 600, marginBottom: '0.3rem' }}>NOI Adjustments</div>
                                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
                                         <div>
                                           {/* Per-month early term already shown inline in incomeRows; show avg adj income */}
-                                          {r.noiDetail.stdEarlyTerm !== 0 && <MathLine label="Add: Std Early Term (avg monthly)" value={formatCurrency(r.noiDetail.stdEarlyTerm)} color="#6a9e7f" />}
-                                          <MathLine label="Adj Avg Monthly Income" value={formatCurrency(r.noiDetail.adjIncome)} color="#c8cdd6" />
+                                          {r.noiDetail.stdEarlyTerm !== 0 && <MathLine label="Add: Std Early Term (avg monthly)" value={formatCurrency(r.noiDetail.stdEarlyTerm)} color="var(--pass)" />}
+                                          <MathLine label="Adj Avg Monthly Income" value={formatCurrency(r.noiDetail.adjIncome)} color="var(--text2)" />
                                         </div>
                                         <div>
                                           {/* Per-month one-time already shown inline in expenseRows; show reserves */}
-                                          {r.noiDetail.replacementReserves !== 0 && <MathLine label="Add: Replacement Reserves (monthly)" value={formatCurrency(r.noiDetail.replacementReserves)} color="#c47474" />}
-                                          <MathLine label="Adj Avg Monthly Expense" value={formatCurrency(r.noiDetail.adjExpense)} color="#c8cdd6" />
+                                          {r.noiDetail.replacementReserves !== 0 && <MathLine label="Add: Replacement Reserves (monthly)" value={formatCurrency(r.noiDetail.replacementReserves)} color="var(--fail)" />}
+                                          <MathLine label="Adj Avg Monthly Expense" value={formatCurrency(r.noiDetail.adjExpense)} color="var(--text2)" />
                                         </div>
                                       </div>
                                     </div>
                                   )}
 
                                   {/* Final NOI */}
-                                  <div style={{ borderTop: '1px solid #2e3340', marginTop: '0.5rem', paddingTop: '0.4rem' }}>
+                                  <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.5rem', paddingTop: '0.4rem' }}>
                                     <MathLine
                                       label={r.noiDetail.hasAdj ? 'Adjusted Annual NOI' : 'Annual NOI (Income − Expenses)'}
                                       value={formatCurrency(r.noi)}
                                       eq={r.noiDetail.hasAdj
                                         ? `(${formatCurrency(r.noiDetail.adjIncome)} − ${formatCurrency(r.noiDetail.adjExpense)}) × 12`
                                         : `${formatCurrency(r.noiDetail.avgIncome * r.noiDetail.annualizer)} − ${formatCurrency(r.noiDetail.avgExpense * r.noiDetail.annualizer)}`}
-                                      color="#c8cdd6"
+                                      color="var(--text2)"
                                     />
                                   </div>
                                 </div>
                               )}
                               {!r.noiDetail && (
-                                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid #2e3340', paddingTop: '0.5rem', marginTop: '0.2rem' }}>
-                                  <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>NOI detail not available — upload a forecast file to populate.</div>
+                                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: '0.5rem', marginTop: '0.2rem' }}>
+                                  <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>NOI detail not available — upload a forecast file to populate.</div>
                                 </div>
                               )}
 
@@ -3469,9 +3469,9 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     };
                     return (
                       <tr>
-                        <td colSpan={colCount} style={{ padding: 0, background: '#16191f' }}>
-                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: '#1e2128', borderRadius: 4, border: '1px solid #2e3340', borderLeft: '3px solid #6a9e7f' }}>
-                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: '#6a9e7f', marginBottom: '0.75rem', fontWeight: 600 }}>History &amp; Notes — {r.property}</div>
+                        <td colSpan={colCount} style={{ padding: 0, background: 'var(--bg)' }}>
+                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: 'var(--panel)', borderRadius: 4, border: '1px solid var(--border)', borderLeft: '3px solid var(--pass)' }}>
+                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--pass)', marginBottom: '0.75rem', fontWeight: 600 }}>History &amp; Notes — {r.property}</div>
 
                             {/* Add comment */}
                             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.85rem' }}>
@@ -3481,60 +3481,60 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                 placeholder="Add a note..."
                                 onChange={e => setNewComment(prev => ({ ...prev, [r.id]: e.target.value }))}
                                 onKeyDown={e => e.key === 'Enter' && saveComment(r.id)}
-                                style={{ flex: 1, background: '#16191f', border: '1px solid #2e3340', borderRadius: 2, color: '#e8eaed', padding: '5px 8px', fontSize: '0.75rem', fontFamily: 'inherit' }}
+                                style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text)', padding: '5px 8px', fontSize: '0.75rem', fontFamily: 'inherit' }}
                               />
-                              <button onClick={() => saveComment(r.id)} style={{ padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', background: '#6a9e7f', color: '#fff', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>Add</button>
+                              <button onClick={() => saveComment(r.id)} style={{ padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', background: 'var(--pass)', color: '#fff', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>Add</button>
                             </div>
 
                             {/* Events feed */}
-                            {events === null && <div style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>Loading...</div>}
-                            {events !== null && events.length === 0 && <div style={{ fontSize: '0.7rem', color: '#4a4f5a' }}>No history yet — will record automatically on next save.</div>}
+                            {events === null && <div style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>Loading...</div>}
+                            {events !== null && events.length === 0 && <div style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>No history yet — will record automatically on next save.</div>}
                             {events !== null && events.length > 0 && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 320, overflowY: 'auto' }}>
                                 {events.map(ev => (
-                                  <div key={ev.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.5rem 0.65rem', background: '#16191f', borderRadius: 3, border: '1px solid #2e3340' }}>
+                                  <div key={ev.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.5rem 0.65rem', background: 'var(--bg)', borderRadius: 3, border: '1px solid var(--border)' }}>
                                     {/* Icon */}
-                                    <div style={{ fontSize: '0.75rem', marginTop: '0.05rem', flexShrink: 0, color: ev.type === 'comment' ? '#6a9e7f' : '#c87941' }}>
+                                    <div style={{ fontSize: '0.75rem', marginTop: '0.05rem', flexShrink: 0, color: ev.type === 'comment' ? 'var(--pass)' : 'var(--accent)' }}>
                                       {ev.type === 'comment' ? '💬' : '📸'}
                                     </div>
                                     {/* Content */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                      <div style={{ fontSize: '0.62rem', color: '#4a4f5a', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                      <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                         {fmtEvent(ev.created_at)}
                                         {ev.type === 'snapshot' && (
                                           isPriorBaseline(ev) ? (
                                             <span style={{
                                               fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
                                               padding: '1px 5px', borderRadius: 2,
-                                              background: 'rgba(106,158,127,0.18)', color: '#6a9e7f',
+                                              background: 'rgba(106,158,127,0.18)', color: 'var(--pass)',
                                             }}>Prior Test</span>
                                           ) : (
                                             <span style={{
                                               fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
                                               padding: '1px 5px', borderRadius: 2,
-                                              background: ev.is_monthly === false ? 'rgba(154,160,170,0.12)' : 'rgba(200,121,65,0.15)',
-                                              color: ev.is_monthly === false ? '#9aa0aa' : '#c87941',
+                                              background: ev.is_monthly === false ? 'rgba(154,160,170,0.12)' : 'rgba(99, 102, 241,0.15)',
+                                              color: ev.is_monthly === false ? 'var(--muted)' : 'var(--accent)',
                                             }}>{ev.is_monthly === false ? 'Interim' : 'Monthly'}</span>
                                           )
                                         )}
                                       </div>
                                       {ev.type === 'comment' ? (
-                                        <div style={{ fontSize: '0.75rem', color: '#c8cdd6' }}>{ev.comment}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text2)' }}>{ev.comment}</div>
                                       ) : (
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.2rem' }}>
-                                          <span style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>NOI <strong style={{ color: '#c8cdd6' }}>{formatCurrency(ev.noi)}</strong></span>
-                                          <span style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>Rate <strong style={{ color: '#c8cdd6' }}>{ev.rate ? `${(ev.rate * 100).toFixed(3)}%` : '—'}</strong></span>
-                                          <span style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'DY'} <strong style={{ color: ev.satisfied ? '#6a9e7f' : '#c47474' }}>{ev.result ? (r.covenantType === 'dscr' ? `${parseFloat(ev.result).toFixed(4)}x` : `${parseFloat(ev.result).toFixed(4)}%`) : '—'}</strong></span>
-                                          <span style={{ fontSize: '0.72rem', color: '#9aa0aa' }}>Req <strong style={{ color: '#c8cdd6' }}>{ev.covenant_req ? (r.covenantType === 'dscr' ? `${parseFloat(ev.covenant_req).toFixed(2)}x` : `${parseFloat(ev.covenant_req).toFixed(2)}%`) : '—'}</strong></span>
-                                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: ev.satisfied ? '#6a9e7f' : '#c47474' }}>{ev.satisfied ? '✓ Pass' : '✗ Fail'}</span>
+                                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>NOI <strong style={{ color: 'var(--text2)' }}>{formatCurrency(ev.noi)}</strong></span>
+                                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Rate <strong style={{ color: 'var(--text2)' }}>{ev.rate ? `${(ev.rate * 100).toFixed(3)}%` : '—'}</strong></span>
+                                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'DY'} <strong style={{ color: ev.satisfied ? 'var(--pass)' : 'var(--fail)' }}>{ev.result ? (r.covenantType === 'dscr' ? `${parseFloat(ev.result).toFixed(4)}x` : `${parseFloat(ev.result).toFixed(4)}%`) : '—'}</strong></span>
+                                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Req <strong style={{ color: 'var(--text2)' }}>{ev.covenant_req ? (r.covenantType === 'dscr' ? `${parseFloat(ev.covenant_req).toFixed(2)}x` : `${parseFloat(ev.covenant_req).toFixed(2)}%`) : '—'}</strong></span>
+                                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: ev.satisfied ? 'var(--pass)' : 'var(--fail)' }}>{ev.satisfied ? '✓ Pass' : '✗ Fail'}</span>
                                         </div>
                                       )}
                                     </div>
                                     {/* Delete */}
                                     <button onClick={() => { if (window.confirm('Delete this entry?')) deleteEvent(ev.id, r.id); }}
-                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2e3340', fontSize: '0.7rem', padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}
-                                      onMouseEnter={e => e.target.style.color = '#c47474'}
-                                      onMouseLeave={e => e.target.style.color = '#2e3340'}>✕</button>
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--border)', fontSize: '0.7rem', padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}
+                                      onMouseEnter={e => e.target.style.color = 'var(--fail)'}
+                                      onMouseLeave={e => e.target.style.color = 'var(--border)'}>✕</button>
                                   </div>
                                 ))}
                               </div>
@@ -3554,15 +3554,15 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     const fpADS = fpLoan ? calcADS(fpLoan, fpRate, r.amort) : null;
                     const fpDSCR = fpADS && fpADS > 0 ? fpNOI / fpADS : null;
                     const fpPassing = fpDSCR !== null ? fpDSCR >= r.covenantReq : null;
-                    const fpColor = fpDSCR === null ? '#4a4f5a' : fpPassing ? '#6a9e7f' : '#c47474';
+                    const fpColor = fpDSCR === null ? 'var(--faint)' : fpPassing ? 'var(--pass)' : 'var(--fail)';
                     const fpDelta = fpDSCR !== null ? fpDSCR - r.covenantReq : null;
                     const fpRequiredNOI = fpADS ? r.covenantReq * fpADS : null;
                     const fpVariance = fpRequiredNOI !== null ? fpNOI - fpRequiredNOI : null;
                     return (
-                    <tr key={`fund-${fi}`} style={{ background: '#13151a', borderBottom: fi === fundProps.length - 1 ? '2px solid #2e3340' : '1px solid #1e2128' }}>
+                    <tr key={`fund-${fi}`} style={{ background: 'var(--panel2)', borderBottom: fi === fundProps.length - 1 ? '2px solid var(--border)' : '1px solid var(--panel)' }}>
 
                       {/* Date cell — empty */}
-                      <td style={{ padding: '0.4rem 0.75rem', borderRight: '1px solid #2e3340' }}></td>
+                      <td style={{ padding: '0.4rem 0.75rem', borderRight: '1px solid var(--border)' }}></td>
 
                       {/* Type — empty */}
                       {col('testType') && <td></td>}
@@ -3571,10 +3571,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       {col('property') && (
                         <td style={{ padding: '0.5rem 0.75rem 0.5rem 1.5rem' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <div style={{ width: 1, height: 28, background: '#2e3340', flexShrink: 0 }}></div>
+                            <div style={{ width: 1, height: 28, background: 'var(--border)', flexShrink: 0 }}></div>
                             <div>
-                              <div style={{ fontSize: '0.8rem', color: '#c8cdd6', fontWeight: 600 }}>{fp.name}</div>
-                              <div style={{ fontSize: '0.68rem', color: '#4a4f5a' }}>{fpLoan ? formatCurrency(fpLoan) : 'Loan TBD'}</div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 600 }}>{fp.name}</div>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>{fpLoan ? formatCurrency(fpLoan) : 'Loan TBD'}</div>
                             </div>
                           </div>
                         </td>
@@ -3583,7 +3583,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       {/* Requirement + individual pass/fail */}
                       {col('covenant') && (
                         <td style={{ padding: '0.5rem 0.75rem' }}>
-                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: fpPassing === null ? 'rgba(74,79,90,0.2)' : fpPassing ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: fpPassing === null ? '#4a4f5a' : fpPassing ? '#6a9e7f' : '#c47474' }}>
+                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: fpPassing === null ? 'rgba(74,79,90,0.2)' : fpPassing ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: fpPassing === null ? 'var(--faint)' : fpPassing ? 'var(--pass)' : 'var(--fail)' }}>
                             {fpPassing === null ? '—' : fpPassing ? '✓ PASS' : '✗ FAIL'}
                           </span>
                         </td>
@@ -3602,22 +3602,22 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                             <>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                                 <span style={{ fontSize: '0.95rem', fontWeight: 700, color: fpColor }}>{fpDSCR.toFixed(3)}x</span>
-                                <span style={{ fontSize: '0.65rem', color: '#4a4f5a' }}>vs</span>
-                                <span style={{ fontSize: '0.78rem', color: '#9aa0aa' }}>{r.covenantReq.toFixed(2)}x</span>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--faint)' }}>vs</span>
+                                <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{r.covenantReq.toFixed(2)}x</span>
                               </div>
-                              <span style={{ display: 'inline-block', marginTop: '0.15rem', padding: '1px 6px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 600, background: fpDelta >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: fpDelta >= 0 ? '#6a9e7f' : '#c47474' }}>
+                              <span style={{ display: 'inline-block', marginTop: '0.15rem', padding: '1px 6px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 600, background: fpDelta >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: fpDelta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
                                 {fpDelta >= 0 ? '+' : ''}{fpDelta.toFixed(3)}x
                               </span>
                             </>
-                          ) : <span style={{ color: '#4a4f5a', fontSize: '0.75rem' }}>—</span>}
+                          ) : <span style={{ color: 'var(--faint)', fontSize: '0.75rem' }}>—</span>}
                         </td>
                       )}
 
                       {/* Individual NOI */}
                       {col('noi') && (
                         <td style={{ padding: '0.5rem 0.75rem' }}>
-                          <div style={{ fontSize: '0.78rem', color: '#c8cdd6', fontWeight: 600 }}>{fpNOI ? formatCurrency(fpNOI) : '—'}</div>
-                          {fpRequiredNOI && <div style={{ fontSize: '0.65rem', color: '#4a4f5a' }}>Req: {formatCurrency(fpRequiredNOI)}</div>}
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text2)', fontWeight: 600 }}>{fpNOI ? formatCurrency(fpNOI) : '—'}</div>
+                          {fpRequiredNOI && <div style={{ fontSize: '0.65rem', color: 'var(--faint)' }}>Req: {formatCurrency(fpRequiredNOI)}</div>}
                         </td>
                       )}
 
@@ -3625,10 +3625,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       {col('noiVariance') && (
                         <td style={{ padding: '0.5rem 0.75rem' }}>
                           {fpVariance !== null ? (
-                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.72rem', fontWeight: 600, background: fpVariance >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: fpVariance >= 0 ? '#6a9e7f' : '#c47474' }}>
+                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.72rem', fontWeight: 600, background: fpVariance >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: fpVariance >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
                               {fpVariance >= 0 ? '+' : ''}{formatCurrency(fpVariance)}
                             </span>
-                          ) : <span style={{ color: '#4a4f5a' }}>—</span>}
+                          ) : <span style={{ color: 'var(--faint)' }}>—</span>}
                         </td>
                       )}
 
@@ -3644,8 +3644,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             </tbody>
           </table>
         </div>
-        {rows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: '#4a4f5a', fontSize: '0.85rem' }}>No properties yet — click "+ Add Property" to get started</div>}
-        {rows.length > 0 && visibleRows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: '#4a4f5a', fontSize: '0.85rem' }}>All tests are hidden — click "Show Hidden" to view them.</div>}
+        {rows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--faint)', fontSize: '0.85rem' }}>No properties yet — click "+ Add Property" to get started</div>}
+        {rows.length > 0 && visibleRows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--faint)', fontSize: '0.85rem' }}>All tests are hidden — click "Show Hidden" to view them.</div>}
       </div>
 
       </div>
@@ -3908,10 +3908,10 @@ function PipelineTab() {
       background: bg, color, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{label}</span>
   );
   const statusBadge = (d) => {
-    if (d.committed)      return pill('COMMITTED',   '#6a9e7f', 'rgba(106,158,127,0.12)');
+    if (d.committed)      return pill('COMMITTED',   'var(--pass)', 'rgba(106,158,127,0.12)');
     if (d.book_published) return pill('BOOK OUT',    '#c8c05a', 'rgba(200,192,90,0.12)');
-    if (d.status==='active') return pill('IN PROCESS', TT_ORANGE, 'rgba(200,121,65,0.12)');
-    return pill('PIPELINE', '#6a7080', 'rgba(106,112,128,0.12)');
+    if (d.status==='active') return pill('IN PROCESS', TT_ORANGE, 'rgba(99, 102, 241,0.12)');
+    return pill('PIPELINE', 'var(--faint2)', 'rgba(106,112,128,0.12)');
   };
   const typeBadge = (d) => d.type === 'Perm/Bridge'
     ? pill('PERM/BRIDGE', '#9b8fc0', 'rgba(155,143,192,0.12)')
@@ -3919,11 +3919,11 @@ function PipelineTab() {
 
   // ── Input style helpers ────────────────────────────────────────────────────
   const inputSt = (extra = {}) => ({
-    background: '#13151a', border: '1px solid #2e3340', borderRadius: 3,
-    color: '#c8cdd6', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit',
+    background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3,
+    color: 'var(--text2)', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit',
     width: '100%', boxSizing: 'border-box', ...extra,
   });
-  const labelSt = { fontSize: '0.6rem', color: '#5a6070', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
+  const labelSt = { fontSize: '0.6rem', color: 'var(--faint3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
   const fieldSt = { marginBottom: '0.65rem' };
 
   // ── Summary stats ──────────────────────────────────────────────────────────
@@ -3943,7 +3943,7 @@ function PipelineTab() {
   });
 
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: '#4a4f5a', fontSize: '0.8rem' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: '0.8rem' }}>
       Loading pipeline data…
     </div>
   );
@@ -3954,10 +3954,10 @@ function PipelineTab() {
     const isNew = editId === 'new';
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2rem 1rem', overflowY: 'auto' }}>
-        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, width: '100%', maxWidth: 820, padding: '1.5rem' }}>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, width: '100%', maxWidth: 820, padding: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-            <span style={{ fontWeight: 700, color: '#c8cdd6', fontSize: '1rem' }}>{isNew ? 'Add Deal' : `Edit — ${editForm.name}`}</span>
-            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+            <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '1rem' }}>{isNew ? 'Add Deal' : `Edit — ${editForm.name}`}</span>
+            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.25rem' }}>
@@ -4020,14 +4020,14 @@ function PipelineTab() {
               )}
               <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.65rem' }}>
                 {[['book_published','Book Published'], ['committed','Committed']].map(([k, label]) => (
-                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.78rem', color: '#9aa0aa' }}>
+                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.78rem', color: 'var(--muted)' }}>
                     <input type="checkbox" checked={!!editForm[k]} onChange={e => setF(k, e.target.checked)}
                       style={{ width: 14, height: 14, accentColor: TT_ORANGE }} />
                     {label}
                   </label>
                 ))}
               </div>
-              <div style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid #2e3340' }}>
+              <div style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.75rem' }}>Budget</div>
                 {[
                   ['total_budget',      'Total Budget'],
@@ -4067,10 +4067,10 @@ function PipelineTab() {
               ))}
 
               {/* Unit Mix */}
-              <div style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid #2e3340', marginBottom: '0.5rem' }}>
+              <div style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)', marginBottom: '0.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.6rem', color: '#5a6070', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Unit Mix</span>
-                  <button onClick={addUnitType} style={{ background: 'none', border: '1px solid #2e3340', color: '#6a7080', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'inherit' }}>+ Row</button>
+                  <span style={{ fontSize: '0.6rem', color: 'var(--faint3)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Unit Mix</span>
+                  <button onClick={addUnitType} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--faint2)', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'inherit' }}>+ Row</button>
                 </div>
                 {(editForm.unit_mix || []).map((row, i) => (
                   <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: 4, marginBottom: 4, alignItems: 'center' }}>
@@ -4079,13 +4079,13 @@ function PipelineTab() {
                     <input style={inputSt({ fontSize: '0.68rem', padding: '3px 5px' })} placeholder="%" type="number" value={row.pct || ''} onChange={e => setUnitMixRow(i, 'pct', e.target.value)} />
                     <input style={inputSt({ fontSize: '0.68rem', padding: '3px 5px' })} placeholder="SF" type="number" value={row.avg_sf || ''} onChange={e => setUnitMixRow(i, 'avg_sf', e.target.value)} />
                     <input style={inputSt({ fontSize: '0.68rem', padding: '3px 5px' })} placeholder="Rent" type="number" value={row.market_rent || ''} onChange={e => setUnitMixRow(i, 'market_rent', e.target.value)} />
-                    <button onClick={() => removeUnitMixRow(i)} style={{ background: 'none', border: 'none', color: '#c47474', cursor: 'pointer', fontSize: '0.75rem', padding: '0 3px' }}>✕</button>
+                    <button onClick={() => removeUnitMixRow(i)} style={{ background: 'none', border: 'none', color: 'var(--fail)', cursor: 'pointer', fontSize: '0.75rem', padding: '0 3px' }}>✕</button>
                   </div>
                 ))}
               </div>
 
               {/* Highlights */}
-              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid #2e3340' }}>
+              <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.5rem' }}>Market Highlights</div>
                 <textarea style={{ ...inputSt(), height: 90, resize: 'vertical' }} value={editForm.highlights || ''} onChange={e => setF('highlights', e.target.value)} placeholder="Key market narrative…" />
               </div>
@@ -4093,9 +4093,9 @@ function PipelineTab() {
           </div>
 
           {/* ── Footer buttons ── */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #2e3340' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
             <button onClick={() => { setEditId(null); setEditForm(null); }}
-              style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>
+              style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>
               Cancel
             </button>
             <button onClick={saveDeal} disabled={saving}
@@ -4114,14 +4114,14 @@ function PipelineTab() {
     const deal = deals.find(d => d.id === confirmDel);
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ background: '#1e2128', border: '1px solid #c47474', borderRadius: 6, padding: '1.5rem', maxWidth: 380, width: '90%' }}>
-          <div style={{ fontWeight: 700, color: '#c8cdd6', marginBottom: '0.5rem' }}>Delete deal?</div>
-          <div style={{ fontSize: '0.8rem', color: '#9aa0aa', marginBottom: '1.25rem' }}>
-            <strong style={{ color: '#c8cdd6' }}>{deal?.name}</strong> will be permanently removed from the pipeline.
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--fail)', borderRadius: 6, padding: '1.5rem', maxWidth: 380, width: '90%' }}>
+          <div style={{ fontWeight: 700, color: 'var(--text2)', marginBottom: '0.5rem' }}>Delete deal?</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '1.25rem' }}>
+            <strong style={{ color: 'var(--text2)' }}>{deal?.name}</strong> will be permanently removed from the pipeline.
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-            <button onClick={() => setConfirmDel(null)} style={{ padding: '6px 16px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' }}>Cancel</button>
-            <button onClick={() => deleteDeal(confirmDel)} style={{ padding: '6px 16px', borderRadius: 3, border: 'none', background: '#c47474', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700 }}>Delete</button>
+            <button onClick={() => setConfirmDel(null)} style={{ padding: '6px 16px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' }}>Cancel</button>
+            <button onClick={() => deleteDeal(confirmDel)} style={{ padding: '6px 16px', borderRadius: 3, border: 'none', background: 'var(--fail)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700 }}>Delete</button>
           </div>
         </div>
       </div>
@@ -4138,11 +4138,11 @@ function PipelineTab() {
       {deals.length === 0 && (
         <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
           <div style={{ fontSize: '2rem', opacity: 0.3, marginBottom: '1rem' }}>🏗</div>
-          <div style={{ fontSize: '0.9rem', color: '#9aa0aa', fontWeight: 600, marginBottom: '0.5rem' }}>No deals yet</div>
-          <div style={{ fontSize: '0.75rem', color: '#4a4f5a', marginBottom: '1.5rem' }}>Start fresh or seed from the 2026 pipeline book</div>
+          <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.5rem' }}>No deals yet</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--faint)', marginBottom: '1.5rem' }}>Start fresh or seed from the 2026 pipeline book</div>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
             <button onClick={startNew} style={{ padding: '8px 20px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: 'pointer', fontWeight: 700, fontFamily: 'inherit', fontSize: '0.8rem' }}>+ Add Deal</button>
-            <button onClick={seedFromBook} disabled={saving} style={{ padding: '8px 20px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', opacity: saving ? 0.6 : 1 }}>
+            <button onClick={seedFromBook} disabled={saving} style={{ padding: '8px 20px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Seeding…' : '↓ Seed from Pipeline Book'}
             </button>
           </div>
@@ -4160,10 +4160,10 @@ function PipelineTab() {
             { label: 'Needs Lender',          value: needsLender,        sub: 'no lender assigned', warn: needsLender > 0 },
             { label: 'Next Close',            value: nextClose ? nextClose.name.split(',')[0] : '—', sub: nextClose ? fmtDate(nextClose.closing_date) : 'no upcoming dates' },
           ].map(c => (
-            <div key={c.label} style={{ background: '#1e2128', border: `1px solid ${c.warn ? 'rgba(196,116,116,0.35)' : '#2e3340'}`, borderRadius: 6, padding: '0.9rem 1rem' }}>
-              <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.08em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 700, color: c.warn ? '#c47474' : '#c8cdd6', lineHeight: 1.1 }}>{c.value}</div>
-              <div style={{ fontSize: '0.65rem', color: '#5a6070', marginTop: '0.2rem' }}>{c.sub}</div>
+            <div key={c.label} style={{ background: 'var(--panel)', border: `1px solid ${c.warn ? 'rgba(196,116,116,0.35)' : 'var(--border)'}`, borderRadius: 6, padding: '0.9rem 1rem' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.08em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
+              <div style={{ fontSize: '1.3rem', fontWeight: 700, color: c.warn ? 'var(--fail)' : 'var(--text2)', lineHeight: 1.1 }}>{c.value}</div>
+              <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', marginTop: '0.2rem' }}>{c.sub}</div>
             </div>
           ))}
         </div>
@@ -4175,16 +4175,16 @@ function PipelineTab() {
           const now = new Date(); const rangeStart = new Date('2026-01-01'); const rangeEnd = new Date('2027-01-01');
           const span = rangeEnd - rangeStart;
           return (
-            <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '0.62rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.75rem', fontWeight: 700 }}>Closing Timeline</div>
+            <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.62rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.75rem', fontWeight: 700 }}>Closing Timeline</div>
               <div style={{ position: 'relative', height: 32 }}>
-                <div style={{ position: 'absolute', top: 14, left: 0, right: 0, height: 2, background: '#2e3340' }} />
+                <div style={{ position: 'absolute', top: 14, left: 0, right: 0, height: 2, background: 'var(--border)' }} />
                 {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
-                  <div key={m} style={{ position: 'absolute', top: 20, left: `${(i/11)*100}%`, transform: 'translateX(-50%)', fontSize: '0.52rem', color: '#4a4f5a' }}>{m}</div>
+                  <div key={m} style={{ position: 'absolute', top: 20, left: `${(i/11)*100}%`, transform: 'translateX(-50%)', fontSize: '0.52rem', color: 'var(--faint)' }}>{m}</div>
                 ))}
                 {upcoming.map(d => {
                   const pct = Math.max(0, Math.min(98, (new Date(d.closing_date) - rangeStart) / span * 100));
-                  const color = d.committed ? '#6a9e7f' : d.book_published ? '#c8c05a' : TT_ORANGE;
+                  const color = d.committed ? 'var(--pass)' : d.book_published ? '#c8c05a' : TT_ORANGE;
                   return <div key={d.id} title={`${d.name} — ${fmtDate(d.closing_date)}`}
                     style={{ position: 'absolute', top: 4, left: `${pct}%`, transform: 'translateX(-50%)', width: 10, height: 10, borderRadius: '50%', background: color, boxShadow: `0 0 0 2px ${color}40`, cursor: 'default' }} />;
                 })}
@@ -4194,10 +4194,10 @@ function PipelineTab() {
                   const days = daysUntil(d.closing_date);
                   return (
                     <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.63rem' }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: d.committed ? '#6a9e7f' : d.book_published ? '#c8c05a' : TT_ORANGE }} />
-                      <span style={{ color: '#9aa0aa' }}>{d.name.split(',')[0]}</span>
-                      <span style={{ color: '#4a4f5a' }}>{fmtDate(d.closing_date)}</span>
-                      {days != null && days >= 0 && days <= 60 && <span style={{ color: days <= 30 ? '#c47474' : TT_ORANGE }}>{days}d</span>}
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: d.committed ? 'var(--pass)' : d.book_published ? '#c8c05a' : TT_ORANGE }} />
+                      <span style={{ color: 'var(--muted)' }}>{d.name.split(',')[0]}</span>
+                      <span style={{ color: 'var(--faint)' }}>{fmtDate(d.closing_date)}</span>
+                      {days != null && days >= 0 && days <= 60 && <span style={{ color: days <= 30 ? 'var(--fail)' : TT_ORANGE }}>{days}d</span>}
                     </div>
                   );
                 })}
@@ -4212,11 +4212,11 @@ function PipelineTab() {
             <button key={o} onClick={() => setFilterType(o)} style={{
               padding: '4px 12px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.72rem',
               fontWeight: 600, fontFamily: 'inherit', letterSpacing: '0.05em',
-              background: filterType===o ? TT_ORANGE : '#2e3340', color: filterType===o ? '#fff' : '#9aa0aa',
+              background: filterType===o ? TT_ORANGE : 'var(--border)', color: filterType===o ? '#fff' : 'var(--muted)',
             }}>{o}</button>
           ))}
           <div style={{ flex: 1 }} />
-          {msg && <span style={{ fontSize: '0.68rem', color: msg.isErr ? '#c47474' : '#6a9e7f' }}>{msg.text}</span>}
+          {msg && <span style={{ fontSize: '0.68rem', color: msg.isErr ? 'var(--fail)' : 'var(--pass)' }}>{msg.text}</span>}
           <button onClick={startNew} style={{ padding: '5px 14px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>+ Add Deal</button>
         </div>
 
@@ -4227,85 +4227,85 @@ function PipelineTab() {
             const days = daysUntil(d.closing_date);
             const covenantMatch = findCovenantMatch(d);
             return (
-              <div key={d.id} style={{ background: '#1e2128', border: `1px solid ${isOpen ? TT_ORANGE+'60' : '#2e3340'}`, borderRadius: 6, overflow: 'hidden' }}>
+              <div key={d.id} style={{ background: 'var(--panel)', border: `1px solid ${isOpen ? 'color-mix(in srgb, var(--accent) 38%, transparent)' : 'var(--border)'}`, borderRadius: 6, overflow: 'hidden' }}>
                 {/* Card header row */}
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1.2fr 1fr 1fr auto auto', alignItems: 'center', gap: '1rem', padding: '0.75rem 1.1rem' }}>
                   {/* Name */}
                   <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <span style={{ fontWeight: 700, color: '#c8cdd6', fontSize: '0.9rem' }}>{d.name}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '0.9rem' }}>{d.name}</span>
                     {statusBadge(d)}{typeBadge(d)}
                     {covenantMatch && (
                       <span title={`Linked: ${covenantMatch.property} in Covenant Tracker`}
-                        style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 3, background: covenantMatch.satisfied ? 'rgba(106,158,127,0.12)' : 'rgba(196,116,116,0.12)', color: covenantMatch.satisfied ? '#6a9e7f' : '#c47474', fontWeight: 700 }}>
+                        style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 3, background: covenantMatch.satisfied ? 'rgba(106,158,127,0.12)' : 'rgba(196,116,116,0.12)', color: covenantMatch.satisfied ? 'var(--pass)' : 'var(--fail)', fontWeight: 700 }}>
                         ⚡ {covenantMatch.satisfied ? 'Passing' : 'Failing'}
                       </span>
                     )}
                   </div>
                   {/* Lender */}
                   <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ cursor: 'pointer' }}>
-                    <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Lender</div>
-                    <div style={{ fontSize: '0.8rem', color: !d.primary_lender ? '#c47474' : '#9aa0aa', fontWeight: 600 }}>
-                      {d.primary_lender || <span style={{ color: '#c47474' }}>TBD</span>}
-                      {d.secondary_lender && <span style={{ color: '#4a4f5a', fontWeight: 400 }}> / {d.secondary_lender}</span>}
+                    <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Lender</div>
+                    <div style={{ fontSize: '0.8rem', color: !d.primary_lender ? 'var(--fail)' : 'var(--muted)', fontWeight: 600 }}>
+                      {d.primary_lender || <span style={{ color: 'var(--fail)' }}>TBD</span>}
+                      {d.secondary_lender && <span style={{ color: 'var(--faint)', fontWeight: 400 }}> / {d.secondary_lender}</span>}
                     </div>
                   </div>
                   {/* Date */}
                   <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ cursor: 'pointer' }}>
-                    <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{d.type==='Perm/Bridge' ? (d.action||'Maturity') : 'Closing'}</div>
-                    <div style={{ fontSize: '0.8rem', color: '#9aa0aa', fontWeight: 600 }}>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{d.type==='Perm/Bridge' ? (d.action||'Maturity') : 'Closing'}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600 }}>
                       {fmtDate(d.closing_date)}
-                      {days != null && days >= 0 && days <= 90 && <span style={{ marginLeft: 6, fontSize: '0.63rem', color: days <= 30 ? '#c47474' : TT_ORANGE }}>{days}d</span>}
+                      {days != null && days >= 0 && days <= 90 && <span style={{ marginLeft: 6, fontSize: '0.63rem', color: days <= 30 ? 'var(--fail)' : TT_ORANGE }}>{days}d</span>}
                     </div>
                   </div>
                   {/* Units */}
                   <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ cursor: 'pointer' }}>
-                    <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Units</div>
-                    <div style={{ fontSize: '0.8rem', color: '#9aa0aa', fontWeight: 600 }}>{d.units ? fmtN(d.units) : '—'}</div>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Units</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600 }}>{d.units ? fmtN(d.units) : '—'}</div>
                   </div>
                   {/* Budget */}
                   <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ cursor: 'pointer' }}>
-                    <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Total Budget</div>
-                    <div style={{ fontSize: '0.8rem', color: '#c8cdd6', fontWeight: 700 }}>{fmt$(d.total_budget)}</div>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Total Budget</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 700 }}>{fmt$(d.total_budget)}</div>
                   </div>
                   {/* Edit */}
-                  <button onClick={() => startEdit(d)} style={{ background: 'none', border: '1px solid #2e3340', borderRadius: 3, color: '#6a7080', cursor: 'pointer', padding: '3px 9px', fontSize: '0.7rem', fontFamily: 'inherit' }}>Edit</button>
+                  <button onClick={() => startEdit(d)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--faint2)', cursor: 'pointer', padding: '3px 9px', fontSize: '0.7rem', fontFamily: 'inherit' }}>Edit</button>
                   {/* Delete */}
-                  <button onClick={() => setConfirmDel(d.id)} style={{ background: 'none', border: 'none', color: '#3a3f4a', cursor: 'pointer', fontSize: '0.8rem', padding: '0 4px' }} title="Delete deal">✕</button>
+                  <button onClick={() => setConfirmDel(d.id)} style={{ background: 'none', border: 'none', color: 'var(--border)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 4px' }} title="Delete deal">✕</button>
                 </div>
 
                 {/* Expanded detail */}
                 {isOpen && (
-                  <div style={{ borderTop: '1px solid #2e3340', padding: '1.1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
+                  <div style={{ borderTop: '1px solid var(--border)', padding: '1.1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
                     {/* Economics */}
                     <div>
-                      <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Deal Economics</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Deal Economics</div>
                       {[['Total Budget',fmt$(d.total_budget)],['Cost / Unit',fmt$(d.cost_per_unit)],['Cost / SF',d.cost_per_sf?`$${d.cost_per_sf}`:'—'],['Hard Cost / Unit',fmt$(d.hard_cost_per_unit)],['Land Cost',fmt$(d.land_cost)],['Soft Costs',fmt$(d.soft_cost)],['Hard Costs',fmt$(d.hard_cost)]].map(([lbl,val]) => (
-                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #23262e' }}>
-                          <span style={{ fontSize: '0.72rem', color: '#5a6070' }}>{lbl}</span>
-                          <span style={{ fontSize: '0.8rem', color: '#c8cdd6', fontWeight: 600 }}>{val}</span>
+                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--faint3)' }}>{lbl}</span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 600 }}>{val}</span>
                         </div>
                       ))}
                     </div>
                     {/* Proforma */}
                     <div>
-                      <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Stabilized Proforma</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Stabilized Proforma</div>
                       {[['Total Units',fmtN(d.units)],['Avg Rent',d.avg_rent?`$${Number(d.avg_rent).toLocaleString()}`:'—'],['Avg SF',d.avg_sf?`${Number(d.avg_sf).toLocaleString()} SF`:'—'],['Gross Pot. Rent',fmt$(d.gpr)],['Gross Pot. Income',fmt$(d.gpi)],['Eff. Gross Income',fmt$(d.egi)],['Net Op. Income',fmt$(d.noi)],['Dev Yield',d.dev_yield?`${Number(d.dev_yield).toFixed(2)}%`:'—'],['Cap Rate',d.cap_rate?`${Number(d.cap_rate).toFixed(2)}%`:'—'],['Breakeven Occ.',d.breakeven_occ?`${Number(d.breakeven_occ).toFixed(2)}%`:'—'],['LTV',d.ltv?`${Number(d.ltv).toFixed(0)}%`:'—']].map(([lbl,val]) => (
-                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #23262e' }}>
-                          <span style={{ fontSize: '0.72rem', color: '#5a6070' }}>{lbl}</span>
-                          <span style={{ fontSize: '0.8rem', color: '#c8cdd6', fontWeight: 600 }}>{val}</span>
+                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--faint3)' }}>{lbl}</span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 600 }}>{val}</span>
                         </div>
                       ))}
                       {d.unit_mix && d.unit_mix.length > 0 && (
                         <div style={{ marginTop: '0.75rem' }}>
-                          <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Unit Mix</div>
+                          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Unit Mix</div>
                           {d.unit_mix.map((u, i) => (
                             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
-                              <div style={{ fontSize: '0.65rem', color: '#6a7080', width: 90, flexShrink: 0 }}>{u.type}</div>
-                              <div style={{ flex: 1, height: 4, borderRadius: 2, background: '#2e3340', overflow: 'hidden' }}>
+                              <div style={{ fontSize: '0.65rem', color: 'var(--faint2)', width: 90, flexShrink: 0 }}>{u.type}</div>
+                              <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                                 <div style={{ width: `${u.pct||0}%`, height: '100%', background: TT_ORANGE, borderRadius: 2 }} />
                               </div>
-                              <div style={{ fontSize: '0.65rem', color: '#9aa0aa', width: 22, textAlign: 'right' }}>{u.count}</div>
-                              <div style={{ fontSize: '0.65rem', color: '#5a6070', width: 42, textAlign: 'right' }}>{u.market_rent ? `$${Number(u.market_rent).toLocaleString()}` : '—'}</div>
+                              <div style={{ fontSize: '0.65rem', color: 'var(--muted)', width: 22, textAlign: 'right' }}>{u.count}</div>
+                              <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', width: 42, textAlign: 'right' }}>{u.market_rent ? `$${Number(u.market_rent).toLocaleString()}` : '—'}</div>
                             </div>
                           ))}
                         </div>
@@ -4313,13 +4313,13 @@ function PipelineTab() {
                     </div>
                     {/* Market + Financing */}
                     <div>
-                      <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Market Highlights</div>
-                      <p style={{ fontSize: '0.75rem', color: '#7a8090', lineHeight: 1.55, margin: '0 0 1rem' }}>{d.highlights || '—'}</p>
-                      <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 700 }}>Financing Status</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Market Highlights</div>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--faint2)', lineHeight: 1.55, margin: '0 0 1rem' }}>{d.highlights || '—'}</p>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 700 }}>Financing Status</div>
                       {[['Primary Lender',d.primary_lender||'TBD',!d.primary_lender],['Secondary Lender',d.secondary_lender||'—',false],['Book Published',d.book_published?'Yes':'No',false,d.book_published],['Committed',d.committed?'Yes':'No',false,d.committed],['Closing / Maturity',fmtDate(d.closing_date),false]].map(([lbl,val,warn,ok]) => (
-                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid #23262e' }}>
-                          <span style={{ fontSize: '0.72rem', color: '#5a6070' }}>{lbl}</span>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: warn?'#c47474':ok===true?'#6a9e7f':ok===false&&val==='No'?'#c47474':'#9aa0aa' }}>{val}</span>
+                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ fontSize: '0.72rem', color: 'var(--faint3)' }}>{lbl}</span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: warn?'var(--fail)':ok===true?'var(--pass)':ok===false&&val==='No'?'var(--fail)':'var(--muted)' }}>{val}</span>
                         </div>
                       ))}
                     </div>
@@ -4462,7 +4462,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       const now   = new Date();
       const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-      const C_ORANGE = [200, 121, 65];
+      const C_ORANGE = [99, 102, 241];
       const C_DARK   = [22, 25, 31];
       const C_LIGHT  = [200, 205, 214];
       const C_GRAY   = [74, 79, 90];
@@ -4765,25 +4765,25 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
   // ── Formatters ──────────────────────────────────────────────────────────────
   const fmtM  = v => v == null ? '—' : '$' + (v / 1e6).toFixed(2) + 'M';
   const fmtD  = s => { if (!s) return '—'; try { return new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return s; } };
-  const statusColor = s => s === 'paid_off' ? '#6a9e7f' : s === 'proposed' ? '#4a9acf' : '#c87941';
+  const statusColor = s => s === 'paid_off' ? 'var(--pass)' : s === 'proposed' ? '#4a9acf' : 'var(--accent)';
   const statusLabel = s => s === 'paid_off' ? 'Paid Off' : s === 'proposed' ? 'Proposed' : 'Outstanding';
-  const statusBg    = s => s === 'paid_off' ? 'rgba(106,158,127,0.1)' : s === 'proposed' ? 'rgba(74,154,207,0.12)' : 'rgba(200,121,65,0.12)';
+  const statusBg    = s => s === 'paid_off' ? 'rgba(106,158,127,0.1)' : s === 'proposed' ? 'rgba(74,154,207,0.12)' : 'rgba(99, 102, 241,0.12)';
 
-  const inputSt = { background: '#1a1d24', border: '1px solid #2e3340', borderRadius: 3, color: '#e8eaed', padding: '6px 10px', fontFamily: 'inherit', fontSize: '0.8rem', width: '100%', boxSizing: 'border-box' };
-  const labelSt = { fontSize: '0.6rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 3 };
+  const inputSt = { background: 'var(--panel3)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', padding: '6px 10px', fontFamily: 'inherit', fontSize: '0.8rem', width: '100%', boxSizing: 'border-box' };
+  const labelSt = { fontSize: '0.6rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 3 };
   const fieldSt = { marginBottom: '0.75rem' };
 
-  if (loading) return <div style={{ padding: '3rem', textAlign: 'center', color: '#4a4f5a' }}>Loading land facility data…</div>;
+  if (loading) return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--faint)' }}>Loading land facility data…</div>;
 
   return (
     <div style={{ position: 'relative' }}>
       {/* Flash message */}
-      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msgErr ? '#4a1a1a' : '#1a3a2a', border: `1px solid ${msgErr ? '#c47474' : '#6a9e7f'}`, color: msgErr ? '#c47474' : '#6a9e7f', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem' }}>{msg}</div>}
+      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msgErr ? '#4a1a1a' : '#1a3a2a', border: `1px solid ${msgErr ? 'var(--fail)' : 'var(--pass)'}`, color: msgErr ? 'var(--fail)' : 'var(--pass)', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem' }}>{msg}</div>}
 
       {/* ── Summary cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
         {/* 12-Month Peak — wider and more prominent */}
-        <div style={{ background: '#13151a', border: `1px solid ${(() => { const peak = Math.max(...timelineData.map(t => t.balance), 0); return threshold && peak > threshold ? '#c47474' : '#1e2330'; })()}`, borderRadius: 4, padding: '1rem 1.5rem' }}>
+        <div style={{ background: 'var(--panel2)', border: `1px solid ${(() => { const peak = Math.max(...timelineData.map(t => t.balance), 0); return threshold && peak > threshold ? 'var(--fail)' : '#1e2330'; })()}`, borderRadius: 4, padding: '1rem 1.5rem' }}>
           <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4, fontWeight: 700 }}>12-Month Peak Exposure</div>
           {(() => {
             const peak = Math.max(...timelineData.map(t => t.balance), 0);
@@ -4791,30 +4791,30 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
             const overThreshold = threshold && peak > threshold;
             return (
               <>
-                <div style={{ fontSize: '1.7rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: overThreshold ? '#c47474' : '#e8eaed', letterSpacing: '-0.01em' }}>{fmtM(peak)}</div>
-                <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 3 }}>
+                <div style={{ fontSize: '1.7rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: overThreshold ? 'var(--fail)' : 'var(--text)', letterSpacing: '-0.01em' }}>{fmtM(peak)}</div>
+                <div style={{ fontSize: '0.67rem', color: 'var(--faint)', marginTop: 3 }}>
                   {peak > 0 && peakMonth ? `projected high — ${peakMonth.label}` : 'no projected draws'}
-                  {overThreshold && <span style={{ color: '#c47474', marginLeft: 8 }}>⚠ exceeds TT Internal Threshold</span>}
+                  {overThreshold && <span style={{ color: 'var(--fail)', marginLeft: 8 }}>⚠ exceeds TT Internal Threshold</span>}
                 </div>
               </>
             );
           })()}
         </div>
-        <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
-          <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Outstanding Balance</div>
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: totalOutstanding > (threshold || Infinity) ? '#c47474' : '#e8eaed' }}>{fmtM(totalOutstanding)}</div>
-          <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 2 }}>{outstanding.length} active draw{outstanding.length !== 1 ? 's' : ''}</div>
+        <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Outstanding Balance</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: totalOutstanding > (threshold || Infinity) ? 'var(--fail)' : 'var(--text)' }}>{fmtM(totalOutstanding)}</div>
+          <div style={{ fontSize: '0.67rem', color: 'var(--faint)', marginTop: 2 }}>{outstanding.length} active draw{outstanding.length !== 1 ? 's' : ''}</div>
         </div>
-        <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
-          <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Facility Capacity</div>
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#e8eaed' }}>{fmtM(FACILITY_MAX)}</div>
-          <div style={{ fontSize: '0.67rem', color: '#4a4f5a', marginTop: 2 }}>{fmtM(FACILITY_MAX - totalOutstanding)} remaining</div>
+        <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Facility Capacity</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>{fmtM(FACILITY_MAX)}</div>
+          <div style={{ fontSize: '0.67rem', color: 'var(--faint)', marginTop: 2 }}>{fmtM(FACILITY_MAX - totalOutstanding)} remaining</div>
         </div>
       </div>
 
       {/* ── Threshold input row ── */}
-      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '0.75rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <div style={{ fontSize: '0.62rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>TT Internal Threshold ($M)</div>
+      <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, padding: '0.75rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ fontSize: '0.62rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>TT Internal Threshold ($M)</div>
         <input
           type="number" step="0.1" min="0" max="45"
           value={thresholdInput}
@@ -4824,11 +4824,11 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           style={{ ...inputSt, width: 100 }}
           disabled={!pinUnlocked}
         />
-        <button onClick={() => requirePin(saveThreshold)} style={{ padding: '5px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
+        <button onClick={() => requirePin(saveThreshold)} style={{ padding: '5px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
           {pinUnlocked ? 'Save' : '🔒 Save'}
         </button>
         {threshold > 0 && (
-          <div style={{ marginLeft: '0.5rem', fontSize: '0.72rem', color: totalOutstanding > threshold ? '#c47474' : '#6a9e7f' }}>
+          <div style={{ marginLeft: '0.5rem', fontSize: '0.72rem', color: totalOutstanding > threshold ? 'var(--fail)' : 'var(--pass)' }}>
             {totalOutstanding > threshold
               ? `⚠ ${fmtM(totalOutstanding - threshold)} over TT Internal Threshold`
               : `${fmtM(threshold - totalOutstanding)} headroom vs. TT Internal Threshold`}
@@ -4837,14 +4837,14 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       </div>
 
       {/* ── Draws table ── */}
-      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, marginBottom: '1.5rem', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, marginBottom: '1.5rem', overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.25rem', borderBottom: '1px solid #1e2330' }}>
           <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>Simmons Bank — Land Draws</div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <button onClick={exportLandPDF} style={{ padding: '4px 14px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>
+            <button onClick={exportLandPDF} style={{ padding: '4px 14px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>
               ↓ Export PDF
             </button>
-            <button onClick={() => requirePin(() => { setForm(EMPTY_DRAW); setEditId('new'); setShowForm(true); })} style={{ padding: '4px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
+            <button onClick={() => requirePin(() => { setForm(EMPTY_DRAW); setEditId('new'); setShowForm(true); })} style={{ padding: '4px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
               {pinUnlocked ? '+ Add Draw' : '🔒 Add Draw'}
             </button>
           </div>
@@ -4852,7 +4852,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
 
         {/* Edit / Add form */}
         {showForm && (
-          <div style={{ padding: '1rem 1.25rem', background: '#0f1117', borderBottom: '1px solid #2e3340' }}>
+          <div style={{ padding: '1rem 1.25rem', background: '#0f1117', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1.5fr', gap: '0.75rem', alignItems: 'end' }}>
               <div style={fieldSt}>
                 <label style={labelSt}>Property Name</label>
@@ -4885,7 +4885,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
               <button onClick={saveDraw} style={{ padding: '5px 16px', background: TT_ORANGE, border: 'none', borderRadius: 3, color: '#fff', fontFamily: 'inherit', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save</button>
-              <button onClick={() => { setShowForm(false); setEditId(null); }} style={{ padding: '5px 12px', background: 'none', border: '1px solid #2e3340', borderRadius: 3, color: '#9aa0aa', fontFamily: 'inherit', fontSize: '0.75rem', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => { setShowForm(false); setEditId(null); }} style={{ padding: '5px 12px', background: 'none', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--muted)', fontFamily: 'inherit', fontSize: '0.75rem', cursor: 'pointer' }}>Cancel</button>
             </div>
           </div>
         )}
@@ -4893,57 +4893,57 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
         {/* Confirm delete */}
         {deleteId && (
           <div style={{ padding: '0.75rem 1.25rem', background: '#1a0f0f', borderBottom: '1px solid #4a1a1a', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <span style={{ fontSize: '0.78rem', color: '#c47474' }}>Delete this draw? This cannot be undone.</span>
-            <button onClick={() => deleteDraw(deleteId)} style={{ padding: '4px 14px', background: '#c47474', border: 'none', borderRadius: 3, color: '#fff', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
-            <button onClick={() => setDeleteId(null)} style={{ padding: '4px 12px', background: 'none', border: '1px solid #2e3340', borderRadius: 3, color: '#9aa0aa', fontFamily: 'inherit', fontSize: '0.72rem', cursor: 'pointer' }}>Cancel</button>
+            <span style={{ fontSize: '0.78rem', color: 'var(--fail)' }}>Delete this draw? This cannot be undone.</span>
+            <button onClick={() => deleteDraw(deleteId)} style={{ padding: '4px 14px', background: 'var(--fail)', border: 'none', borderRadius: 3, color: '#fff', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
+            <button onClick={() => setDeleteId(null)} style={{ padding: '4px 12px', background: 'none', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--muted)', fontFamily: 'inherit', fontSize: '0.72rem', cursor: 'pointer' }}>Cancel</button>
           </div>
         )}
 
         {/* Table */}
         {draws.length === 0 ? (
-          <div style={{ padding: '2.5rem', textAlign: 'center', color: '#4a4f5a', fontSize: '0.8rem' }}>No draws recorded yet — click Add Draw to get started.</div>
+          <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--faint)', fontSize: '0.8rem' }}>No draws recorded yet — click Add Draw to get started.</div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid #1e2330' }}>
                 {['Property', 'Amount', 'Currently Funded', 'Takedown', 'Expected Payoff', 'Status', 'Note', ''].map(h => (
-                  <th key={h} style={{ padding: '0.55rem 1rem', textAlign: h === 'Amount' || h === 'Currently Funded' ? 'right' : 'left', fontSize: '0.6rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 400, whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '0.55rem 1rem', textAlign: h === 'Amount' || h === 'Currently Funded' ? 'right' : 'left', fontSize: '0.6rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 400, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {draws.map((d, i) => (
-                <tr key={d.id} style={{ borderBottom: '1px solid #1a1d24', opacity: d.status === 'paid_off' ? 0.55 : 1 }}>
-                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#c8cdd6', fontWeight: 600 }}>{d.name}</td>
-                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#9aa0aa', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(d.draw_amount)}</td>
-                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: d.status === 'outstanding' ? '#e8eaed' : '#4a4f5a' }}>
+                <tr key={d.id} style={{ borderBottom: '1px solid var(--panel3)', opacity: d.status === 'paid_off' ? 0.55 : 1 }}>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: 'var(--text2)', fontWeight: 600 }}>{d.name}</td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: 'var(--muted)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(d.draw_amount)}</td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: d.status === 'outstanding' ? 'var(--text)' : 'var(--faint)' }}>
                     {d.status === 'outstanding' ? fmtM(d.draw_amount) : '—'}
                   </td>
-                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.75rem', color: '#9aa0aa' }}>{fmtD(d.takedown_date)}</td>
-                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.75rem', color: '#9aa0aa' }}>{fmtD(d.payoff_date)}</td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.75rem', color: 'var(--muted)' }}>{fmtD(d.takedown_date)}</td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.75rem', color: 'var(--muted)' }}>{fmtD(d.payoff_date)}</td>
                   <td style={{ padding: '0.7rem 1rem' }}>
                     <span style={{ fontSize: '0.65rem', fontWeight: 700, color: statusColor(d.status), background: statusBg(d.status), padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
                       {statusLabel(d.status)}
                     </span>
                   </td>
-                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: '#4a4f5a', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '—'}</td>
+                  <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: 'var(--faint)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '—'}</td>
                   <td style={{ padding: '0.7rem 0.75rem', whiteSpace: 'nowrap' }}>
                     {pinUnlocked ? (
                       <>
-                        <button onClick={() => startEdit(d)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9aa0aa', fontSize: '0.75rem', padding: '2px 5px' }} title="Edit">✏</button>
-                        <button onClick={() => setDeleteId(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4747444', fontSize: '0.75rem', padding: '2px 5px' }} title="Delete">✕</button>
+                        <button onClick={() => startEdit(d)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.75rem', padding: '2px 5px' }} title="Edit">✏</button>
+                        <button onClick={() => setDeleteId(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 27%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }} title="Delete">✕</button>
                       </>
                     ) : (
-                      <button onClick={() => requirePin(() => startEdit(d))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2a2d35', fontSize: '0.75rem', padding: '2px 5px' }} title="Unlock to edit">🔒</button>
+                      <button onClick={() => requirePin(() => startEdit(d))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title="Unlock to edit">🔒</button>
                     )}
                   </td>
                 </tr>
               ))}
               {/* Totals row — outstanding funded only, no commitment sum */}
-              <tr style={{ borderTop: '2px solid #2e3340', background: '#0f1117' }}>
-                <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: '#4a4f5a', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Currently Funded</td>
+              <tr style={{ borderTop: '2px solid var(--border)', background: '#0f1117' }}>
+                <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Currently Funded</td>
                 <td />
-                <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: '#e8eaed', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{fmtM(totalOutstanding)}</td>
+                <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: 'var(--text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{fmtM(totalOutstanding)}</td>
                 <td colSpan={5} />
               </tr>
             </tbody>
@@ -4952,13 +4952,13 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
       </div>
 
       {/* ── 12-month exposure line chart ── */}
-      <div style={{ background: '#13151a', border: '1px solid #1e2330', borderRadius: 4, padding: '1.25rem 1.5rem', marginTop: '0.5rem' }}>
+      <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, padding: '1.25rem 1.5rem', marginTop: '0.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>12-Month Exposure Forecast</div>
           <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
             <span style={{ fontSize: '0.6rem', color: '#4a7a9e', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 2, background: '#4a7a9e', borderRadius: 1 }} />Projected exposure</span>
-            {threshold && <span style={{ fontSize: '0.6rem', color: '#c87941', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed #c87941' }} />TT Internal Threshold {fmtM(threshold)}</span>}
-            <span style={{ fontSize: '0.6rem', color: '#3a4050', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '1px dashed #3a4050' }} />$45M cap</span>
+            {threshold && <span style={{ fontSize: '0.6rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed var(--accent)' }} />TT Internal Threshold {fmtM(threshold)}</span>}
+            <span style={{ fontSize: '0.6rem', color: 'var(--border)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '1px dashed var(--border)' }} />$45M cap</span>
           </div>
         </div>
         <svg viewBox={`0 0 ${SVG_VW} ${CHART_H + CHART_TOP_PAD + LABEL_H}`} style={{ width: '100%', display: 'block', overflow: 'visible' }}>
@@ -4972,7 +4972,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
                   stroke={isTop ? '#3a4555' : '#1e2330'}
                   strokeWidth={isTop ? 1.5 : 1}
                   strokeDasharray={isTop ? '5 4' : undefined} />
-                <text x={LABEL_W - 2} y={y + 4} textAnchor="end" fontSize="9" fill="#4a4f5a" fontFamily="inherit">
+                <text x={LABEL_W - 2} y={y + 4} textAnchor="end" fontSize="9" fill="var(--faint)" fontFamily="inherit">
                   {fmtM(frac * Y_MAX)}
                 </text>
               </g>
@@ -4983,8 +4983,8 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           {threshold && thresholdY != null && (
             <g>
               <line x1={LABEL_W + 2} x2={SVG_VW} y1={thresholdY} y2={thresholdY}
-                stroke="#c87941" strokeWidth={1.5} strokeDasharray="6 3" opacity="0.85" />
-              <text x={SVG_VW - 3} y={thresholdY - 5} textAnchor="end" fontSize="8.5" fill="#c87941" fontFamily="inherit" opacity="0.9">
+                stroke="var(--accent)" strokeWidth={1.5} strokeDasharray="6 3" opacity="0.85" />
+              <text x={SVG_VW - 3} y={thresholdY - 5} textAnchor="end" fontSize="8.5" fill="var(--accent)" fontFamily="inherit" opacity="0.9">
                 TT Internal Threshold: {fmtM(threshold)}
               </text>
             </g>
@@ -5001,7 +5001,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
               <line key={i}
                 x1={p.x.toFixed(1)} y1={p.y.toFixed(1)}
                 x2={next.x.toFixed(1)} y2={next.y.toFixed(1)}
-                stroke={over ? '#c47474' : '#4a7a9e'}
+                stroke={over ? 'var(--fail)' : '#4a7a9e'}
                 strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
             );
           })}
@@ -5013,7 +5013,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
               <g key={i}>
                 <title>{p.label}: {fmtM(p.balance)}</title>
                 <circle cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={3.5}
-                  fill={over ? '#c47474' : '#4a7a9e'} stroke="#13151a" strokeWidth={1.5} />
+                  fill={over ? 'var(--fail)' : '#4a7a9e'} stroke="var(--panel2)" strokeWidth={1.5} />
               </g>
             );
           })}
@@ -5027,7 +5027,7 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
             const arrow = isPos ? '▲' : '▼';
             const amt   = '$' + (Math.abs(delta) / 1e6).toFixed(2) + 'M';
             const labelY = isPos ? p.y - 10 : p.y + 18;
-            const color  = isPos ? '#c47474' : '#6a9e7f';
+            const color  = isPos ? 'var(--fail)' : 'var(--pass)';
             return (
               <g key={i}>
                 <text x={p.x.toFixed(1)} y={labelY.toFixed(1)}
@@ -5046,12 +5046,12 @@ function LandFacilityTab({ pinUnlocked, requirePin }) {
           {/* X-axis labels — every other month to avoid crowding */}
           {pts.map((p, i) => i % 2 === 0 && (
             <text key={i} x={p.x.toFixed(1)} y={CHART_H + CHART_TOP_PAD + 14}
-              textAnchor="middle" fontSize="9" fill="#4a4f5a" fontFamily="inherit">
+              textAnchor="middle" fontSize="9" fill="var(--faint)" fontFamily="inherit">
               {p.label}
             </text>
           ))}
         </svg>
-        <div style={{ marginTop: '0.5rem', fontSize: '0.6rem', color: '#4a4f5a' }}>
+        <div style={{ marginTop: '0.5rem', fontSize: '0.6rem', color: 'var(--faint)' }}>
           Includes outstanding and proposed draws based on takedown and payoff dates. Outstanding draws without a takedown date are counted from today. Proposed draws without a takedown date are excluded. Y-axis fixed at $45M facility maximum.
         </div>
       </div>
@@ -5182,9 +5182,9 @@ function LeasingTab() {
   };
   const fmtCur = v => v != null ? '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
   const fmtPct = v => v != null ? (v * 100).toFixed(2) + '%' : '—';
-  const passColor  = '#6a9e7f';
-  const failColor  = '#c47474';
-  const warnColor  = '#c87941';
+  const passColor  = 'var(--pass)';
+  const failColor  = 'var(--fail)';
+  const warnColor  = 'var(--warn)';
 
   // ── Derived data ───────────────────────────────────────────────────────────
   const states = leasingData
@@ -5232,7 +5232,7 @@ function LeasingTab() {
   const SortTh = ({ k, label, right }) => (
     <th onClick={() => toggleSort(k)} style={{
       padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.1em',
-      textTransform: 'uppercase', color: sortKey === k ? '#c87941' : '#9aa0aa',
+      textTransform: 'uppercase', color: sortKey === k ? 'var(--accent)' : 'var(--muted)',
       fontWeight: 400, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
       textAlign: right ? 'right' : 'left',
     }}>
@@ -5242,7 +5242,7 @@ function LeasingTab() {
 
   // ── Loading / empty state ───────────────────────────────────────────────────
   if (dbLoading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: '#4a4f5a', fontSize: '0.8rem' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: '0.8rem' }}>
       Loading leasing data…
     </div>
   );
@@ -5250,16 +5250,16 @@ function LeasingTab() {
   if (!leasingData) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: '1.25rem' }}>
       <div style={{ fontSize: '2rem', opacity: 0.3 }}>📊</div>
-      <div style={{ fontSize: '0.9rem', color: '#9aa0aa', fontWeight: 600 }}>Leasing vs. Bank Book</div>
-      <div style={{ fontSize: '0.75rem', color: '#4a4f5a', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
-        Upload your refreshed <strong style={{ color: '#c8cdd6' }}>Lender_Leasing_Comparison.xlsx</strong> file to populate this dashboard.
+      <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600 }}>Leasing vs. Bank Book</div>
+      <div style={{ fontSize: '0.75rem', color: 'var(--faint)', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
+        Upload your refreshed <strong style={{ color: 'var(--text2)' }}>Lender_Leasing_Comparison.xlsx</strong> file to populate this dashboard.
         Refresh the Excel query first, save, then upload here.
       </div>
-      <label style={{ padding: '8px 22px', borderRadius: 3, background: 'rgba(200,121,65,0.15)', color: '#c87941', outline: '1px solid #c8794155', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit' }}>
+      <label style={{ padding: '8px 22px', borderRadius: 3, background: 'rgba(99, 102, 241,0.15)', color: 'var(--accent)', outline: '1px solid color-mix(in srgb, var(--accent) 33%, transparent)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit' }}>
         ↑ Upload Excel File
         <input type="file" accept=".xlsx" onChange={handleFile} style={{ display: 'none' }} />
       </label>
-      {uploadMsg && <div style={{ fontSize: '0.72rem', color: '#c47474' }}>{uploadMsg}</div>}
+      {uploadMsg && <div style={{ fontSize: '0.72rem', color: 'var(--fail)' }}>{uploadMsg}</div>}
     </div>
   );
 
@@ -5269,7 +5269,7 @@ function LeasingTab() {
       {/* ── Toolbar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
         <div>
-          <div style={{ fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa' }}>
+          <div style={{ fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>
             Data as of {fmtDate(asOfDate)} {weekEnd ? `· Week ending ${weekEnd}` : ''}
           </div>
         </div>
@@ -5277,28 +5277,28 @@ function LeasingTab() {
 
         {/* State filter */}
         <select value={filterState} onChange={e => setFilterState(e.target.value)}
-          style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 2, color: '#c8cdd6', padding: '4px 10px', fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer' }}>
+          style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text2)', padding: '4px 10px', fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer' }}>
           {states.map(s => <option key={s} value={s}>{s === 'All' ? 'All States' : s}</option>)}
         </select>
 
         {/* Chart toggle */}
-        <div style={{ display: 'flex', background: '#13151a', borderRadius: 3, overflow: 'hidden', outline: '1px solid #2e3340' }}>
+        <div style={{ display: 'flex', background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden', outline: '1px solid var(--border)' }}>
           {[['rent','Rent'], ['occ','Occupancy']].map(([v, label]) => (
             <button key={v} onClick={() => setChartView(v)} style={{
               padding: '4px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
               fontSize: '0.7rem', fontWeight: chartView === v ? 700 : 400,
-              background: chartView === v ? 'rgba(200,121,65,0.2)' : 'transparent',
-              color: chartView === v ? '#c87941' : '#4a4f5a',
+              background: chartView === v ? 'rgba(99, 102, 241,0.2)' : 'transparent',
+              color: chartView === v ? 'var(--accent)' : 'var(--faint)',
             }}>{label}</button>
           ))}
         </div>
 
         {/* Re-upload */}
-        <label style={{ padding: '5px 14px', borderRadius: 2, background: 'rgba(200,121,65,0.12)', color: '#c87941', outline: '1px solid #c8794144', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>
+        <label style={{ padding: '5px 14px', borderRadius: 2, background: 'rgba(99, 102, 241,0.12)', color: 'var(--accent)', outline: '1px solid color-mix(in srgb, var(--accent) 27%, transparent)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>
           ↑ Re-upload
           <input type="file" accept=".xlsx" onChange={handleFile} style={{ display: 'none' }} />
         </label>
-        {uploadMsg && <span style={{ fontSize: '0.7rem', color: uploadMsg.startsWith('✓') ? '#6a9e7f' : '#c47474' }}>{uploadMsg}</span>}
+        {uploadMsg && <span style={{ fontSize: '0.7rem', color: uploadMsg.startsWith('✓') ? 'var(--pass)' : 'var(--fail)' }}>{uploadMsg}</span>}
       </div>
 
       {/* ── Summary Cards ── */}
@@ -5319,10 +5319,10 @@ function LeasingTab() {
               sub: 'properties at or above',
               color: summary.atOrAboveOcc === filtered.length ? passColor : summary.atOrAboveOcc > filtered.length * 0.5 ? warnColor : failColor },
           ].map((card, i) => (
-            <div key={i} style={{ background: '#1e2128', borderRadius: 4, border: '1px solid #2e3340', padding: '0.75rem 0.85rem' }}>
-              <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#4a4f5a', marginBottom: '0.3rem' }}>{card.label}</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: card.color || '#c8cdd6' }}>{card.value}</div>
-              {card.sub && <div style={{ fontSize: '0.65rem', color: '#4a4f5a', marginTop: '0.2rem' }}>{card.sub}</div>}
+            <div key={i} style={{ background: 'var(--panel)', borderRadius: 4, border: '1px solid var(--border)', padding: '0.75rem 0.85rem' }}>
+              <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: '0.3rem' }}>{card.label}</div>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: card.color || 'var(--text2)' }}>{card.value}</div>
+              {card.sub && <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.2rem' }}>{card.sub}</div>}
             </div>
           ))}
         </div>
@@ -5338,13 +5338,13 @@ function LeasingTab() {
           ? sorted.map(r => ({
               name: r.property,
               a: r.inPlaceRent, aLabel: fmtCur(r.inPlaceRent), aColor: r.rentDelta >= 1 ? passColor : failColor,
-              b: r.bankBookRent, bLabel: fmtCur(r.bankBookRent), bColor: '#2e3340',
+              b: r.bankBookRent, bLabel: fmtCur(r.bankBookRent), bColor: 'var(--border)',
               pct: r.rentDelta, pctLabel: fmtPct(r.rentDelta),
             }))
           : sorted.map(r => ({
               name: r.property,
               a: r.occPercent * 100, aLabel: fmtPct(r.occPercent), aColor: (r.bankBookOcc === 0 || r.occPercent >= r.bankBookOcc) ? passColor : failColor,
-              b: r.bankBookOcc > 0 ? r.bankBookOcc * 100 : null, bLabel: r.bankBookOcc > 0 ? fmtPct(r.bankBookOcc) : 'N/A', bColor: '#2e3340',
+              b: r.bankBookOcc > 0 ? r.bankBookOcc * 100 : null, bLabel: r.bankBookOcc > 0 ? fmtPct(r.bankBookOcc) : 'N/A', bColor: 'var(--border)',
               pct: r.bankBookOcc > 0 ? r.occPercent - r.bankBookOcc : null,
               pctLabel: r.bankBookOcc > 0 ? (r.occPercent >= r.bankBookOcc ? '+' : '') + ((r.occPercent - r.bankBookOcc) * 100).toFixed(1) + '%' : '',
             }));
@@ -5352,14 +5352,14 @@ function LeasingTab() {
         const toX = v => (v / maxVal) * CHART_W_TOTAL;
         const totalH = barRows.length * (BAR_H * 2 + GAP * 3 + 10) + 30;
         return (
-          <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 4, padding: '1rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
-            <div style={{ fontSize: '0.6rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#c87941', marginBottom: '0.75rem', fontWeight: 600 }}>
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, padding: '1rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
+            <div style={{ fontSize: '0.6rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '0.75rem', fontWeight: 600 }}>
               {chartView === 'rent' ? 'In-Place Rent vs. Bank Book Rent' : 'Current Occupancy vs. Bank Book Occupancy'}
             </div>
-            <div style={{ display: 'flex', gap: '1rem', fontSize: '0.62rem', color: '#9aa0aa', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', fontSize: '0.62rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
               <span><span style={{ display: 'inline-block', width: 10, height: 10, background: passColor, borderRadius: 2, marginRight: 4 }} />At/above bank book</span>
               <span><span style={{ display: 'inline-block', width: 10, height: 10, background: failColor, borderRadius: 2, marginRight: 4 }} />Below bank book</span>
-              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#2e3340', borderRadius: 2, marginRight: 4, outline: '1px solid #4a4f5a' }} />Bank book target</span>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--border)', borderRadius: 2, marginRight: 4, outline: '1px solid var(--faint)' }} />Bank book target</span>
             </div>
             <svg width={LABEL_W + CHART_W_TOTAL + 120} height={totalH} style={{ display: 'block', fontFamily: 'inherit' }}>
               {barRows.map((row, i) => {
@@ -5367,14 +5367,14 @@ function LeasingTab() {
                 return (
                   <g key={i}>
                     {/* Property label */}
-                    <text x={LABEL_W - 8} y={y + BAR_H * 0.75 + GAP} textAnchor="end" fontSize={9} fill="#9aa0aa" dominantBaseline="middle">{row.name}</text>
+                    <text x={LABEL_W - 8} y={y + BAR_H * 0.75 + GAP} textAnchor="end" fontSize={9} fill="var(--muted)" dominantBaseline="middle">{row.name}</text>
                     {/* Actual bar */}
                     <rect x={LABEL_W} y={y + GAP} width={toX(row.a)} height={BAR_H} fill={row.aColor} rx={2} />
                     <text x={LABEL_W + toX(row.a) + 5} y={y + GAP + BAR_H / 2} fontSize={9} fill={row.aColor} fontWeight="700" dominantBaseline="middle">{row.aLabel}</text>
                     {/* Bank book bar */}
                     {row.b != null && <>
                       <rect x={LABEL_W} y={y + BAR_H + GAP * 2} width={toX(row.b)} height={BAR_H} fill={row.bColor} rx={2} />
-                      <text x={LABEL_W + toX(row.b) + 5} y={y + BAR_H + GAP * 2 + BAR_H / 2} fontSize={9} fill="#9aa0aa" dominantBaseline="middle">{row.bLabel}</text>
+                      <text x={LABEL_W + toX(row.b) + 5} y={y + BAR_H + GAP * 2 + BAR_H / 2} fontSize={9} fill="var(--muted)" dominantBaseline="middle">{row.bLabel}</text>
                     </>}
                     {/* Delta badge */}
                     {row.pctLabel && (
@@ -5392,14 +5392,14 @@ function LeasingTab() {
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #2e3340' }}>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
               <SortTh k="property"    label="Property" />
               <SortTh k="inPlaceRent" label="In-Place Rent" right />
               <SortTh k="bankBookRent" label="Bank Book Rent" right />
               <SortTh k="rentDelta"   label="Rent Δ" right />
               <SortTh k="occPercent"  label="Curr. Occ" right />
               <SortTh k="bankBookOcc" label="Bank Book Occ" right />
-              <th style={{ padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#9aa0aa', fontWeight: 400, textAlign: 'right' }}>Occ Δ</th>
+              <th style={{ padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, textAlign: 'right' }}>Occ Δ</th>
               <SortTh k="firstMI"    label="First Move-In" />
               <SortTh k="avgNetMI"   label="Avg Move-Ins/Mo" right />
               <SortTh k="netRental"  label="Wkly Net Rentals" right />
@@ -5412,19 +5412,19 @@ function LeasingTab() {
               const occOk   = r.bankBookOcc === 0 || r.occPercent >= r.bankBookOcc;
               const occDelta = r.bankBookOcc > 0 ? r.occPercent - r.bankBookOcc : null;
               return (
-                <tr key={r.pscode} style={{ background: i % 2 === 0 ? 'transparent' : '#13151a', borderBottom: '1px solid #16191f' }}>
+                <tr key={r.pscode} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--panel2)', borderBottom: '1px solid var(--bg)' }}>
                   {/* Property */}
                   <td style={{ padding: '0.65rem 0.7rem' }}>
                     <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.82rem' }}>{r.property}</div>
-                    <div style={{ fontSize: '0.65rem', color: '#4a4f5a', marginTop: '0.1rem' }}>{r.marquee}</div>
-                    <div style={{ fontSize: '0.63rem', color: '#2e3340', marginTop: '0.1rem' }}>{r.totalUnits} units · DOP {fmtDate(r.dopDate)}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.1rem' }}>{r.marquee}</div>
+                    <div style={{ fontSize: '0.63rem', color: 'var(--border)', marginTop: '0.1rem' }}>{r.totalUnits} units · DOP {fmtDate(r.dopDate)}</div>
                   </td>
                   {/* In-place rent */}
                   <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
                     <div style={{ fontWeight: 700, fontSize: '0.88rem', color: rentOk ? passColor : failColor }}>{fmtCur(r.inPlaceRent)}</div>
                   </td>
                   {/* Bank book rent */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: '#9aa0aa' }}>{fmtCur(r.bankBookRent)}</td>
+                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: 'var(--muted)' }}>{fmtCur(r.bankBookRent)}</td>
                   {/* Rent delta */}
                   <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
                     <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.75rem', fontWeight: 700,
@@ -5438,8 +5438,8 @@ function LeasingTab() {
                     <div style={{ fontWeight: 700, fontSize: '0.88rem', color: occOk ? passColor : failColor }}>{fmtPct(r.occPercent)}</div>
                   </td>
                   {/* Bank book occ */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: '#9aa0aa' }}>
-                    {r.bankBookOcc > 0 ? fmtPct(r.bankBookOcc) : <span style={{ color: '#2e3340' }}>—</span>}
+                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: 'var(--muted)' }}>
+                    {r.bankBookOcc > 0 ? fmtPct(r.bankBookOcc) : <span style={{ color: 'var(--border)' }}>—</span>}
                   </td>
                   {/* Occ delta */}
                   <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
@@ -5449,23 +5449,23 @@ function LeasingTab() {
                           color: occDelta >= 0 ? passColor : failColor }}>
                           {occDelta >= 0 ? '+' : ''}{(occDelta * 100).toFixed(2)}%
                         </span>
-                      : <span style={{ color: '#2e3340' }}>—</span>}
+                      : <span style={{ color: 'var(--border)' }}>—</span>}
                   </td>
                   {/* First move-in */}
-                  <td style={{ padding: '0.65rem 0.7rem', color: '#9aa0aa', whiteSpace: 'nowrap' }}>{fmtDate(r.firstMI)}</td>
+                  <td style={{ padding: '0.65rem 0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(r.firstMI)}</td>
                   {/* Avg move-ins/mo */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: '#c8cdd6' }}>
+                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: 'var(--text2)' }}>
                     {r.avgNetMI ? r.avgNetMI.toFixed(1) : '—'}
                   </td>
                   {/* Weekly net rentals */}
                   <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
                     <span style={{ fontWeight: 700, fontSize: '0.88rem',
-                      color: r.netRental > 0 ? passColor : r.netRental < 0 ? failColor : '#4a4f5a' }}>
+                      color: r.netRental > 0 ? passColor : r.netRental < 0 ? failColor : 'var(--faint)' }}>
                       {r.netRental > 0 ? '+' : ''}{r.netRental}
                     </span>
                   </td>
                   {/* Units */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: '#4a4f5a', fontSize: '0.75rem' }}>{r.totalUnits}</td>
+                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: 'var(--faint)', fontSize: '0.75rem' }}>{r.totalUnits}</td>
                 </tr>
               );
             })}
@@ -5474,7 +5474,7 @@ function LeasingTab() {
       </div>
 
       {/* ── Footer note ── */}
-      <div style={{ marginTop: '1rem', fontSize: '0.63rem', color: '#4a4f5a' }}>
+      <div style={{ marginTop: '1rem', fontSize: '0.63rem', color: 'var(--faint)' }}>
         * In Place Rent and Current Occupancy are current as of {fmtDate(asOfDate)}
       </div>
     </div>
@@ -5616,7 +5616,7 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
           let arrow = '', arrowColor = '#888888';
           if (prior) {
             const delta = cur - prior.val;
-            if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = '#6a9e7f'; }
+            if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = 'var(--pass)'; }
             else if (delta > 0) { arrow = '▲'; arrowColor = '#2e7d32'; }
             else { arrow = '▼'; arrowColor = '#c0392b'; }
           }
@@ -5743,7 +5743,7 @@ function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
               let arrow = '', arrowColor = '#888';
               if (prior) {
                 const delta = cur - prior.val;
-                if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = '#6a9e7f'; }
+                if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = 'var(--pass)'; }
                 else if (delta > 0) { arrow = '▲'; arrowColor = '#2e7d32'; }
                 else { arrow = '▼'; arrowColor = '#c0392b'; }
               }
@@ -6297,9 +6297,9 @@ function LoansTab({ pinUnlocked, requirePin }) {
   // from the DSCR test frequency, stepping forward from the closing date to maturity.
   const CAL_EVENT_META = {
     closing:   { label: 'Closing',        fg: '#4fa3c8', bg: 'rgba(79,163,200,0.16)' },
-    maturity:  { label: 'Maturity',       fg: '#c87941', bg: 'rgba(200,121,65,0.20)' },
+    maturity:  { label: 'Maturity',       fg: '#6366f1', bg: 'rgba(99,102,241,0.20)' },
     extension: { label: 'Ext. Maturity',  fg: '#9b8fc0', bg: 'rgba(155,143,192,0.18)' },
-    covenant:  { label: 'Covenant Test',  fg: '#6a9e7f', bg: 'rgba(106,158,127,0.16)' },
+    covenant:  { label: 'Covenant Test',  fg: 'var(--pass)', bg: 'rgba(106,158,127,0.16)' },
   };
   const isoOf  = d => (typeof d === 'string' ? d.slice(0, 10) : '');
   const parseISO = d => { const m = (d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12) : null; };
@@ -6356,7 +6356,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
       const pageH = doc.internal.pageSize.getHeight();
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const C_ORANGE = [200, 121, 65], C_DARK = [22, 25, 31], C_LIGHT = [200, 205, 214], C_GRAY = [74, 79, 90];
+      const C_ORANGE = [99, 102, 241], C_DARK = [22, 25, 31], C_LIGHT = [200, 205, 214], C_GRAY = [74, 79, 90];
 
       doc.setFillColor(...C_DARK); doc.rect(0, 0, pageW, 52, 'F');
       doc.setFillColor(...C_ORANGE); doc.rect(0, 52, pageW, 2, 'F');
@@ -6471,8 +6471,8 @@ function LoansTab({ pinUnlocked, requirePin }) {
   }
 
   // ── Styles ───────────────────────────────────────────────────────────────────
-  const inputSt = (extra = {}) => ({ background: '#13151a', border: '1px solid #2e3340', borderRadius: 3, color: '#c8cdd6', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', ...extra });
-  const labelSt = { fontSize: '0.6rem', color: '#5a6070', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
+  const inputSt = (extra = {}) => ({ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text2)', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', ...extra });
+  const labelSt = { fontSize: '0.6rem', color: 'var(--faint3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
   const fieldSt = { marginBottom: '0.6rem' };
   const groupHdr = { fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.6rem' };
   const typeBadge = l => (
@@ -6483,7 +6483,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
     </span>
   );
 
-  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: '#4a4f5a', fontSize: '0.8rem' }}>Loading loans…</div>;
+  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: '0.8rem' }}>Loading loans…</div>;
 
   function renderField([key, label, type]) {
     const span = type === 'textarea' ? { gridColumn: '1 / -1' } : {};
@@ -6503,10 +6503,10 @@ function LoansTab({ pinUnlocked, requirePin }) {
     const isNew = editId === 'new';
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2rem 1rem', overflowY: 'auto' }}>
-        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, width: '100%', maxWidth: 980, padding: '1.5rem' }}>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, width: '100%', maxWidth: 980, padding: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-            <span style={{ fontWeight: 700, color: '#c8cdd6', fontSize: '1rem' }}>{isNew ? 'Add Loan' : `Edit — ${editForm.property_name || editForm.borrower_entity}`}</span>
-            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+            <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '1rem' }}>{isNew ? 'Add Loan' : `Edit — ${editForm.property_name || editForm.borrower_entity}`}</span>
+            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -6517,7 +6517,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
                 <option value="refinance">Refinance</option>
               </select>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.78rem', color: '#9aa0aa', marginTop: 16 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.78rem', color: 'var(--muted)', marginTop: 16 }}>
               <input type="checkbox" checked={!!editForm.prepayment_open} onChange={e => setF('prepayment_open', e.target.checked)} style={{ width: 14, height: 14, accentColor: TT_ORANGE }} />
               Prepayment open (no penalty)
             </label>
@@ -6537,14 +6537,14 @@ function LoansTab({ pinUnlocked, requirePin }) {
             <div style={{ marginBottom: '0.75rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <span style={groupHdr}>Participants</span>
-                <button onClick={addParticipant} style={{ background: 'none', border: '1px solid #2e3340', color: '#6a7080', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'inherit' }}>+ Row</button>
+                <button onClick={addParticipant} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--faint2)', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'inherit' }}>+ Row</button>
               </div>
               {(editForm.participants || []).map((row, i) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1fr auto', gap: 4, marginBottom: 4, alignItems: 'center' }}>
                   <input style={inputSt({ fontSize: '0.68rem', padding: '3px 5px' })} placeholder="Name" value={row.name || ''} onChange={e => setParticipant(i, 'name', e.target.value)} />
                   <input style={inputSt({ fontSize: '0.68rem', padding: '3px 5px' })} placeholder="Commitment $" type="number" value={row.commitment || ''} onChange={e => setParticipant(i, 'commitment', e.target.value)} />
                   <input style={inputSt({ fontSize: '0.68rem', padding: '3px 5px' })} placeholder="%" type="number" value={row.pct || ''} onChange={e => setParticipant(i, 'pct', e.target.value)} />
-                  <button onClick={() => removeParticipant(i)} style={{ background: 'none', border: 'none', color: '#c47474', cursor: 'pointer', fontSize: '0.75rem', padding: '0 3px' }}>✕</button>
+                  <button onClick={() => removeParticipant(i)} style={{ background: 'none', border: 'none', color: 'var(--fail)', cursor: 'pointer', fontSize: '0.75rem', padding: '0 3px' }}>✕</button>
                 </div>
               ))}
             </div>
@@ -6553,7 +6553,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
             <div style={{ gridColumn: '1 / -1', marginBottom: '0.5rem' }}>
               <div style={groupHdr}>Type-specific details — advanced (JSON)</div>
               <textarea style={inputSt({ minHeight: 120, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={tsDraft} onChange={e => setTsDraft(e.target.value)} spellCheck={false} />
-              <div style={{ fontSize: '0.6rem', color: '#5a6070', marginTop: 3 }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--faint3)', marginTop: 3 }}>
                 {editForm.loan_type === 'construction'
                   ? 'e.g. lender_required_completion_date, development_fee_funding, retainage, letters_of_credit, post_closing_items'
                   : 'e.g. prior_lender, future_advance, lockbox_structure, cash_management_waterfall, cash_collateral_reserves'}
@@ -6561,8 +6561,8 @@ function LoansTab({ pinUnlocked, requirePin }) {
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem', paddingTop: '1rem', borderTop: '1px solid #2e3340' }}>
-            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
             <button onClick={saveLoan} disabled={saving} style={{ padding: '7px 22px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : isNew ? 'Add Loan' : 'Save Changes'}</button>
           </div>
         </div>
@@ -6575,33 +6575,33 @@ function LoansTab({ pinUnlocked, requirePin }) {
     if (!showImport) return null;
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2rem 1rem', overflowY: 'auto' }}>
-        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, width: '100%', maxWidth: 720, padding: '1.5rem' }}>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, width: '100%', maxWidth: 720, padding: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontWeight: 700, color: '#c8cdd6', fontSize: '1rem' }}>Import Abstract</span>
-            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+            <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '1rem' }}>Import Abstract</span>
+            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#7a8090', lineHeight: 1.5, marginBottom: '1rem' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--faint2)', lineHeight: 1.5, marginBottom: '1rem' }}>
             Easiest: attach the <code>.docx</code> and click <strong>Auto-fill</strong> — the fields are read straight from the document. Review them below, then Import. (Or paste a JSON sidecar from your abstract assistant if you have one.) Re-importing the same document updates the existing record — no duplicates.
           </div>
 
           {/* Step 1 — attach + auto-fill */}
-          <div style={{ background: '#13151a', border: '1px solid #2e3340', borderRadius: 4, padding: '0.85rem 1rem', marginBottom: '1rem' }}>
+          <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, padding: '0.85rem 1rem', marginBottom: '1rem' }}>
             <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.6rem' }}>Step 1 — Source document</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <label style={{ padding: '6px 14px', borderRadius: 3, cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: '#c8cdd6', outline: '1px solid #c8cdd633' }}>
+              <label style={{ padding: '6px 14px', borderRadius: 3, cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 20%, transparent)' }}>
                 {importFile ? '✓ ' + importFile.name : '↑ Attach .docx'}
                 <input type="file" accept=".docx" onChange={e => setImportFile(e.target.files[0] || null)} style={{ display: 'none' }} />
               </label>
-              <button onClick={autofillFromDocx} disabled={!importFile} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', cursor: importFile ? 'pointer' : 'default', fontSize: '0.74rem', fontWeight: 700, fontFamily: 'inherit', background: importFile ? TT_ORANGE : '#2a2d35', color: importFile ? '#fff' : '#4a4f5a' }}>↳ Auto-fill fields from .docx</button>
-              {importFile && <button onClick={() => setImportFile(null)} style={{ background: 'none', border: 'none', color: '#c47474', cursor: 'pointer', fontSize: '0.72rem', fontFamily: 'inherit' }}>remove</button>}
+              <button onClick={autofillFromDocx} disabled={!importFile} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', cursor: importFile ? 'pointer' : 'default', fontSize: '0.74rem', fontWeight: 700, fontFamily: 'inherit', background: importFile ? TT_ORANGE : 'var(--disabled)', color: importFile ? '#fff' : 'var(--faint)' }}>↳ Auto-fill fields from .docx</button>
+              {importFile && <button onClick={() => setImportFile(null)} style={{ background: 'none', border: 'none', color: 'var(--fail)', cursor: 'pointer', fontSize: '0.72rem', fontFamily: 'inherit' }}>remove</button>}
             </div>
           </div>
 
           {/* Step 2 — review/paste JSON */}
           <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.4rem' }}>Step 2 — Review fields (auto-filled or pasted)</div>
           <textarea style={inputSt({ minHeight: 220, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={importJson} onChange={e => setImportJson(e.target.value)} spellCheck={false} placeholder='Click "Auto-fill" above, or paste JSON like: { "loan_type": "construction", "borrower_entity": "...", "loan_amount": 51694640 }' />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid #2e3340' }}>
-            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
             <button onClick={importAbstract} disabled={saving} style={{ padding: '7px 22px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Importing…' : 'Import'}</button>
           </div>
         </div>
@@ -6614,14 +6614,14 @@ function LoansTab({ pinUnlocked, requirePin }) {
     const loan = loans.find(l => l.id === confirmDel);
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ background: '#1e2128', border: '1px solid #c47474', borderRadius: 6, padding: '1.5rem', maxWidth: 380, width: '90%' }}>
-          <div style={{ fontWeight: 700, color: '#c8cdd6', marginBottom: '0.5rem' }}>Delete loan?</div>
-          <div style={{ fontSize: '0.8rem', color: '#9aa0aa', marginBottom: '1.25rem' }}>
-            <strong style={{ color: '#c8cdd6' }}>{loan?.property_name || loan?.borrower_entity}</strong> will be permanently removed. The source .docx in Storage is not deleted.
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--fail)', borderRadius: 6, padding: '1.5rem', maxWidth: 380, width: '90%' }}>
+          <div style={{ fontWeight: 700, color: 'var(--text2)', marginBottom: '0.5rem' }}>Delete loan?</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '1.25rem' }}>
+            <strong style={{ color: 'var(--text2)' }}>{loan?.property_name || loan?.borrower_entity}</strong> will be permanently removed. The source .docx in Storage is not deleted.
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-            <button onClick={() => setConfirmDel(null)} style={{ padding: '6px 16px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' }}>Cancel</button>
-            <button onClick={() => deleteLoan(confirmDel)} style={{ padding: '6px 16px', borderRadius: 3, border: 'none', background: '#c47474', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700 }}>Delete</button>
+            <button onClick={() => setConfirmDel(null)} style={{ padding: '6px 16px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' }}>Cancel</button>
+            <button onClick={() => deleteLoan(confirmDel)} style={{ padding: '6px 16px', borderRadius: 3, border: 'none', background: 'var(--fail)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700 }}>Delete</button>
           </div>
         </div>
       </div>
@@ -6629,7 +6629,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
   };
 
   const SortHdr = ({ field, label, align = 'left' }) => (
-    <th onClick={() => toggleSort(field)} style={{ padding: '0.55rem 0.85rem', textAlign: align, cursor: 'pointer', color: sortField === field ? TT_ORANGE : '#9aa0aa', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none' }}>
+    <th onClick={() => toggleSort(field)} style={{ padding: '0.55rem 0.85rem', textAlign: align, cursor: 'pointer', color: sortField === field ? TT_ORANGE : 'var(--muted)', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none' }}>
       {label}{sortField === field ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
     </th>
   );
@@ -6637,23 +6637,23 @@ function LoansTab({ pinUnlocked, requirePin }) {
   // ── Detail panel (expanded row) ──────────────────────────────────────────────
   const Detail = ({ l }) => {
     const Row = ({ k, v }) => (v == null || v === '' ? null : (
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '3px 0', borderBottom: '1px solid #23262e' }}>
-        <span style={{ fontSize: '0.7rem', color: '#5a6070', flexShrink: 0 }}>{k}</span>
-        <span style={{ fontSize: '0.76rem', color: '#c8cdd6', textAlign: 'right' }}>{v}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: '0.7rem', color: 'var(--faint3)', flexShrink: 0 }}>{k}</span>
+        <span style={{ fontSize: '0.76rem', color: 'var(--text2)', textAlign: 'right' }}>{v}</span>
       </div>
     ));
     const Prose = ({ k, v }) => (!v ? null : (
       <div style={{ marginBottom: '0.6rem' }}>
-        <div style={{ fontSize: '0.58rem', color: '#4a4f5a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>{k}</div>
-        <div style={{ fontSize: '0.74rem', color: '#9aa0aa', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v}</div>
+        <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>{k}</div>
+        <div style={{ fontSize: '0.74rem', color: 'var(--muted)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v}</div>
       </div>
     ));
     const ts = l.type_specific && typeof l.type_specific === 'object' ? l.type_specific : {};
     const tsEntries = Object.entries(ts).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
     return (
-      <div style={{ borderTop: '1px solid #2e3340', padding: '1.1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
+      <div style={{ borderTop: '1px solid var(--border)', padding: '1.1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
         <div>
-          <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Loan Terms</div>
+          <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Loan Terms</div>
           <Row k="Borrower" v={l.borrower_entity} />
           <Row k="Units" v={l.unit_count} />
           <Row k="Closing" v={fmtDate(l.closing_date)} />
@@ -6666,7 +6666,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
           <Row k="Maturity" v={fmtDate(l.maturity_date)} />
           <Row k="LTC / LTV" v={(l.ltc_pct != null || l.ltv_pct != null) ? `${l.ltc_pct != null ? fmtPct(l.ltc_pct, 0) : '—'} / ${l.ltv_pct != null ? fmtPct(l.ltv_pct, 0) : '—'}` : null} />
           <Prose k="Repayment" v={l.repayment_summary} />
-          <div style={{ marginTop: '0.5rem', fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.4rem' }}>Lender</div>
+          <div style={{ marginTop: '0.5rem', fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.4rem' }}>Lender</div>
           <Row k="Lead Lender" v={l.lead_lender} />
           <Row k="Role" v={l.lead_lender_role} />
           <Row k="Lead Commitment" v={l.lead_lender_commitment != null ? fmtFull$(l.lead_lender_commitment) : null} />
@@ -6674,7 +6674,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
           <Prose k="Lender Contact" v={l.lender_contact} />
         </div>
         <div>
-          <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Guaranty & Covenants</div>
+          <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Guaranty & Covenants</div>
           <Row k="Completion Guaranty" v={l.completion_guaranty_pct != null ? fmtPct(l.completion_guaranty_pct, 0) : null} />
           <Row k="Repayment Guaranty" v={l.repayment_guaranty_pct != null ? fmtPct(l.repayment_guaranty_pct, 0) : null} />
           <Row k="Guarantor" v={l.guarantor_entity} />
@@ -6691,7 +6691,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
           <Prose k="Significant Covenants" v={l.significant_covenants} />
         </div>
         <div>
-          <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Extension / Prepay / Other</div>
+          <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Extension / Prepay / Other</div>
           <Row k="Extension" v={(l.extension_count != null || l.extension_term_months != null) ? `${l.extension_count ?? '?'} × ${l.extension_term_months ?? '?'} mo` : null} />
           <Row k="Extension Fee" v={l.extension_fee_pct != null ? fmtPct(l.extension_fee_pct) : (l.extension_fee_amount != null ? fmtFull$(l.extension_fee_amount) : null)} />
           <Row k="Extension Maturity" v={l.extension_maturity_date ? fmtDate(l.extension_maturity_date) : null} />
@@ -6709,8 +6709,8 @@ function LoansTab({ pinUnlocked, requirePin }) {
               <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, fontWeight: 700 }}>{LOAN_TYPE_LABEL[l.loan_type]}-specific</div>
               {tsEntries.map(([k, v]) => (
                 <div key={k} style={{ marginBottom: 5 }}>
-                  <span style={{ fontSize: '0.62rem', color: '#5a6070' }}>{k}: </span>
-                  <span style={{ fontSize: '0.7rem', color: '#9aa0aa', whiteSpace: 'pre-wrap' }}>{typeof v === 'object' ? JSON.stringify(v, null, 1) : String(v)}</span>
+                  <span style={{ fontSize: '0.62rem', color: 'var(--faint3)' }}>{k}: </span>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'pre-wrap' }}>{typeof v === 'object' ? JSON.stringify(v, null, 1) : String(v)}</span>
                 </div>
               ))}
             </div>
@@ -6741,22 +6741,22 @@ function LoansTab({ pinUnlocked, requirePin }) {
     const navMonth = delta => setCalRef(new Date(y, m + delta, 1));
     const goToday  = () => { const n = new Date(); setCalRef(new Date(n.getFullYear(), n.getMonth(), 1)); };
 
-    const navBtn = { padding: '5px 12px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' };
-    const dowSt  = { padding: '0.4rem 0.5rem', textAlign: 'center', color: '#6a7080', fontWeight: 600, letterSpacing: '0.06em', fontSize: '0.58rem', textTransform: 'uppercase' };
+    const navBtn = { padding: '5px 12px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' };
+    const dowSt  = { padding: '0.4rem 0.5rem', textAlign: 'center', color: 'var(--faint2)', fontWeight: 600, letterSpacing: '0.06em', fontSize: '0.58rem', textTransform: 'uppercase' };
 
     const selectedLoan = expandedId != null ? loans.find(l => l.id === expandedId) : null;
 
     return (
       <div>
         {/* calendar header: month nav + legend */}
-        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, padding: '0.7rem 1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.7rem 1rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <button onClick={() => navMonth(-1)} style={navBtn} title="Previous month">‹</button>
             <button onClick={goToday} style={navBtn}>Today</button>
             <button onClick={() => navMonth(1)} style={navBtn} title="Next month">›</button>
           </div>
-          <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#c8cdd6', minWidth: 170 }}>{monthLabel}</div>
-          <div style={{ fontSize: '0.68rem', color: '#5a6070' }}>{monthCount} event{monthCount === 1 ? '' : 's'} this month</div>
+          <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text2)', minWidth: 170 }}>{monthLabel}</div>
+          <div style={{ fontSize: '0.68rem', color: 'var(--faint3)' }}>{monthCount} event{monthCount === 1 ? '' : 's'} this month</div>
           <div style={{ flex: 1 }} />
           {/* legend doubles as type toggles */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
@@ -6766,8 +6766,8 @@ function LoansTab({ pinUnlocked, requirePin }) {
                 <button key={k} onClick={() => setCalTypes(t => ({ ...t, [k]: !t[k] }))}
                   title={on ? 'Click to hide' : 'Click to show'}
                   style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', fontWeight: 600,
-                    border: `1px solid ${on ? meta.fg + '66' : '#2e3340'}`, background: on ? meta.bg : 'transparent', color: on ? meta.fg : '#4a4f5a' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: on ? meta.fg : '#3a3f4a' }} />
+                    border: `1px solid ${on ? meta.fg + '66' : 'var(--border)'}`, background: on ? meta.bg : 'transparent', color: on ? meta.fg : 'var(--faint)' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: on ? meta.fg : 'var(--border)' }} />
                   {meta.label}
                 </button>
               );
@@ -6776,19 +6776,19 @@ function LoansTab({ pinUnlocked, requirePin }) {
         </div>
 
         {/* month grid */}
-        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid #2e3340' }}>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--border)' }}>
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} style={dowSt}>{d}</div>)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
             {cells.map((d, i) => {
-              if (d == null) return <div key={i} style={{ minHeight: 92, borderRight: (i % 7 !== 6) ? '1px solid #16191f' : 'none', borderBottom: '1px solid #16191f', background: '#191c22' }} />;
+              if (d == null) return <div key={i} style={{ minHeight: 92, borderRight: (i % 7 !== 6) ? '1px solid var(--bg)' : 'none', borderBottom: '1px solid var(--bg)', background: 'var(--panel3)' }} />;
               const iso = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
               const evts = byDay[iso] || [];
               const isToday = iso === todayISO;
               return (
-                <div key={i} style={{ minHeight: 92, padding: '4px 4px 6px', borderRight: (i % 7 !== 6) ? '1px solid #16191f' : 'none', borderBottom: '1px solid #16191f', background: isToday ? 'rgba(200,121,65,0.06)' : 'transparent', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <div style={{ fontSize: '0.66rem', fontWeight: isToday ? 700 : 500, color: isToday ? TT_ORANGE : '#6a7080', alignSelf: 'flex-end', padding: '1px 4px', borderRadius: 3, background: isToday ? 'rgba(200,121,65,0.16)' : 'transparent' }}>{d}</div>
+                <div key={i} style={{ minHeight: 92, padding: '4px 4px 6px', borderRight: (i % 7 !== 6) ? '1px solid var(--bg)' : 'none', borderBottom: '1px solid var(--bg)', background: isToday ? 'rgba(99, 102, 241,0.06)' : 'transparent', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div style={{ fontSize: '0.66rem', fontWeight: isToday ? 700 : 500, color: isToday ? TT_ORANGE : 'var(--faint2)', alignSelf: 'flex-end', padding: '1px 4px', borderRadius: 3, background: isToday ? 'rgba(99, 102, 241,0.16)' : 'transparent' }}>{d}</div>
                   {evts.map((e, j) => {
                     const meta = CAL_EVENT_META[e.type];
                     return (
@@ -6809,13 +6809,13 @@ function LoansTab({ pinUnlocked, requirePin }) {
 
         {/* detail panel for the clicked loan */}
         {selectedLoan && (
-          <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, marginTop: '0.75rem', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 1rem', borderBottom: '1px solid #2e3340' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c8cdd6' }}>
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, marginTop: '0.75rem', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.7rem 1rem', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text2)' }}>
                 {selectedLoan.property_name || selectedLoan.borrower_entity}
                 <span style={{ marginLeft: 8 }}>{typeBadge(selectedLoan)}</span>
               </span>
-              <button onClick={() => setExpandedId(null)} style={{ background: 'none', border: 'none', color: '#5a6070', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
+              <button onClick={() => setExpandedId(null)} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1rem' }}>✕</button>
             </div>
             <Detail l={selectedLoan} />
           </div>
@@ -6829,7 +6829,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
       <EditModal />
       <ImportModal />
       <ConfirmDeleteModal />
-      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msg.isErr ? '#4a1a1a' : '#1a3a2a', border: `1px solid ${msg.isErr ? '#c47474' : '#6a9e7f'}`, color: msg.isErr ? '#c47474' : '#6a9e7f', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem' }}>{msg.text}</div>}
+      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msg.isErr ? 'color-mix(in srgb, var(--fail) 14%, var(--panel))' : 'color-mix(in srgb, var(--pass) 14%, var(--panel))', border: `1px solid ${msg.isErr ? 'var(--fail)' : 'var(--pass)'}`, color: msg.isErr ? 'var(--fail)' : 'var(--pass)', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem', boxShadow: 'var(--shadow)' }}>{msg.text}</div>}
 
       {/* ── Summary cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
@@ -6839,21 +6839,21 @@ function LoansTab({ pinUnlocked, requirePin }) {
           { label: `Maturing ${thisYear}`, value: maturingThisYear, sub: 'in current calendar year' },
           { label: 'In Database', value: loans.length, sub: 'all loans' },
         ].map(c => (
-          <div key={c.label} style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, padding: '0.9rem 1rem' }}>
-            <div style={{ fontSize: '0.6rem', color: '#6a7080', letterSpacing: '0.08em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#c8cdd6', lineHeight: 1.1 }}>{c.value}</div>
-            <div style={{ fontSize: '0.65rem', color: '#5a6070', marginTop: '0.2rem' }}>{c.sub}</div>
+          <div key={c.label} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.9rem 1rem', boxShadow: 'var(--shadow)' }}>
+            <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.08em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text2)', lineHeight: 1.1 }}>{c.value}</div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', marginTop: '0.2rem' }}>{c.sub}</div>
           </div>
         ))}
       </div>
 
       {/* ── Filter bar ── */}
-      <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, padding: '0.85rem 1rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.85rem 1rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem', boxShadow: 'var(--shadow)' }}>
         <div>
           <label style={labelSt}>View</label>
           <div style={{ display: 'flex', gap: 4 }}>
             {[['table', '☰ Table'], ['calendar', '📅 Calendar']].map(([v, lbl]) => (
-              <button key={v} onClick={() => setViewMode(v)} style={{ padding: '5px 11px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: viewMode === v ? TT_ORANGE : '#2e3340', color: viewMode === v ? '#fff' : '#9aa0aa' }}>{lbl}</button>
+              <button key={v} onClick={() => setViewMode(v)} style={{ padding: '5px 11px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: viewMode === v ? TT_ORANGE : 'var(--border)', color: viewMode === v ? '#fff' : 'var(--muted)' }}>{lbl}</button>
             ))}
           </div>
         </div>
@@ -6861,7 +6861,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
           <label style={labelSt}>Type</label>
           <div style={{ display: 'flex', gap: 4 }}>
             {[['all', 'All'], ['construction', 'Const'], ['refinance', 'Refi']].map(([v, lbl]) => (
-              <button key={v} onClick={() => setFType(v)} style={{ padding: '5px 11px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: fType === v ? TT_ORANGE : '#2e3340', color: fType === v ? '#fff' : '#9aa0aa' }}>{lbl}</button>
+              <button key={v} onClick={() => setFType(v)} style={{ padding: '5px 11px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: fType === v ? TT_ORANGE : 'var(--border)', color: fType === v ? '#fff' : 'var(--muted)' }}>{lbl}</button>
             ))}
           </div>
         </div>
@@ -6876,13 +6876,13 @@ function LoansTab({ pinUnlocked, requirePin }) {
         <div><label style={labelSt}>Repay Guar ≥ %</label><input style={inputSt({ width: 90 })} type="number" value={fGuaranty} onChange={e => setFGuaranty(e.target.value)} placeholder="35" /></div>
         <div><label style={labelSt}>TTH NW ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fNW} onChange={e => setFNW(e.target.value)} placeholder="75" /></div>
         <div><label style={labelSt}>TTH Liq ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fLiq} onChange={e => setFLiq(e.target.value)} placeholder="15" /></div>
-        <button onClick={clearFilters} style={{ padding: '6px 12px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>Clear</button>
+        <button onClick={clearFilters} style={{ padding: '6px 12px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>Clear</button>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans" style={{ padding: '6px 14px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export Excel</button>
-          <button onClick={exportPDF} style={{ padding: '6px 14px', borderRadius: 3, border: '1px solid #2e3340', background: 'none', color: '#9aa0aa', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export PDF</button>
-          <button onClick={() => requirePin(() => setShowImport(true))} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? 'rgba(200,121,65,0.18)' : '#2a2d35', color: pinUnlocked ? TT_ORANGE : '#4a4f5a', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600, outline: pinUnlocked ? '1px solid #c8794155' : 'none' }}>{pinUnlocked ? '⇪ Import Abstract' : '🔒 Import'}</button>
-          <button onClick={() => requirePin(startNew)} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : '#2a2d35', color: pinUnlocked ? '#fff' : '#4a4f5a', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700 }}>{pinUnlocked ? '+ Add Loan' : '🔒 Add Loan'}</button>
+          <button onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans" style={{ padding: '6px 14px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export Excel</button>
+          <button onClick={exportPDF} style={{ padding: '6px 14px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export PDF</button>
+          <button onClick={() => requirePin(() => setShowImport(true))} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? 'rgba(99, 102, 241,0.18)' : 'var(--disabled)', color: pinUnlocked ? TT_ORANGE : 'var(--faint)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600, outline: pinUnlocked ? '1px solid color-mix(in srgb, var(--accent) 33%, transparent)' : 'none' }}>{pinUnlocked ? '⇪ Import Abstract' : '🔒 Import'}</button>
+          <button onClick={() => requirePin(startNew)} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700 }}>{pinUnlocked ? '+ Add Loan' : '🔒 Add Loan'}</button>
         </div>
       </div>
 
@@ -6890,24 +6890,24 @@ function LoansTab({ pinUnlocked, requirePin }) {
       {loans.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
           <div style={{ fontSize: '2rem', opacity: 0.3, marginBottom: '1rem' }}>📄</div>
-          <div style={{ fontSize: '0.9rem', color: '#9aa0aa', fontWeight: 600, marginBottom: '0.5rem' }}>No loans yet</div>
-          <div style={{ fontSize: '0.75rem', color: '#4a4f5a' }}>Use “Import Abstract” to add your first loan, or run the backfill script.</div>
+          <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.5rem' }}>No loans yet</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--faint)' }}>Use “Import Abstract” to add your first loan, or run the backfill script.</div>
         </div>
       ) : viewMode === 'calendar' ? (
         <CalendarView />
       ) : (
-        <div style={{ background: '#1e2128', border: '1px solid #2e3340', borderRadius: 6, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #2e3340' }}>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 <SortHdr field="property_name" label="Property" />
-                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'left', color: '#9aa0aa', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Type</th>
+                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Type</th>
                 <SortHdr field="lead_lender" label="Lender" />
                 <SortHdr field="maturity_date" label="Maturity" />
                 <SortHdr field="loan_amount" label="Loan Amount" align="right" />
                 <SortHdr field="repayment_guaranty_pct" label="Repay Guar" align="right" />
-                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: '#9aa0aa', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>DSCR</th>
-                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: '#9aa0aa', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Doc</th>
+                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: 'var(--muted)', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>DSCR</th>
+                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: 'var(--muted)', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Doc</th>
                 <th style={{ width: 70 }} />
               </tr>
             </thead>
@@ -6916,31 +6916,31 @@ function LoansTab({ pinUnlocked, requirePin }) {
                 const isOpen = expandedId === l.id;
                 return (
                   <React.Fragment key={l.id}>
-                    <tr style={{ borderBottom: isOpen ? 'none' : '1px solid #16191f', background: isOpen ? '#23262e' : 'transparent', cursor: 'pointer' }} onClick={() => setExpandedId(isOpen ? null : l.id)}>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.82rem', color: '#c8cdd6', fontWeight: 600 }}>
+                    <tr style={{ borderBottom: isOpen ? 'none' : '1px solid var(--bg)', background: isOpen ? 'var(--border)' : 'transparent', cursor: 'pointer' }} onClick={() => setExpandedId(isOpen ? null : l.id)}>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.82rem', color: 'var(--text2)', fontWeight: 600 }}>
                         <span style={{ color: TT_ORANGE, marginRight: 6, fontSize: '0.7rem' }}>{isOpen ? '▾' : '▸'}</span>
                         {l.property_name || l.borrower_entity || '—'}
-                        {l.property_state && <span style={{ color: '#5a6070', fontWeight: 400 }}> · {l.property_state}</span>}
+                        {l.property_state && <span style={{ color: 'var(--faint3)', fontWeight: 400 }}> · {l.property_state}</span>}
                       </td>
                       <td style={{ padding: '0.65rem 0.85rem' }}>{typeBadge(l)}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#9aa0aa' }}>{l.lead_lender || '—'}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#9aa0aa' }}>{fmtDate(l.maturity_date)}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#c8cdd6', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtFull$(l.loan_amount)}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#9aa0aa', textAlign: 'right' }}>{l.repayment_guaranty_pct != null ? fmtPct(l.repayment_guaranty_pct, 0) : '—'}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: '#9aa0aa', textAlign: 'right' }}>{l.dscr_covenant != null ? `${Number(l.dscr_covenant).toFixed(2)}x` : '—'}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)' }}>{l.lead_lender || '—'}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)' }}>{fmtDate(l.maturity_date)}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--text2)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtFull$(l.loan_amount)}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', textAlign: 'right' }}>{l.repayment_guaranty_pct != null ? fmtPct(l.repayment_guaranty_pct, 0) : '—'}</td>
+                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', textAlign: 'right' }}>{l.dscr_covenant != null ? `${Number(l.dscr_covenant).toFixed(2)}x` : '—'}</td>
                       <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                         {l.source_doc_path
-                          ? <button onClick={() => downloadDoc(l)} title="Download source .docx" style={{ background: 'none', border: '1px solid #2e3340', borderRadius: 3, color: TT_ORANGE, cursor: 'pointer', padding: '3px 8px', fontSize: '0.68rem', fontFamily: 'inherit' }}>↓ .docx</button>
-                          : <span style={{ fontSize: '0.68rem', color: '#3a3f4a' }}>—</span>}
+                          ? <button onClick={() => downloadDoc(l)} title="Download source .docx" style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 3, color: TT_ORANGE, cursor: 'pointer', padding: '3px 8px', fontSize: '0.68rem', fontFamily: 'inherit' }}>↓ .docx</button>
+                          : <span style={{ fontSize: '0.68rem', color: 'var(--border)' }}>—</span>}
                       </td>
                       <td style={{ padding: '0.65rem 0.5rem', whiteSpace: 'nowrap', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                         {pinUnlocked ? (
                           <>
-                            <button onClick={() => startEdit(l)} title="Edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9aa0aa', fontSize: '0.75rem', padding: '2px 5px' }}>✏</button>
-                            <button onClick={() => setConfirmDel(l.id)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c4747466', fontSize: '0.75rem', padding: '2px 5px' }}>✕</button>
+                            <button onClick={() => startEdit(l)} title="Edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.75rem', padding: '2px 5px' }}>✏</button>
+                            <button onClick={() => setConfirmDel(l.id)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 40%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }}>✕</button>
                           </>
                         ) : (
-                          <button onClick={() => requirePin(() => startEdit(l))} title="Unlock to edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2a2d35', fontSize: '0.75rem', padding: '2px 5px' }}>🔒</button>
+                          <button onClick={() => requirePin(() => startEdit(l))} title="Unlock to edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }}>🔒</button>
                         )}
                       </td>
                     </tr>
@@ -6952,7 +6952,7 @@ function LoansTab({ pinUnlocked, requirePin }) {
               })}
             </tbody>
           </table>
-          {sorted.length === 0 && <div style={{ padding: '2rem', textAlign: 'center', color: '#4a4f5a', fontSize: '0.8rem' }}>No loans match the current filters.</div>}
+          {sorted.length === 0 && <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--faint)', fontSize: '0.8rem' }}>No loans match the current filters.</div>}
         </div>
       )}
     </div>
@@ -6972,6 +6972,32 @@ export default function App() {
   const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land','loans'];
   const [visibleTabs, setVisibleTabs] = useState({ calculator:false, matrix:false, covenant:true, leasing:false, pipeline:false, land:false, loans:true });
   const [showTabConfig, setShowTabConfig] = useState(false);
+
+  // ── Light / dark theme (system default, remembered once toggled) ──
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tt-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    } catch { return 'light'; }
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('tt-theme', theme); } catch {}
+  }, [theme]);
+  // Follow the OS preference live, but only until the user makes an explicit choice.
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = e => {
+      let saved = null;
+      try { saved = localStorage.getItem('tt-theme'); } catch {}
+      if (saved !== 'light' && saved !== 'dark') setTheme(e.matches ? 'dark' : 'light');
+    };
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  const toggleTheme = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'));
 
   // Load SOFR and 10-year curves from Supabase on mount (overrides hardcoded if present)
   useEffect(() => { loadSofrCurve(); }, []);
@@ -7199,7 +7225,7 @@ export default function App() {
       fontFamily: "'Inter', sans-serif",
       background: TT_NAVY,
       minHeight: "100vh",
-      color: "#e8eaed",
+      color: "var(--text)",
       padding: "0",
       display: "flex",
       flexDirection: "column",
@@ -7217,7 +7243,7 @@ export default function App() {
 
       {/* ── Header bar ── */}
       <div style={{
-        background: "#13151a",
+        background: "var(--header)",
         borderBottom: `3px solid ${TT_ORANGE}`,
         padding: "1.25rem 2rem",
         display: "flex",
@@ -7233,24 +7259,38 @@ export default function App() {
             Covenant Dashboard
           </div>
         </div>
-        {/* Right side — SOFR curve status + upload */}
+        {/* Right side — theme toggle + SOFR curve status + upload */}
+        <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+        <button
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label="Toggle light / dark mode"
+          style={{
+            width: 38, height: 38, borderRadius: 8, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--panel)', border: '1px solid var(--border)',
+            color: 'var(--text2)', fontSize: '1rem', lineHeight: 1, flexShrink: 0,
+            transition: 'background-color 0.15s, border-color 0.15s',
+          }}
+        >{theme === 'dark' ? '☀️' : '🌙'}</button>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: "0.7rem", color: "#4a4f5a" }}>Chatham 1-Mo Term SOFR Forward Curve</div>
-          <div style={{ fontSize: "0.7rem", color: sofrUpdated ? "#6a9e7f" : "#4a4f5a" }}>
+          <div style={{ fontSize: "0.7rem", color: "var(--faint)" }}>Chatham 1-Mo Term SOFR Forward Curve</div>
+          <div style={{ fontSize: "0.7rem", color: sofrUpdated ? "var(--pass)" : "var(--faint)" }}>
             {sofrUpdated
               ? `Updated ${sofrUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
               : "as of 03 Mar 2026 (hardcoded)"}
           </div>
           {pinUnlocked ? (
-            <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: '#c8cdd6', outline: '1px solid #c8cdd633' }}>
+            <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 20%, transparent)' }}>
               ↑ Update Curve
               <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
             </label>
           ) : (
-            <button onClick={() => setShowPinModal(true)} style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(200,205,214,0.05)', color: '#4a4f5a', outline: '1px solid #4a4f5a33', border: 'none' }}>
+            <button onClick={() => setShowPinModal(true)} style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(200,205,214,0.05)', color: 'var(--faint)', outline: '1px solid color-mix(in srgb, var(--faint) 20%, transparent)', border: 'none' }}>
               🔒 Update Curve
             </button>
           )}
+        </div>
         </div>
       </div>
 
@@ -7258,7 +7298,7 @@ export default function App() {
       <div style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
 
         {/* ── Tab Nav ── */}
-        <div style={{ display: 'flex', borderBottom: `1px solid #2e3340`, marginBottom: '2rem', alignItems: 'flex-end', position: 'relative' }}>
+        <div style={{ display: 'flex', borderBottom: `1px solid var(--border)`, marginBottom: '2rem', alignItems: 'flex-end', position: 'relative' }}>
           {visibleTabs.calculator && <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("calculator")}>Calculator</button>}
           {visibleTabs.matrix     && <button className={`tab-btn ${activeTab === "matrix"     ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("matrix")}>DY / DSCR Matrix</button>}
           {visibleTabs.covenant   && <button className={`tab-btn ${activeTab === "covenant"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("covenant")}>Covenant Tracker</button>}
@@ -7270,19 +7310,19 @@ export default function App() {
           <button
             onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
             title={pinUnlocked ? 'Configure visible tabs' : 'Unlock to configure tabs'}
-            style={{ marginLeft: 'auto', marginBottom: 6, padding: '4px 8px', background: showTabConfig ? 'rgba(200,121,65,0.15)' : 'none', border: showTabConfig ? `1px solid ${TT_ORANGE}44` : '1px solid transparent', borderRadius: 4, cursor: 'pointer', color: showTabConfig ? TT_ORANGE : '#4a4f5a', fontSize: '0.9rem', lineHeight: 1 }}
+            style={{ marginLeft: 'auto', marginBottom: 6, padding: '4px 8px', background: showTabConfig ? 'rgba(99, 102, 241,0.15)' : 'none', border: showTabConfig ? `1px solid color-mix(in srgb, var(--accent) 27%, transparent)` : '1px solid transparent', borderRadius: 4, cursor: 'pointer', color: showTabConfig ? TT_ORANGE : 'var(--faint)', fontSize: '0.9rem', lineHeight: 1 }}
           >⚙</button>
           {/* Tab config dropdown */}
           {showTabConfig && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: '#13151a', border: `1px solid ${TT_ORANGE}44`, borderRadius: 4, padding: '0.75rem 1rem', minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+            <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: 'var(--panel2)', border: `1px solid color-mix(in srgb, var(--accent) 27%, transparent)`, borderRadius: 4, padding: '0.75rem 1rem', minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
               <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: '0.65rem' }}>Visible Tabs</div>
               {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans']].map(([key, label]) => (
                 <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem', cursor: 'pointer' }}>
                   <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ accentColor: TT_ORANGE, width: 14, height: 14 }} />
-                  <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? '#c8cdd6' : '#4a4f5a' }}>{label}</span>
+                  <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? 'var(--text2)' : 'var(--faint)' }}>{label}</span>
                 </label>
               ))}
-              <div style={{ marginTop: '0.5rem', fontSize: '0.58rem', color: '#4a4f5a' }}>Changes persist across sessions.</div>
+              <div style={{ marginTop: '0.5rem', fontSize: '0.58rem', color: 'var(--faint)' }}>Changes persist across sessions.</div>
             </div>
           )}
         </div>
@@ -7296,8 +7336,8 @@ export default function App() {
         {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
 
         {/* ── Footer ── */}
-        <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid #2e3340`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: "0.68rem", color: "#4a4f5a" }}>
+        <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid var(--border)`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: "0.68rem", color: "var(--faint)" }}>
             Chatham 1-Month Term SOFR Forward Curve · as of 03 Mar 2026
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
@@ -7308,14 +7348,14 @@ export default function App() {
                 padding: '2px 8px', borderRadius: 2, border: 'none', cursor: 'pointer',
                 fontFamily: 'inherit', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.08em',
                 background: pinUnlocked ? 'rgba(106,158,127,0.10)' : 'transparent',
-                color: pinUnlocked ? '#6a9e7f' : '#4a4f5a',
-                outline: pinUnlocked ? '1px solid rgba(106,158,127,0.25)' : '1px solid #2e3340',
+                color: pinUnlocked ? 'var(--pass)' : 'var(--faint)',
+                outline: pinUnlocked ? '1px solid rgba(106,158,127,0.25)' : '1px solid var(--border)',
               }}
               title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
             >
               {pinUnlocked ? '🔓 Editing unlocked' : '🔒 View only'}
             </button>
-            <span style={{ fontSize: "0.85rem", color: "#c8cdd6", fontWeight: 700, letterSpacing: "0.06em" }}>
+            <span style={{ fontSize: "0.85rem", color: "var(--text2)", fontWeight: 700, letterSpacing: "0.06em" }}>
               Kevin Ashburn · <span style={{ color: TT_ORANGE }}>Thompson Thrift</span>
             </span>
           </div>

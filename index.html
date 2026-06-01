@@ -8,9 +8,70 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <style>
+      /* ── Theme tokens ───────────────────────────────────────────────
+         Dark is the baseline; [data-theme="light"] overrides it.
+         Toggled at runtime by setting data-theme on <html>. */
+      :root, :root[data-theme="dark"] {
+        --bg: #16191f;
+        --header: #13151a;
+        --panel: #1e2128;
+        --panel2: #13151a;
+        --panel3: #191c22;
+        --border: #2e3340;
+        --text: #e8eaed;
+        --text2: #c8cdd6;
+        --muted: #9aa0aa;
+        --faint: #4a4f5a;
+        --faint2: #6a7080;
+        --faint3: #5a6070;
+        --accent: #6366f1;
+        --accent-strong: #818cf8;
+        --pass: #6a9e7f;
+        --fail: #c47474;
+        --warn: #b8923c;
+        --disabled: #2a2d35;
+        --shadow: 0 1px 3px rgba(0,0,0,0.45);
+        color-scheme: dark;
+      }
+      :root[data-theme="light"] {
+        --bg: #f4f5f7;
+        --header: #ffffff;
+        --panel: #ffffff;
+        --panel2: #f6f7f9;
+        --panel3: #fafbfc;
+        --border: #e4e7ec;
+        --text: #1f2733;
+        --text2: #334155;
+        --muted: #6b7280;
+        --faint: #98a1ae;
+        --faint2: #6b7484;
+        --faint3: #8a93a3;
+        --accent: #4f46e5;
+        --accent-strong: #4338ca;
+        --pass: #15803d;
+        --fail: #dc2626;
+        --warn: #b45309;
+        --disabled: #eceef1;
+        --shadow: 0 1px 3px rgba(16,24,40,0.08), 0 1px 2px rgba(16,24,40,0.05);
+        color-scheme: light;
+      }
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #0d2137; font-family: 'Inter', sans-serif; }
+      body { background: var(--bg); font-family: 'Inter', sans-serif; transition: background-color 0.2s ease; }
     </style>
+    <script>
+      /* Apply the saved/system theme before first paint to avoid a flash. */
+      (function () {
+        try {
+          var saved = localStorage.getItem('tt-theme');
+          var theme = (saved === 'light' || saved === 'dark')
+            ? saved
+            : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
