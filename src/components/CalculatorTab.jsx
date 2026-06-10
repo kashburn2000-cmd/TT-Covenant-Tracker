@@ -241,7 +241,7 @@ export function CalculatorTab({ thresholds }) {
               <span style={{ fontSize: "0.78rem", color: "var(--text2)", fontWeight: 600 }}>+ {spread.toFixed(2)}%</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0 0" }}>
-              <span style={{ fontSize: "0.82rem", color: "#ffffff", fontWeight: 600 }}>All-in Rate</span>
+              <span style={{ fontSize: "0.82rem", color: "var(--text)", fontWeight: 600 }}>All-in Rate</span>
               <span style={{ fontSize: "0.82rem", color: "var(--warn)", fontWeight: 700 }}>{formatPct(allInRate, 4)}</span>
             </div>
           </div>
@@ -271,7 +271,7 @@ export function CalculatorTab({ thresholds }) {
               const diff = maxLoan - loanAmount;
               return (
                 <tr key={dy}>
-                  <td style={{ color: "#ffffff", fontWeight: 600 }}>{(dy * 100).toFixed(1)}%</td>
+                  <td style={{ color: "var(--text)", fontWeight: 600 }}>{(dy * 100).toFixed(1)}%</td>
                   <td style={{ color: "var(--pass)", fontWeight: 600 }}>{formatCurrency(maxLoan)}</td>
                   <td>
                     {under
