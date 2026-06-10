@@ -357,7 +357,7 @@ export function LeasingTab() {
                 <tr key={r.pscode} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--panel2)', borderBottom: '1px solid var(--bg)' }}>
                   {/* Property */}
                   <td style={{ padding: '0.65rem 0.7rem' }}>
-                    <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.82rem' }}>{r.property}</div>
+                    <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.82rem' }}>{r.property}</div>
                     <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.1rem' }}>{r.marquee}</div>
                     <div style={{ fontSize: '0.63rem', color: 'var(--border)', marginTop: '0.1rem' }}>{r.totalUnits} units · DOP {fmtDate(r.dopDate)}</div>
                   </td>

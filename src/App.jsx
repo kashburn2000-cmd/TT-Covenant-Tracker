@@ -1480,7 +1480,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <tbody>
               {uploadResults.map(r => (
                 <tr key={r.id} style={{ borderBottom: '1px solid var(--bg)' }}>
-                  <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#ffffff', fontSize: '0.82rem' }}>{r.property}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text)', fontSize: '0.82rem' }}>{r.property}</td>
                   <td style={{ padding: '0.5rem 0.75rem' }}>
                     <span style={{
                       padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 600,
@@ -1859,7 +1859,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                               {expandedFund ? '▼' : '▶'}
                             </button>
                           )}
-                          <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.85rem' }}>{r.property}</div>
+                          <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.85rem' }}>{r.property}</div>
                         </div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.lender}</div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--faint)', marginLeft: isFundRow ? '1.1rem' : 0 }}>{formatCurrency(r.loanAmount)}</div>
@@ -2088,7 +2088,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
                       <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'var(--muted)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
                       <button onClick={() => requirePin(() => toggleHidden(r.id, r.hidden))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? (r.hidden ? 'var(--pass)' : 'var(--muted)') : 'var(--disabled)', fontSize: '0.78rem', padding: '2px 5px' }} title={pinUnlocked ? (r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)') : 'Unlock to hide'}>{r.hidden ? '↩' : '⊘'}</button>
-                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'color-mix(in srgb, var(--fail) 27%, transparent)' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
+                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'color-mix(in srgb, var(--fail) 27%, transparent)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
                       <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? 'var(--accent)' : 'var(--faint)' }} title="Show calculation">∑</button>
                       <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? 'var(--pass)' : 'var(--faint)' }} title="History &amp; notes">⏱</button>
                     </td>
