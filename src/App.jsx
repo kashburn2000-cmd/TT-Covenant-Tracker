@@ -1377,18 +1377,22 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     const amort = parseInt(p.amort);
 
     // ── Variable loan balance: T-3 rolling interest ──────────────────────────
-    // If variableLoan is on, find the 3 schedule entries immediately before the
-    // test date, compute monthly interest for each (balance × rate / 12 using
+    // If variableLoan is on, find the 3 schedule months immediately before the
+    // test month, compute monthly interest for each (balance × rate / 12 using
     // that month's SOFR), sum and annualize × 4.
     let ads, variableLoanDetail = null;
-    // Parse the variable-loan balance schedule once (entries before the test
-    // date, newest first). Reused for both the T-3 interest calc and the
-    // effective loan balance below.
+    // Parse the variable-loan balance schedule once (months strictly before the
+    // test month, newest first). The month-granular cutoff matches computeNOI's
+    // trailing window, so the interest months line up with the NOI months and a
+    // test date entered as 5/31 vs 5/1 selects the same window. Reused for both
+    // the T-3 interest calc and the effective loan balance below.
+    const testDate = new Date(p.covenantDate + 'T00:00:00');
+    const testYM = testDate.getFullYear() * 12 + testDate.getMonth();
     const parsedSchedule = (p.variableLoan && p.loanSchedule)
       ? p.loanSchedule
           .filter(e => e.month && e.balance !== '' && e.balance != null)
           .map(e => ({ date: new Date(e.month + '-01T00:00:00'), balance: parseFloat(e.balance) }))
-          .filter(e => e.date < new Date(p.covenantDate + 'T00:00:00'))
+          .filter(e => (e.date.getFullYear() * 12 + e.date.getMonth()) < testYM)
           .sort((a, b) => b.date - a.date)
       : [];
     if (p.variableLoan && p.loanSchedule && p.loanSchedule.length > 0) {
@@ -1413,7 +1417,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         });
         const totalT3Interest = monthlyInterests.reduce((s, m) => s + m.monthlyInterest, 0);
         ads = (totalT3Interest / t3.length) * 12; // annualized average monthly interest
-        variableLoanDetail = { months: monthlyInterests, annualizedADS: ads };
+        const avgRate = monthlyInterests.reduce((s, m) => s + m.rate, 0) / monthlyInterests.length;
+        variableLoanDetail = { months: monthlyInterests, annualizedADS: ads, avgRate };
       } else {
         // Fallback to commitment × rate I/O if no schedule entries before test date
         const commitment = p.loanCommitment || loan;
@@ -1437,14 +1442,25 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     if (!satisfied) {
       if (p.covenantType === 'dy') {
         paydown = Math.max(0, effectiveLoan - noi / (req / 100));
+      } else if (variableLoanDetail) {
+        // T-3 rolling interest: a paydown of X reduces each trailing balance by
+        // X, so ADS falls linearly at the average of the trailing months' rates:
+        // ads(X) = ads − X × avgRate. Solve ads(X) = noi / req for X.
+        paydown = variableLoanDetail.avgRate > 0
+          ? Math.min(effectiveLoan, Math.max(0, (ads - noi / req) / variableLoanDetail.avgRate))
+          : effectiveLoan;
       } else {
-        let lo = 0, hi = effectiveLoan;
+        // Bisect over the remaining balance using the same basis that produced
+        // the failing ADS: the commitment for a schedule-less variable loan,
+        // the loan amount otherwise.
+        const base = p.variableLoan ? (p.loanCommitment || loan) : effectiveLoan;
+        let lo = 0, hi = base;
         for (let i = 0; i < 60; i++) {
           const mid = (lo + hi) / 2;
           const testAds = calcADS(mid, rate, amort);
           if (noi / testAds >= req) lo = mid; else hi = mid;
         }
-        paydown = Math.max(0, effectiveLoan - lo);
+        paydown = Math.max(0, base - lo);
       }
     }
     return { ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, ads, effectiveLoan, variableLoanDetail, currentVal, satisfied, requiredNOI, noiVariance, paydown };
@@ -2782,7 +2798,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 ))}
               </div>
               <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: '0.5rem' }}>
-                Enter months in any order. The 3 entries immediately before the test date will be used for T-3 interest calculation.
+                Enter months in any order. The 3 months immediately before the test month will be used for T-3 interest calculation (matching the trailing NOI window).
               </div>
             </div>
           )}
@@ -3356,17 +3372,28 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                               </div>
 
                               {/* Paydown */}
-                              {!r.satisfied && (
+                              {!r.satisfied && (() => {
+                                // Same balance basis the paydown was solved against in calcRow:
+                                // drawn balance for variable loans, loan amount otherwise.
+                                const payBase = r.effectiveLoan || r.loanAmount;
+                                const isTBD = r.paydown >= payBase * 0.999;
+                                // New ADS under the same debt-service model that produced the
+                                // failing DSCR (T-3 linear for variable loans, calcADS otherwise).
+                                const newAds = r.variableLoanDetail
+                                  ? r.ads - r.paydown * r.variableLoanDetail.avgRate
+                                  : calcADS(payBase - r.paydown, r.rate, r.amort);
+                                return (
                                 <div>
                                   <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Paydown to Clear</div>
                                   <MathLine label="NOI Shortfall" value={formatCurrency(r.noiVariance)} color="var(--fail)" />
-                                  <MathLine label="Required Paydown" value={r.paydown >= r.loanAmount * 0.999 ? 'TBD' : formatCurrency(r.paydown)} color="var(--accent)" />
-                                  {r.paydown < r.loanAmount * 0.999 && <MathLine label="New Loan Balance" value={formatCurrency(r.loanAmount - r.paydown)} eq="after paydown" />}
-                                  {r.covenantType === 'dscr' && r.paydown < r.loanAmount * 0.999 && (
-                                    <MathLine label="Verify DSCR" value={`${(r.noi / calcADS(r.loanAmount - r.paydown, r.rate, r.amort)).toFixed(4)}x`} eq="NOI ÷ new ADS" color="var(--pass)" />
+                                  <MathLine label="Required Paydown" value={isTBD ? 'TBD' : formatCurrency(r.paydown)} color="var(--accent)" />
+                                  {!isTBD && <MathLine label="New Loan Balance" value={formatCurrency(payBase - r.paydown)} eq="after paydown" />}
+                                  {r.covenantType === 'dscr' && !isTBD && newAds > 0 && (
+                                    <MathLine label="Verify DSCR" value={`${(r.noi / newAds).toFixed(4)}x`} eq="NOI ÷ new ADS" color="var(--pass)" />
                                   )}
                                 </div>
-                              )}
+                                );
+                              })()}
 
                               {/* NOI Calculation Detail */}
                               {r.noiDetail && (
@@ -3549,8 +3576,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   {isFundRow && expandedFund && fundProps.map((fp, fi) => {
                     const fpLoan = fp.allocatedLoan;
                     const fpNOI = fp.noi || 0;
-                    const fpSofr = getSofr(r.covenantDate);
-                    const fpRate = fpSofr + parseFloat(r.spread) / 100;
+                    // Parent's covenant-date rate — already the highest of all
+                    // three prongs (SOFR, 10Y, sizing floor), so a sub-row can't
+                    // show a pass the floor-based covenant math would fail.
+                    const fpRate = r.rate;
                     const fpADS = fpLoan ? calcADS(fpLoan, fpRate, r.amort) : null;
                     const fpDSCR = fpADS && fpADS > 0 ? fpNOI / fpADS : null;
                     const fpPassing = fpDSCR !== null ? fpDSCR >= r.covenantReq : null;
