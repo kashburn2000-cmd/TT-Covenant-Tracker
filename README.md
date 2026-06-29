@@ -180,7 +180,21 @@ With Variable Loan Balance enabled, the **NOI Adjustments** section appears. Ent
 
 ## Access Control
 
-The app uses a PIN (`1234`) to gate add, edit, and delete operations. All read/view functionality is open.
+There are two layers:
+
+1. **View gate (riddle).** The whole dashboard is hidden behind a riddle on
+   load — nobody sees any data until they answer it. This keeps casual visitors
+   (anyone who just types the domain) out. Configure the riddle, accepted
+   answers, and hint at the top of [`src/components/AccessGate.jsx`](src/components/AccessGate.jsx).
+   The unlock is remembered for the browser session (swap `sessionStorage` for
+   `localStorage` there to remember the device instead).
+2. **Edit PIN (`1234`).** Gates add, edit, and delete operations once inside.
+
+> **Note — this is a casual lock, not real security.** The app reads Supabase
+> with a publishable key that ships in the page, and this repo is public, so a
+> technical visitor could still query the data directly. To actually protect the
+> data, lock down Supabase row-level security (require auth for reads), make the
+> repo private, and rotate the key.
 
 ---
 
