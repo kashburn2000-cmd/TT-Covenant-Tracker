@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
+import { LockIcon } from '../icons.jsx';
 
 // ── Land Facility Tab ─────────────────────────────────────────────────────────
 // Tracks the Simmons Bank $45M guidance line — individual draws, payoff status,
@@ -414,12 +415,12 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
   // ── Formatters ──────────────────────────────────────────────────────────────
   const fmtM  = v => v == null ? '—' : '$' + (v / 1e6).toFixed(2) + 'M';
   const fmtD  = s => { if (!s) return '—'; try { return new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return s; } };
-  const statusColor = s => s === 'paid_off' ? 'var(--pass)' : s === 'proposed' ? '#4a9acf' : 'var(--accent)';
+  const statusColor = s => s === 'paid_off' ? 'var(--pass)' : s === 'proposed' ? 'var(--cat-blue)' : 'var(--accent)';
   const statusLabel = s => s === 'paid_off' ? 'Paid Off' : s === 'proposed' ? 'Proposed' : 'Outstanding';
-  const statusBg    = s => s === 'paid_off' ? 'rgba(106,158,127,0.1)' : s === 'proposed' ? 'rgba(74,154,207,0.12)' : 'rgba(99, 102, 241,0.12)';
+  const statusBg    = s => s === 'paid_off' ? 'color-mix(in srgb, var(--pass) 10%, transparent)' : s === 'proposed' ? 'color-mix(in srgb, var(--cat-blue) 12%, transparent)' : 'color-mix(in srgb, var(--accent) 12%, transparent)';
 
-  const inputSt = { background: 'var(--panel3)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', padding: '6px 10px', fontFamily: 'inherit', fontSize: '0.8rem', width: '100%', boxSizing: 'border-box' };
-  const labelSt = { fontSize: '0.6rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 3 };
+  const inputSt = { background: 'var(--panel3)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '6px 10px', fontFamily: 'inherit', fontSize: '0.8rem', width: '100%', boxSizing: 'border-box' };
+  const labelSt = { fontSize: '0.6rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 3 };
   const fieldSt = { marginBottom: '0.75rem' };
 
   if (loading) return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--faint)' }}>Loading land facility data…</div>;
@@ -427,13 +428,13 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
   return (
     <div style={{ position: 'relative' }}>
       {/* Flash message */}
-      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msgErr ? '#4a1a1a' : '#1a3a2a', border: `1px solid ${msgErr ? 'var(--fail)' : 'var(--pass)'}`, color: msgErr ? 'var(--fail)' : 'var(--pass)', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem' }}>{msg}</div>}
+      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msgErr ? 'color-mix(in srgb, var(--fail) 35%, var(--bg))' : 'color-mix(in srgb, var(--pass) 22%, var(--bg))', border: `1px solid ${msgErr ? 'var(--fail)' : 'var(--pass)'}`, color: msgErr ? 'var(--fail)' : 'var(--pass)', padding: '8px 18px', borderRadius: 6, fontSize: '0.78rem' }}>{msg}</div>}
 
       {/* ── Summary cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
         {/* 12-Month Peak — wider and more prominent */}
-        <div style={{ background: 'var(--panel2)', border: `1px solid ${(() => { const peak = Math.max(...timelineData.map(t => t.balance), 0); return threshold && peak > threshold ? 'var(--fail)' : '#1e2330'; })()}`, borderRadius: 4, padding: '1rem 1.5rem' }}>
-          <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4, fontWeight: 700 }}>12-Month Peak Exposure</div>
+        <div style={{ background: 'var(--panel2)', border: `1px solid ${(() => { const peak = Math.max(...timelineData.map(t => t.balance), 0); return threshold && peak > threshold ? 'var(--fail)' : 'var(--border)'; })()}`, borderRadius: 6, padding: '1rem 1.5rem' }}>
+          <div style={{ fontSize: '0.62rem', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 }}>12-Month Peak Exposure</div>
           {(() => {
             const peak = Math.max(...timelineData.map(t => t.balance), 0);
             const peakMonth = timelineData.find(t => t.balance === peak);
@@ -449,21 +450,21 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
             );
           })()}
         </div>
-        <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
-          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Outstanding Balance</div>
+        <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Outstanding Balance</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: totalOutstanding > (threshold || Infinity) ? 'var(--fail)' : 'var(--text)' }}>{fmtM(totalOutstanding)}</div>
           <div style={{ fontSize: '0.67rem', color: 'var(--faint)', marginTop: 2 }}>{outstanding.length} active draw{outstanding.length !== 1 ? 's' : ''}</div>
         </div>
-        <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, padding: '1rem 1.25rem' }}>
-          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Facility Capacity</div>
+        <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '1rem 1.25rem' }}>
+          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Facility Capacity</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>{fmtM(FACILITY_MAX)}</div>
           <div style={{ fontSize: '0.67rem', color: 'var(--faint)', marginTop: 2 }}>{fmtM(FACILITY_MAX - totalOutstanding)} remaining</div>
         </div>
       </div>
 
       {/* ── Threshold input row ── */}
-      <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, padding: '0.75rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <div style={{ fontSize: '0.62rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>TT Internal Threshold ($M)</div>
+      <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.75rem 1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ fontSize: '0.62rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>TT Internal Threshold ($M)</div>
         <input
           type="number" step="0.1" min="0" max="45"
           value={thresholdInput}
@@ -473,8 +474,8 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
           style={{ ...inputSt, width: 100 }}
           disabled={!pinUnlocked}
         />
-        <button onClick={() => requirePin(saveThreshold)} style={{ padding: '5px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
-          {pinUnlocked ? 'Save' : '🔒 Save'}
+        <button onClick={() => requirePin(saveThreshold)} className={`btn btn-sm btn-primary ${pinUnlocked ? '' : 'btn-locked'}`}>
+          {pinUnlocked ? 'Save' : <><LockIcon size={11} /> Save</>}
         </button>
         {threshold > 0 && (
           <div style={{ marginLeft: '0.5rem', fontSize: '0.72rem', color: totalOutstanding > threshold ? 'var(--fail)' : 'var(--pass)' }}>
@@ -486,22 +487,22 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
       </div>
 
       {/* ── Draws table ── */}
-      <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, marginBottom: '1.5rem', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.25rem', borderBottom: '1px solid #1e2330' }}>
-          <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>Simmons Bank — Land Draws</div>
+      <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, marginBottom: '1.5rem', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontSize: '0.65rem', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Simmons Bank — Land Draws</div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <button onClick={exportLandPDF} style={{ padding: '4px 14px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>
+            <button onClick={exportLandPDF} className="btn btn-sm">
               ↓ Export PDF
             </button>
-            <button onClick={() => requirePin(() => { setForm(EMPTY_DRAW); setEditId('new'); setShowForm(true); })} style={{ padding: '4px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
-              {pinUnlocked ? '+ Add Draw' : '🔒 Add Draw'}
+            <button onClick={() => requirePin(() => { setForm(EMPTY_DRAW); setEditId('new'); setShowForm(true); })} className={`btn btn-sm btn-primary ${pinUnlocked ? '' : 'btn-locked'}`}>
+              {pinUnlocked ? '+ Add Draw' : <><LockIcon size={11} /> Add Draw</>}
             </button>
           </div>
         </div>
 
         {/* Edit / Add form */}
         {showForm && (
-          <div style={{ padding: '1rem 1.25rem', background: '#0f1117', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ padding: '1rem 1.25rem', background: 'var(--panel2)', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1.5fr', gap: '0.75rem', alignItems: 'end' }}>
               <div style={fieldSt}>
                 <label style={labelSt}>Property Name</label>
@@ -533,18 +534,18 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <button onClick={saveDraw} style={{ padding: '5px 16px', background: TT_ORANGE, border: 'none', borderRadius: 3, color: '#fff', fontFamily: 'inherit', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save</button>
-              <button onClick={() => { setShowForm(false); setEditId(null); }} style={{ padding: '5px 12px', background: 'none', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--muted)', fontFamily: 'inherit', fontSize: '0.75rem', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={saveDraw} className="btn btn-sm btn-primary">Save</button>
+              <button onClick={() => { setShowForm(false); setEditId(null); }} style={{ padding: '5px 12px', background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--muted)', fontFamily: 'inherit', fontSize: '0.75rem', cursor: 'pointer' }}>Cancel</button>
             </div>
           </div>
         )}
 
         {/* Confirm delete */}
         {deleteId && (
-          <div style={{ padding: '0.75rem 1.25rem', background: '#1a0f0f', borderBottom: '1px solid #4a1a1a', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ padding: '0.75rem 1.25rem', background: 'color-mix(in srgb, var(--fail) 12%, var(--bg))', borderBottom: '1px solid color-mix(in srgb, var(--fail) 35%, var(--bg))', display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <span style={{ fontSize: '0.78rem', color: 'var(--fail)' }}>Delete this draw? This cannot be undone.</span>
-            <button onClick={() => deleteDraw(deleteId)} style={{ padding: '4px 14px', background: 'var(--fail)', border: 'none', borderRadius: 3, color: '#fff', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
-            <button onClick={() => setDeleteId(null)} style={{ padding: '4px 12px', background: 'none', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--muted)', fontFamily: 'inherit', fontSize: '0.72rem', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={() => deleteDraw(deleteId)} style={{ padding: '4px 14px', background: 'var(--fail)', border: 'none', borderRadius: 4, color: '#fff', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>Delete</button>
+            <button onClick={() => setDeleteId(null)} style={{ padding: '4px 12px', background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--muted)', fontFamily: 'inherit', fontSize: '0.72rem', cursor: 'pointer' }}>Cancel</button>
           </div>
         )}
 
@@ -554,9 +555,9 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid #1e2330' }}>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {['Property', 'Amount', 'Currently Funded', 'Takedown', 'Expected Payoff', 'Status', 'Note', ''].map(h => (
-                  <th key={h} style={{ padding: '0.55rem 1rem', textAlign: h === 'Amount' || h === 'Currently Funded' ? 'right' : 'left', fontSize: '0.6rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 400, whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '0.55rem 1rem', textAlign: h === 'Amount' || h === 'Currently Funded' ? 'right' : 'left', fontSize: '0.6rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -583,14 +584,14 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
                         <button onClick={() => setDeleteId(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 27%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }} title="Delete">✕</button>
                       </>
                     ) : (
-                      <button onClick={() => requirePin(() => startEdit(d))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title="Unlock to edit">🔒</button>
+                      <button onClick={() => requirePin(() => startEdit(d))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', opacity: 0.5, fontSize: '0.75rem', padding: '2px 5px' }} title="Unlock to edit"><LockIcon size={12} /></button>
                     )}
                   </td>
                 </tr>
               ))}
               {/* Totals row — outstanding funded only, no commitment sum */}
-              <tr style={{ borderTop: '2px solid var(--border)', background: '#0f1117' }}>
-                <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Currently Funded</td>
+              <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--panel2)' }}>
+                <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Currently Funded</td>
                 <td />
                 <td style={{ padding: '0.7rem 1rem', fontSize: '0.78rem', color: 'var(--text)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{fmtM(totalOutstanding)}</td>
                 <td colSpan={5} />
@@ -601,11 +602,11 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
       </div>
 
       {/* ── 12-month exposure line chart ── */}
-      <div style={{ background: 'var(--panel2)', border: '1px solid #1e2330', borderRadius: 4, padding: '1.25rem 1.5rem', marginTop: '0.5rem' }}>
+      <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '1.25rem 1.5rem', marginTop: '0.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-          <div style={{ fontSize: '0.65rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>12-Month Exposure Forecast</div>
+          <div style={{ fontSize: '0.65rem', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>12-Month Exposure Forecast</div>
           <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.6rem', color: '#4a7a9e', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 2, background: '#4a7a9e', borderRadius: 1 }} />Projected exposure</span>
+            <span style={{ fontSize: '0.6rem', color: 'var(--cat-blue)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 2, background: 'var(--cat-blue)', borderRadius: 1 }} />Projected exposure</span>
             {threshold && <span style={{ fontSize: '0.6rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed var(--accent)' }} />TT Internal Threshold {fmtM(threshold)}</span>}
             <span style={{ fontSize: '0.6rem', color: 'var(--border)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '1px dashed var(--border)' }} />$45M cap</span>
           </div>
@@ -618,7 +619,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
             return (
               <g key={frac}>
                 <line x1={LABEL_W + 2} x2={SVG_VW} y1={y} y2={y}
-                  stroke={isTop ? '#3a4555' : '#1e2330'}
+                  stroke={isTop ? 'var(--border2)' : 'var(--border)'}
                   strokeWidth={isTop ? 1.5 : 1}
                   strokeDasharray={isTop ? '5 4' : undefined} />
                 <text x={LABEL_W - 2} y={y + 4} textAnchor="end" fontSize="9" fill="var(--faint)" fontFamily="inherit">
@@ -640,7 +641,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
           )}
 
           {/* Filled area under line */}
-          <path d={areaPath} fill="rgba(74,122,158,0.10)" />
+          <path d={areaPath} fill="color-mix(in srgb, var(--cat-blue) 10%, transparent)" />
 
           {/* Line segments — red where over threshold */}
           {pts.slice(0, -1).map((p, i) => {
@@ -650,7 +651,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
               <line key={i}
                 x1={p.x.toFixed(1)} y1={p.y.toFixed(1)}
                 x2={next.x.toFixed(1)} y2={next.y.toFixed(1)}
-                stroke={over ? 'var(--fail)' : '#4a7a9e'}
+                stroke={over ? 'var(--fail)' : 'var(--cat-blue)'}
                 strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
             );
           })}
@@ -662,7 +663,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
               <g key={i}>
                 <title>{p.label}: {fmtM(p.balance)}</title>
                 <circle cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={3.5}
-                  fill={over ? 'var(--fail)' : '#4a7a9e'} stroke="var(--panel2)" strokeWidth={1.5} />
+                  fill={over ? 'var(--fail)' : 'var(--cat-blue)'} stroke="var(--panel2)" strokeWidth={1.5} />
               </g>
             );
           })}

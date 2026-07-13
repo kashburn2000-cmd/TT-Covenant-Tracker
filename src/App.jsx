@@ -14,6 +14,7 @@ import { PipelineTab } from './components/PipelineTab.jsx';
 import { LandFacilityTab } from './components/LandFacilityTab.jsx';
 import { LeasingTab } from './components/LeasingTab.jsx';
 import { DocView } from './components/DocView.jsx';
+import { LockIcon, UnlockIcon, SunIcon, MoonIcon, EyeIcon, EyeOffIcon, PencilIcon, ClockIcon, CommentIcon, CameraIcon } from './icons.jsx';
 import { LoansTab } from './components/LoansTab.jsx';
 import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
 
@@ -27,42 +28,154 @@ const DEFAULT_THRESHOLDS = { high: 1.25, mid: 1.10, low: 1.00 };
 
 
 const SHARED_STYLES = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap');
   * { box-sizing: border-box; }
-  input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: var(--disabled); outline: none; }
-  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: ${TT_ORANGE}; cursor: pointer; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 1.5rem; box-shadow: var(--shadow); }
-  .label { font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.5rem; }
-  .metric { font-size: 1.9rem; font-weight: 700; text-shadow: 0 0 20px rgba(255,255,255,0.1); }
-  .pill { display: inline-block; padding: 2px 10px; border-radius: 2px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; }
-  .green  { background: rgba(106,158,127,0.15);  color: var(--pass); }
-  .yellow { background: rgba(138,122,66,0.15);  color: var(--warn); }
-  .red    { background: rgba(160,82,82,0.15); color: var(--fail); }
-  .blue   { background: rgba(99, 102, 241,0.15);   color: ${TT_ORANGE}; }
-  input[type=number], select, input[type=date] {
-    background: var(--panel2); border: 1px solid var(--border); border-radius: 3px;
-    color: var(--text); padding: 0.5rem 0.75rem; font-family: inherit;
-    font-size: 0.85rem; width: 100%; outline: none;
+  button { font-family: inherit; transition: background-color 0.15s ease-out, color 0.15s ease-out,
+           border-color 0.15s ease-out, box-shadow 0.15s ease-out, opacity 0.15s ease-out; }
+  button:focus-visible, label:focus-visible {
+    outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
   }
-  input[type=number]:focus, select:focus, input[type=date]:focus { border-color: ${TT_ORANGE}; }
-  .sub  { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.5; }
-  .note { font-size: 0.7rem;  color: var(--faint);  margin-top: 0.4rem;  line-height: 1.6; }
-  th { padding: 0.5rem 0.85rem; text-align: left; color: var(--muted); font-weight: 400;
-       letter-spacing: 0.08em; font-size: 0.66rem; text-transform: uppercase; }
-  td { padding: 0.65rem 0.85rem; font-size: 0.82rem; border-bottom: 1px solid var(--bg); color: var(--text); }
+  input[type=checkbox] { accent-color: var(--accent); }
+  input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: var(--disabled); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 1.35rem 1.5rem; box-shadow: var(--shadow); }
+  .label { font-size: 0.7rem; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.45rem; }
+  .metric { font-size: 1.85rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em; border: 1px solid transparent; }
+  .green  { background: color-mix(in srgb, var(--pass) 12%, transparent); color: var(--pass); border-color: color-mix(in srgb, var(--pass) 20%, transparent); }
+  .yellow { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 20%, transparent); }
+  .red    { background: color-mix(in srgb, var(--fail) 12%, transparent); color: var(--fail); border-color: color-mix(in srgb, var(--fail) 20%, transparent); }
+  .blue   { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+  input[type=number], input[type=text], input[type=date], input[type=month], select {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text); padding: 0.45rem 0.7rem; font-family: inherit;
+    font-size: 0.85rem; width: 100%; outline: none;
+    transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out, background-color 0.15s ease-out;
+  }
+  input[type=number]:hover, input[type=text]:hover, input[type=date]:hover, input[type=month]:hover, select:hover { border-color: var(--border2); }
+  input[type=number]:focus, input[type=text]:focus, input[type=date]:focus, input[type=month]:focus, select:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring);
+  }
+  input::placeholder { color: var(--faint); }
+  select {
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    padding-right: 1.8rem !important;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238B99AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 0.6rem center;
+  }
+  :root[data-theme="light"] select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+  .sub  { font-size: 0.76rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.55; }
+  .note { font-size: 0.72rem; color: var(--faint2); margin-top: 0.4rem; line-height: 1.6; }
+  th { padding: 0.55rem 0.85rem; text-align: left; color: var(--muted); font-weight: 600;
+       letter-spacing: 0.05em; font-size: 0.68rem; text-transform: uppercase; }
+  td { padding: 0.6rem 0.85rem; font-size: 0.81rem; color: var(--text);
+       border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+       font-variant-numeric: tabular-nums; }
   tr:last-child td { border-bottom: none; }
-  .section-title { font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase;
-                   color: ${TT_ORANGE}; margin-bottom: 1rem; }
-  .tab-btn { padding: 0.55rem 1.5rem; border: none; cursor: pointer; font-family: inherit;
-             font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-             border-bottom: 2px solid transparent; background: transparent; transition: all 0.15s; }
-  .tab-active   { color: ${TT_ORANGE}; border-bottom-color: ${TT_ORANGE}; }
-  .tab-inactive { color: var(--faint); }
-  .tab-inactive:hover { color: var(--muted); }
-  .mx-high { background: rgba(106,158,127,0.18);  color: var(--pass); font-weight: 700; }
-  .mx-mid  { background: rgba(138,122,66,0.13);  color: var(--warn); font-weight: 600; }
-  .mx-low  { background: rgba(160,82,82,0.13); color: var(--fail); font-weight: 600; }
-  .mx-vlow { background: rgba(160,82,82,0.28); color: var(--fail); font-weight: 700; }
+  tbody tr { transition: background-color 0.13s ease-out; }
+  tbody tr:hover > td { background-color: color-mix(in srgb, var(--row-hover) 65%, transparent); }
+  .section-title { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
+                   color: var(--text2); font-weight: 600; margin-bottom: 1rem; }
+  .tab-btn { padding: 0.6rem 1.1rem; border: none; cursor: pointer; font-family: inherit;
+             font-size: 0.82rem; font-weight: 500; letter-spacing: 0.01em;
+             border-bottom: 2px solid transparent; background: transparent;
+             transition: color 0.15s ease-out, border-color 0.15s ease-out; }
+  .tab-active   { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-inactive { color: var(--muted); }
+  .tab-inactive:hover { color: var(--text2); }
+  .mx-high { background: color-mix(in srgb, var(--pass) 15%, transparent); color: var(--pass); font-weight: 600; }
+  .mx-mid  { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); font-weight: 500; }
+  .mx-low  { background: color-mix(in srgb, var(--fail) 11%, transparent); color: var(--fail); font-weight: 500; }
+  .mx-vlow { background: color-mix(in srgb, var(--fail) 24%, transparent); color: var(--fail); font-weight: 600; }
+
+  /* ── Control system ─────────────────────────────────────────────────────
+     One button vocabulary for the whole app:
+       .btn          neutral secondary action (bordered, quiet)
+       .btn-primary  the one emphasized action in a context (solid blue)
+       .btn-tinted   emphasized-but-lighter action (tinted blue)
+       .btn-danger   destructive / dismiss-with-consequence
+       .btn-ghost    icon-adjacent utility, no chrome until hover
+       .btn-locked   PIN-locked variant of any of the above
+       .btn-sm       compact height for dense toolbars                    */
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 5px 13px; border-radius: 5px;
+    border: 1px solid var(--border); background: var(--panel3); color: var(--text2);
+    font-size: 0.75rem; font-weight: 500; line-height: 1.5;
+    cursor: pointer; white-space: nowrap; user-select: none;
+  }
+  .btn:hover { border-color: var(--border2); color: var(--text); }
+  .btn-primary { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
+  .btn-primary:hover { background: color-mix(in srgb, var(--accent) 86%, #fff); border-color: transparent; color: #fff; }
+  .btn-tinted {
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+    color: var(--accent-strong); font-weight: 600;
+  }
+  .btn-tinted:hover {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    color: var(--accent-strong);
+  }
+  .btn-danger {
+    background: color-mix(in srgb, var(--fail) 12%, transparent);
+    border-color: color-mix(in srgb, var(--fail) 28%, transparent);
+    color: var(--fail);
+  }
+  .btn-danger:hover { background: color-mix(in srgb, var(--fail) 20%, transparent); border-color: color-mix(in srgb, var(--fail) 40%, transparent); color: var(--fail); }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn-ghost:hover { background: var(--row-hover); border-color: transparent; color: var(--text2); }
+  .btn-locked { opacity: 0.55; }
+  .btn-locked:hover { opacity: 0.8; }
+  .btn-sm { padding: 3px 10px; font-size: 0.72rem; }
+
+  /* Filter chips (sort controls, quick filters) */
+  .chip {
+    padding: 3px 11px; border-radius: 5px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted);
+    font-size: 0.72rem; font-weight: 500; cursor: pointer; user-select: none;
+  }
+  .chip:hover { color: var(--text2); border-color: var(--border2); }
+  .chip-active {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    color: var(--accent-strong); font-weight: 600;
+  }
+
+  /* Segmented toggles (DSCR / DY, I-O / Amort) */
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  .seg button {
+    padding: 3px 11px; border: none; background: transparent; color: var(--muted);
+    font-size: 0.72rem; font-weight: 500; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent-strong); font-weight: 600;
+  }
+
+  /* Dropdown menus (export, column picker, tab config, add widget) */
+  .menu {
+    position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 200;
+    background: var(--panel3); border: 1px solid var(--border2); border-radius: 6px;
+    padding: 0.35rem 0; min-width: 160px;
+    box-shadow: 0 10px 28px rgba(2, 6, 12, 0.45);
+  }
+  :root[data-theme="light"] .menu { box-shadow: 0 10px 28px rgba(16, 24, 40, 0.14); }
+  .menu-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.42rem 0.95rem; cursor: pointer; font-size: 0.75rem; color: var(--text2); }
+  .menu-item:hover { background: var(--row-hover); }
+  .menu-heading {
+    padding: 0.3rem 0.95rem 0.45rem; font-size: 0.64rem; letter-spacing: 0.05em;
+    color: var(--muted); text-transform: uppercase; font-weight: 600;
+    border-bottom: 1px solid var(--border); margin-bottom: 0.35rem;
+  }
+
+  /* Sticky table headers — headers stay visible inside scrolling panels */
+  thead th { position: sticky; top: 0; background: var(--panel2); z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }
+
+  .spin { display: inline-block; animation: tt-spin 1.1s linear infinite; }
+  @keyframes tt-spin { to { transform: rotate(360deg); } }
 `;
 
 
@@ -865,10 +978,10 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const pageH = doc.internal.pageSize.getHeight();
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const TT_ORANGE = [99, 102, 241];
-      const TT_DARK   = [22, 25, 31];
-      const TT_LIGHT  = [200, 205, 214];
-      const TT_GRAY   = [74, 79, 90];
+      const TT_ORANGE = [91, 138, 245];
+      const TT_DARK   = [11, 16, 24];
+      const TT_LIGHT  = [198, 209, 224];
+      const TT_GRAY   = [122, 138, 161];
 
       // ── Header bar ──────────────────────────────────────────────────────────
       doc.setFillColor(...TT_DARK);
@@ -909,7 +1022,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         doc.text(text, pillX + 7, pillY + 1);
       };
 
-      doc.setFillColor(99, 102, 241);
+      doc.setFillColor(91, 138, 245);
       // Draw pills right to left
       const totalPaydown = activeRows.reduce((s, r) => s + r.paydown, 0);
       // Failing pill
@@ -917,11 +1030,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         const label = `Failing: ${failing}`;
         const tw = doc.getTextWidth(label) + 14;
         pillX -= tw + 6;
-        doc.setFillColor(196, 116, 116, 0.25);
+        doc.setFillColor(224, 106, 106, 0.25);
         doc.roundedRect(pillX, pillY - 9, tw, 13, 2, 2, 'F');
         doc.setFontSize(7.5);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(196, 116, 116);
+        doc.setTextColor(224, 106, 106);
         doc.text(label, pillX + 7, pillY + 1);
       }
       // Passing pill
@@ -929,11 +1042,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         const label = `Passing: ${passing}`;
         const tw = doc.getTextWidth(label) + 14;
         pillX -= tw + 6;
-        doc.setFillColor(106, 158, 127, 0.25);
+        doc.setFillColor(79, 191, 143, 0.25);
         doc.roundedRect(pillX, pillY - 9, tw, 13, 2, 2, 'F');
         doc.setFontSize(7.5);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(106, 158, 127);
+        doc.setTextColor(79, 191, 143);
         doc.text(label, pillX + 7, pillY + 1);
       }
 
@@ -1040,22 +1153,22 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           font: 'helvetica',
           fontSize: 7.5,
           cellPadding: { top: 5, right: 6, bottom: 5, left: 6 },
-          textColor: [200, 205, 214],
-          fillColor: [30, 33, 40],
-          lineColor: [22, 25, 31],
+          textColor: [198, 209, 224],
+          fillColor: [18, 26, 38],
+          lineColor: [11, 16, 24],
           lineWidth: 0.5,
           overflow: 'linebreak',
           valign: 'top',
         },
         headStyles: {
-          fillColor: [19, 21, 26],
-          textColor: [154, 160, 170],
+          fillColor: [14, 21, 32],
+          textColor: [139, 153, 175],
           fontStyle: 'normal',
           fontSize: 6.5,
           cellPadding: { top: 5, right: 6, bottom: 5, left: 6 },
         },
         alternateRowStyles: {
-          fillColor: [19, 21, 26],
+          fillColor: [14, 21, 32],
         },
         columnStyles: {
           0: { cellWidth: 54 }, // Test Date
@@ -1066,18 +1179,18 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             if (!row) return;
             // Result column — color by pass/fail
             if (resultColIdx !== -1 && data.column.index === resultColIdx) {
-              data.cell.styles.textColor = row.satisfied ? [106, 158, 127] : [196, 116, 116];
+              data.cell.styles.textColor = row.satisfied ? [79, 191, 143] : [224, 106, 106];
               data.cell.styles.fontStyle = 'bold';
             }
             // NOI Variance — color by positive/negative
             const noivIdx = visibleDefs.findIndex(c => c.key === 'noiVariance');
             if (noivIdx !== -1 && data.column.index === noivIdx) {
-              data.cell.styles.textColor = row.noiVariance >= 0 ? [106, 158, 127] : [196, 116, 116];
+              data.cell.styles.textColor = row.noiVariance >= 0 ? [79, 191, 143] : [224, 106, 106];
             }
             // Paydown — amber if needed
             const pdIdx = visibleDefs.findIndex(c => c.key === 'paydown');
             if (pdIdx !== -1 && data.column.index === pdIdx && row.paydown > 0) {
-              data.cell.styles.textColor = [99, 102, 241];
+              data.cell.styles.textColor = [91, 138, 245];
               data.cell.styles.fontStyle = 'bold';
             }
           }
@@ -1108,8 +1221,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
   const fmtDate = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
   const daysUntil = d => { try { return Math.ceil((new Date(d + 'T00:00:00') - new Date()) / 86400000); } catch { return null; } };
 
-  const inputStyle = { width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit' };
-  const labelStyle = { fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block' };
+  const inputStyle = { width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit' };
+  const labelStyle = { fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block' };
 
   return (
     <div>
@@ -1121,105 +1234,93 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       {/* ── DB Loading / Error states ── */}
       {dbLoading && (
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)', fontSize: '0.85rem' }}>
-          <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>⟳</div>
+          <div className="spin" style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>⟳</div>
           Loading properties from database...
         </div>
       )}
       {dbError && (
-        <div style={{ padding: '1rem', marginBottom: '1rem', background: 'rgba(160,82,82,0.08)', border: '1px solid rgba(160,82,82,0.25)', borderRadius: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '1rem', marginBottom: '1rem', background: 'color-mix(in srgb, var(--fail) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fail) 25%, transparent)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.78rem', color: 'var(--fail)' }}>⚠ {dbError}</span>
-          <button onClick={loadProperties} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: 'rgba(160,82,82,0.15)', color: 'var(--fail)' }}>Retry</button>
+          <button onClick={loadProperties} className="btn btn-sm btn-danger">Retry</button>
         </div>
       )}
       {!dbLoading && (
       <div>
       {/* ── Dashboard header + prominent Doc View ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div style={{ fontSize: '0.7rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
+        <div style={{ fontSize: '0.7rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
           Covenant Compliance Dashboard
         </div>
-        <button onClick={openDocView} title="View the dashboard styled like the executive Excel doc" style={{
-          padding: '8px 20px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-          fontSize: '0.78rem', fontWeight: 700, background: '#1f4e79', color: '#eaf2fb',
-          outline: '1px solid #2e6aa3', boxShadow: '0 2px 8px rgba(31,78,121,0.35)', display: 'flex', alignItems: 'center', gap: '0.45rem',
-        }}>
-          <span style={{ fontSize: '0.9rem' }}>▦</span> Open Doc View
+        <button onClick={openDocView} title="View the dashboard styled like the executive Excel doc" className="btn btn-primary" style={{ padding: '7px 18px', fontSize: '0.78rem' }}>
+          <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>▦</span> Open Doc View
         </button>
       </div>
       {/* ── Summary Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div className="card" style={{ textAlign: 'center' }}>
-            <div style={labelStyle}>Total Properties</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--text2)' }}>{summary.total}</div>
-          </div>
-          <div className="card" style={{ textAlign: 'center' }}>
-            <div style={labelStyle}>Passing</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--pass)' }}>{summary.passing}</div>
-          </div>
-          <div className="card" style={{ textAlign: 'center' }}>
-            <div style={labelStyle}>Failing</div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--fail)' }}>{summary.failing}</div>
-          </div>
-          <div className="card" style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowPaydown(v => !v)}>
-            <div style={{ ...labelStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+          {[
+            { label: 'Total Properties', value: summary.total, color: 'var(--text)', sub: 'active tests tracked' },
+            { label: 'Passing', value: summary.passing, color: summary.passing > 0 ? 'var(--pass)' : 'var(--text)', sub: 'meeting covenant' },
+            { label: 'Failing', value: summary.failing, color: summary.failing > 0 ? 'var(--fail)' : 'var(--text)', sub: 'below requirement' },
+          ].map(c => (
+            <div key={c.label} className="card" style={{ padding: '1rem 1.25rem' }}>
+              <div style={labelStyle}>{c.label}</div>
+              <div className="metric" style={{ color: c.color, lineHeight: 1.15 }}>{c.value}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--faint2)', marginTop: '0.25rem' }}>{c.sub}</div>
+            </div>
+          ))}
+          <div className="card" style={{ padding: '1rem 1.25rem', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowPaydown(v => !v)} title={showPaydown ? 'Click to hide' : 'Click to reveal'}>
+            <div style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               Potential Maximum Paydown
-              <span style={{ fontSize: '0.95rem', color: showPaydown ? 'var(--accent)' : 'var(--faint)' }}>
-                {showPaydown ? '👁' : '👁'}
+              <span style={{ color: showPaydown ? 'var(--accent-strong)' : 'var(--faint)', display: 'inline-flex' }}>
+                {showPaydown ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}
               </span>
             </div>
             {showPaydown
-              ? <div style={{ fontSize: '1.6rem', fontWeight: 700, color: 'var(--accent)' }}>{formatCurrency(summary.totalPaydown)}</div>
-              : <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--faint)', letterSpacing: '0.2em' }}>••••••••</div>
+              ? <div className="metric" style={{ color: 'var(--accent-strong)', lineHeight: 1.15 }}>{formatCurrency(summary.totalPaydown)}</div>
+              : <div style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--faint)', letterSpacing: '0.2em', lineHeight: 1.7 }}>••••••••</div>
             }
+            {showPaydown && <div style={{ fontSize: '0.7rem', color: 'var(--faint2)', marginTop: '0.25rem' }}>sum across failing tests</div>}
           </div>
       </div>
 
       {/* ── Last Updated Banner ── */}
       {lastUpdated && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'rgba(106,158,127,0.08)', border: '1px solid rgba(106,158,127,0.2)', borderRadius: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'color-mix(in srgb, var(--pass) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--pass) 20%, transparent)', borderRadius: 4 }}>
           <span style={{ fontSize: '0.7rem', color: 'var(--pass)' }}>✓</span>
-          <span style={{ fontSize: '0.72rem', color: '#5a9a8a' }}>NOI last updated from forecast file:</span>
+          <span style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--pass) 65%, var(--muted))' }}>NOI last updated from forecast file:</span>
           <span style={{ fontSize: '0.72rem', color: 'var(--pass)', fontWeight: 600 }}>
             {lastUpdated.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} at {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
           </span>
           {forecastMonth && (
             <>
-              <span style={{ fontSize: '0.68rem', color: '#2a5a4a' }}>·</span>
-              <span style={{ fontSize: '0.72rem', color: '#5a9a8a' }}>Using</span>
+              <span style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--pass) 40%, transparent)' }}>·</span>
+              <span style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--pass) 65%, var(--muted))' }}>Using</span>
               <span style={{ fontSize: '0.72rem', color: 'var(--pass)', fontWeight: 600 }}>{forecastMonth} reforecast</span>
             </>
           )}
         </div>
       )}
       {!lastUpdated && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'rgba(160,82,82,0.06)', border: '1px solid rgba(160,82,82,0.15)', borderRadius: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'color-mix(in srgb, var(--fail) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--fail) 15%, transparent)', borderRadius: 4 }}>
           <span style={{ fontSize: '0.7rem', color: 'var(--fail)' }}>⚠</span>
-          <span style={{ fontSize: '0.72rem', color: '#7a5a5a' }}>NOI not yet updated this session —</span>
+          <span style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--fail) 55%, var(--muted))' }}>NOI not yet updated this session —</span>
           <span style={{ fontSize: '0.72rem', color: 'var(--fail)' }}>upload a forecast file to refresh figures</span>
         </div>
       )}
       {/* ── Debt Fund Settings Panel ── */}
       <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--border)', borderLeft: '3px solid var(--text2)', padding: '0.85rem 1.1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: '0.62rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: '0.62rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600, whiteSpace: 'nowrap' }}>
             Debt Fund Assumptions
           </div>
 
           {/* DSCR / DY mode toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Size by</span>
-            <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid var(--border)' }}>
-              {['DSCR', 'DY'].map(opt => {
-                const active = dfMode === opt.toLowerCase();
-                return (
-                  <button key={opt} onClick={() => setDfMode(opt.toLowerCase())} style={{
-                    padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                    fontSize: '0.7rem', fontWeight: 600,
-                    background: active ? 'rgba(99, 102, 241,0.2)' : 'var(--panel2)',
-                    color: active ? 'var(--accent)' : 'var(--faint)',
-                  }}>{opt}</button>
-                );
-              })}
+            <div className="seg">
+              {['DSCR', 'DY'].map(opt => (
+                <button key={opt} className={dfMode === opt.toLowerCase() ? 'on' : ''} onClick={() => setDfMode(opt.toLowerCase())}>{opt}</button>
+              ))}
             </div>
           </div>
 
@@ -1231,7 +1332,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 type="number" step="0.01" value={dfDSCRInput}
                 onChange={e => setDfDSCRInput(e.target.value)}
                 onBlur={() => { const v = parseFloat(dfDSCRInput); if (!isNaN(v) && v > 0) setDfDSCR(String(v)); }}
-                style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
+                style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
               />
               <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>x</span>
             </div>
@@ -1246,7 +1347,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   type="number" step="0.01" value={dfDYAsIsInput}
                   onChange={e => setDfDYAsIsInput(e.target.value)}
                   onBlur={() => { const v = parseFloat(dfDYAsIsInput); if (!isNaN(v) && v > 0) setDfDYAsIs(String(v)); }}
-                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
+                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
                 />
                 <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>%</span>
               </div>
@@ -1256,7 +1357,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   type="number" step="0.01" value={dfDYStabInput}
                   onChange={e => setDfDYStabInput(e.target.value)}
                   onBlur={() => { const v = parseFloat(dfDYStabInput); if (!isNaN(v) && v > 0) setDfDYStab(String(v)); }}
-                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
+                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
                 />
                 <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>%</span>
               </div>
@@ -1269,7 +1370,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
               type="number" step="0.01" value={dfSpreadInput}
               onChange={e => setDfSpreadInput(e.target.value)}
               onBlur={() => { const v = parseFloat(dfSpreadInput); if (!isNaN(v) && v >= 0) setDfSpread(String(v)); }}
-              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
+              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
             />
             <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>%</span>
           </div>}
@@ -1278,18 +1379,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           {dfMode === 'dscr' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Amortization</span>
-              <div style={{ display: 'flex', borderRadius: 3, overflow: 'hidden', outline: '1px solid var(--border)' }}>
-                {['I/O', 'Amort'].map(opt => {
-                  const active = opt === 'I/O' ? dfIO : !dfIO;
-                  return (
-                    <button key={opt} onClick={() => setDfIO(opt === 'I/O')} style={{
-                      padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                      fontSize: '0.7rem', fontWeight: 600,
-                      background: active ? 'rgba(200,205,214,0.15)' : 'var(--panel2)',
-                      color: active ? 'var(--text2)' : 'var(--faint)',
-                    }}>{opt}</button>
-                  );
-                })}
+              <div className="seg">
+                {['I/O', 'Amort'].map(opt => (
+                  <button key={opt} className={(opt === 'I/O' ? dfIO : !dfIO) ? 'on' : ''} onClick={() => setDfIO(opt === 'I/O')}>{opt}</button>
+                ))}
               </div>
               {!dfIO && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -1297,7 +1390,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     type="number" step="1" min="1" max="40" value={dfAmortInput}
                     onChange={e => setDfAmortInput(e.target.value)}
                     onBlur={() => { const v = parseInt(dfAmortInput); if (!isNaN(v) && v > 0) setDfAmort(String(v)); }}
-                    style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
+                    style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
                   />
                   <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>yr</span>
                 </div>
@@ -1311,15 +1404,9 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       {/* ── Toolbar ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.68rem', color: 'var(--muted)', letterSpacing: '0.08em' }}>SORT:</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Sort by</span>
           {[['covenantDate','Date'],['property','Property'],['satisfied','Status']].map(([f,l]) => (
-            <button key={f} onClick={() => setSortField(f)} style={{
-              padding: '3px 10px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.7rem', fontWeight: 600,
-              background: sortField === f ? 'rgba(99, 102, 241,0.2)' : 'var(--panel)',
-              color: sortField === f ? 'var(--accent)' : 'var(--muted)',
-              outline: sortField === f ? '1px solid color-mix(in srgb, var(--accent) 33%, transparent)' : '1px solid var(--border)',
-            }}>{l}</button>
+            <button key={f} onClick={() => setSortField(f)} className={`chip ${sortField === f ? 'chip-active' : ''}`}>{l}</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1331,7 +1418,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
               onChange={e => setForecastMonthInput(e.target.value)}
               placeholder="e.g. February 2026"
               style={{
-                padding: '4px 8px', borderRadius: 2, fontSize: '0.72rem', fontFamily: 'inherit',
+                padding: '4px 8px', borderRadius: 4, fontSize: '0.72rem', fontFamily: 'inherit',
                 background: 'var(--panel2)', border: '1px solid var(--border)', color: 'var(--text)',
                 width: 140, outline: 'none',
               }}
@@ -1339,100 +1426,63 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           )}
           {/* File Upload */}
           {pinUnlocked ? (
-            <label style={{
-              padding: '5px 14px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,205,214,0.12)', color: 'var(--text2)',
-              outline: '1px solid color-mix(in srgb, var(--text2) 27%, transparent)', display: 'inline-block',
-            }}>
+            <label className="btn btn-sm">
               ↑ Upload Forecast
               <input type="file" accept=".xlsx" onChange={handleFileUpload} style={{ display: 'none' }} />
             </label>
           ) : (
-            <button onClick={() => requirePin(() => {})} style={{
-              padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: 'rgba(200,205,214,0.05)', color: 'var(--faint)',
-              outline: '1px solid color-mix(in srgb, var(--faint) 20%, transparent)',
-            }}>🔒 Upload Forecast</button>
+            <button onClick={() => requirePin(() => {})} className="btn btn-sm btn-locked">
+              <LockIcon size={11} /> Upload Forecast
+            </button>
           )}
           {exportMsg && <span style={{ fontSize: '0.7rem', color: 'var(--pass)' }}>{exportMsg}</span>}
           {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? 'var(--pass)' : 'var(--text2)' }}>{uploadStatus}</span>}
           <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowExportMenu(v => !v)} style={{
-              padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: showExportMenu ? 'rgba(106,158,127,0.25)' : 'rgba(106,158,127,0.15)',
-              color: 'var(--pass)', outline: '1px solid color-mix(in srgb, var(--pass) 27%, transparent)',
-            }}>↓ Export ▾</button>
+            <button onClick={() => setShowExportMenu(v => !v)} className="btn btn-sm" style={showExportMenu ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>↓ Export ▾</button>
             {showExportMenu && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 100,
-                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4,
-                padding: '0.35rem 0', minWidth: 150, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-              }}>
+              <div className="menu" style={{ minWidth: 150 }}>
                 {[
-                  ['Excel', () => exportXLSX(), 'var(--pass)', "Drops straight into the workbook's Covenant Dashboard Export tab"],
-                  ['CSV', () => exportCSV(), 'var(--pass)', ''],
-                  ['PDF', () => exportPDF(), 'var(--accent)', ''],
-                ].map(([label, fn, color, tip]) => (
-                  <div key={label} title={tip} onClick={() => { fn(); setShowExportMenu(false); }} style={{
-                    display: 'flex', alignItems: 'center', gap: '0.5rem',
-                    padding: '0.4rem 0.95rem', cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, color,
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--panel)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <span style={{ opacity: 0.7 }}>↓</span>{label}
+                  ['Excel', () => exportXLSX(), "Drops straight into the workbook's Covenant Dashboard Export tab"],
+                  ['CSV', () => exportCSV(), ''],
+                  ['PDF', () => exportPDF(), ''],
+                ].map(([label, fn, tip]) => (
+                  <div key={label} title={tip} className="menu-item" onClick={() => { fn(); setShowExportMenu(false); }}>
+                    <span style={{ opacity: 0.6 }}>↓</span>{label}
                   </div>
                 ))}
               </div>
             )}
           </div>
           <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowColPicker(v => !v)} style={{
-              padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: showColPicker ? 'rgba(200,205,214,0.15)' : 'rgba(200,205,214,0.10)',
-              color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 27%, transparent)',
-            }}>⊞ Columns</button>
+            <button onClick={() => setShowColPicker(v => !v)} className="btn btn-sm" style={showColPicker ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>⊞ Columns</button>
             {showColPicker && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 100,
-                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4,
-                padding: '0.6rem 0', minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-              }}>
-                <div style={{ padding: '0.25rem 0.85rem 0.5rem', fontSize: '0.6rem', letterSpacing: '0.12em', color: 'var(--faint)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', marginBottom: '0.4rem' }}>Toggle Columns</div>
+              <div className="menu" style={{ minWidth: 190, padding: '0.35rem 0 0.5rem' }}>
+                <div className="menu-heading">Toggle Columns</div>
                 {ALL_COLS.map(c => (
-                  <div key={c.key} onClick={() => toggleCol(c.key)} style={{
-                    display: 'flex', alignItems: 'center', gap: '0.6rem',
-                    padding: '0.35rem 0.85rem', cursor: 'pointer',
-                    background: 'transparent',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--panel)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <div key={c.key} onClick={() => toggleCol(c.key)} className="menu-item" style={{ padding: '0.32rem 0.95rem' }}>
                     <div style={{
-                      width: 14, height: 14, borderRadius: 2, flexShrink: 0,
-                      background: visibleCols[c.key] ? 'var(--text2)' : 'transparent',
-                      border: `1px solid ${visibleCols[c.key] ? 'var(--text2)' : '#2e5a7a'}`,
+                      width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+                      background: visibleCols[c.key] ? 'var(--accent)' : 'transparent',
+                      border: `1px solid ${visibleCols[c.key] ? 'var(--accent)' : 'var(--border2)'}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: 'var(--panel2)', fontWeight: 900 }}>✓</span>}
+                      {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: '#fff', fontWeight: 700 }}>✓</span>}
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: visibleCols[c.key] ? '#d0e8ff' : 'var(--faint)' }}>{c.label}</span>
+                    <span style={{ fontSize: '0.75rem', color: visibleCols[c.key] ? 'var(--text)' : 'var(--faint2)' }}>{c.label}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
           {hiddenCount > 0 && (
-            <button onClick={() => setShowHidden(v => !v)} title="Hidden tests are kept in the database but excluded from the dashboard, summary and exports" style={{
-              padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: showHidden ? 'rgba(154,160,170,0.22)' : 'rgba(154,160,170,0.10)',
-              color: 'var(--muted)', outline: '1px solid color-mix(in srgb, var(--muted) 27%, transparent)',
-            }}>{showHidden ? '🙈 Hide Hidden' : `👁 Show Hidden (${hiddenCount})`}</button>
+            <button onClick={() => setShowHidden(v => !v)} title="Hidden tests are kept in the database but excluded from the dashboard, summary and exports" className="btn btn-sm" style={showHidden ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>
+              {showHidden ? <EyeOffIcon size={12} /> : <EyeIcon size={12} />} {showHidden ? 'Hide Hidden' : `Show Hidden (${hiddenCount})`}
+            </button>
           )}
-          <button onClick={() => requirePin(() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); })} style={{
-            padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.72rem', fontWeight: 600,
-            background: showForm ? 'rgba(224,92,32,0.25)' : 'rgba(99, 102, 241,0.15)',
-            color: pinUnlocked ? 'var(--accent)' : '#7a4a30', outline: '1px solid color-mix(in srgb, var(--accent) 33%, transparent)',
-          }}>{showForm ? '✕ Cancel' : (pinUnlocked ? '+ Add Property' : '🔒 Add Property')}</button>
+          <button onClick={() => requirePin(() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); })}
+            className={`btn btn-sm ${showForm ? 'btn-danger' : `btn-tinted ${pinUnlocked ? '' : 'btn-locked'}`}`}>
+            {showForm ? '✕ Cancel' : pinUnlocked ? '+ Add Property' : <><LockIcon size={11} /> Add Property</>}
+          </button>
         </div>
       </div>
 
@@ -1440,7 +1490,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       {showUploadResults && (
         <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid var(--text2)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
+            <div style={{ fontSize: '0.7rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
               {uploadMode === 'prior' ? 'Upload Preview — Set as Prior Test' : 'Upload Preview — Review NOI Updates'}
             </div>
             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -1448,7 +1498,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 title="Update current NOI: overwrite live figures with this forecast (the normal monthly update). Set as Prior Test only: record this forecast as the last test result baseline without changing current NOI — use it to backfill an earlier forecast for the comparison column."
                 style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted)' }}
               >
-                <select value={uploadMode} onChange={e => setUploadMode(e.target.value)} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text2)', padding: '4px 8px', fontSize: '0.7rem', fontFamily: 'inherit', cursor: 'pointer' }}>
+                <select value={uploadMode} onChange={e => setUploadMode(e.target.value)} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', padding: '4px 8px', fontSize: '0.7rem', fontFamily: 'inherit', cursor: 'pointer' }}>
                   <option value="current">Update current NOI</option>
                   <option value="prior">Set as Prior Test only</option>
                 </select>
@@ -1462,12 +1512,12 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   Monthly baseline update
                 </label>
               )}
-              <button onClick={() => setShowUploadResults(false)} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: 'var(--panel)', color: 'var(--muted)', outline: '1px solid var(--border)' }}>Dismiss</button>
-              <button onClick={() => uploadMode === 'prior' ? applyAsPriorTest() : applyUploadResults()} style={{ padding: '4px 12px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, background: 'var(--text2)', color: 'var(--panel2)' }}>{uploadMode === 'prior' ? 'Set as Prior Test' : 'Apply All Updates'}</button>
+              <button onClick={() => setShowUploadResults(false)} className="btn btn-sm btn-ghost">Dismiss</button>
+              <button onClick={() => uploadMode === 'prior' ? applyAsPriorTest() : applyUploadResults()} className="btn btn-sm btn-primary">{uploadMode === 'prior' ? 'Set as Prior Test' : 'Apply All Updates'}</button>
             </div>
           </div>
           {uploadMode === 'prior' && (
-            <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '0.85rem', padding: '0.5rem 0.65rem', background: 'var(--panel)', borderRadius: 3, borderLeft: '3px solid var(--accent)' }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '0.85rem', padding: '0.5rem 0.65rem', background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid var(--accent)' }}>
               Records this forecast as the <strong style={{ color: 'var(--text2)' }}>Prior Test</strong> result{(forecastMonthInput.trim() || forecastMonth) ? <> dated <strong style={{ color: 'var(--text2)' }}>{forecastMonthInput.trim() || forecastMonth}</strong></> : null}. Current live NOI figures are left unchanged.
             </div>
           )}
@@ -1475,18 +1525,18 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 {['Property','Status','Matched Sheet','T-Periods','Old NOI','New NOI','Change'].map(h => (
-                  <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400 }}>{h}</th>
+                  <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {uploadResults.map(r => (
                 <tr key={r.id} style={{ borderBottom: '1px solid var(--bg)' }}>
-                  <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#ffffff', fontSize: '0.82rem' }}>{r.property}</td>
+                  <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text)', fontSize: '0.82rem' }}>{r.property}</td>
                   <td style={{ padding: '0.5rem 0.75rem' }}>
                     <span style={{
-                      padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 600,
-                      background: r.status === 'matched' ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)',
+                      padding: '2px 8px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 600,
+                      background: r.status === 'matched' ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)',
                       color: r.status === 'matched' ? 'var(--pass)' : 'var(--fail)',
                     }}>
                       {r.status === 'matched' ? `✓ Matched (${Math.round(r.score*100)}%)` : r.status === 'no_match' ? '✗ No match' : '⚠ Insufficient data'}
@@ -1526,7 +1576,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       {/* ── Add / Edit Form ── */}
       {showForm && (
         <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid var(--accent)' }}>
-          <div style={{ fontSize: '0.7rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '1rem', fontWeight: 600 }}>
+          <div style={{ fontSize: '0.7rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '1rem', fontWeight: 600 }}>
             {editId !== null ? 'Edit Property' : 'Add New Property'}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
@@ -1621,7 +1671,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 style={{ width: 36, height: 20, borderRadius: 10, background: form.variableLoan ? 'var(--accent)' : 'var(--border)', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
                 <div style={{ position: 'absolute', top: 3, left: form.variableLoan ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: 'var(--text)', transition: 'left 0.2s' }} />
               </div>
-              <span style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: form.variableLoan ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>Variable Loan Balance</span>
+              <span style={{ fontSize: '0.68rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: form.variableLoan ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>Variable Loan Balance</span>
             </label>
           </div>
 
@@ -1633,13 +1683,13 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 style={{ width: 36, height: 20, borderRadius: 10, background: form.waived ? 'var(--pass)' : 'var(--border)', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
                 <div style={{ position: 'absolute', top: 3, left: form.waived ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: 'var(--text)', transition: 'left 0.2s' }} />
               </div>
-              <span style={{ fontSize: '0.68rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: form.waived ? 'var(--pass)' : 'var(--muted)', fontWeight: 600 }}>Covenant Waived</span>
+              <span style={{ fontSize: '0.68rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: form.waived ? 'var(--pass)' : 'var(--muted)', fontWeight: 600 }}>Covenant Waived</span>
             </label>
             <div style={{ fontSize: '0.66rem', color: 'var(--faint2)', marginTop: '0.3rem' }}>Lender has waived this test — shows WAIVED instead of FAIL on the dashboard and Doc View.</div>
           </div>
 
           {form.variableLoan && (
-            <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)', borderLeft: '3px solid var(--accent)' }}>
+            <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--accent)' }}>
               {/* Commitment field — replaces loan amount display */}
               <div style={{ marginBottom: '0.85rem' }}>
                 <label style={labelStyle}>Loan Commitment (Total Facility, $)</label>
@@ -1656,7 +1706,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
               </div>
 
               {/* 12-row schedule */}
-              <div style={{ fontSize: '0.58rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Loan Balance Schedule (12 months)</div>
+              <div style={{ fontSize: '0.58rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Loan Balance Schedule (12 months)</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
                 {(form.loanSchedule || []).map((entry, i) => (
                   <div key={i} style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
@@ -1719,8 +1769,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
               setF('oneTimeExpenseMonths', arr);
             };
             return (
-              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)', borderLeft: '3px solid var(--pass)' }}>
-                <div style={{ fontSize: '0.58rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--pass)', marginBottom: '0.75rem', fontWeight: 600 }}>NOI Adjustments</div>
+              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--pass)' }}>
+                <div style={{ fontSize: '0.58rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--pass)', marginBottom: '0.75rem', fontWeight: 600 }}>NOI Adjustments</div>
 
                 {/* Section: Less Actual Early Term — one per income month */}
                 <div style={{ marginBottom: '0.85rem' }}>
@@ -1784,7 +1834,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <input type="text" value={form.note || ''} placeholder="e.g. NOI: T1 Dec 2026 annualized"
               onChange={e => setF('note', e.target.value)} style={inputStyle} />
           </div>
-          <button onClick={saveForm} style={{ padding: '6px 20px', borderRadius: 2, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, background: 'var(--accent)', color: '#fff' }}>
+          <button onClick={saveForm} className="btn btn-primary" style={{ padding: '6px 20px', fontSize: '0.8rem' }}>
             {editId !== null ? 'Save Changes' : 'Add Property'}
           </button>
         </div>
@@ -1797,18 +1847,18 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <thead>
               <tr style={{ background: 'var(--panel2)', borderBottom: '2px solid var(--border)' }}>
                 {/* Test Date — always visible, far left */}
-                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Test Date</th>
-                {col('testType')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Type</th>}
-                {col('property')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Property / Lender</th>}
-                {col('covenant')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Requirement</th>}
-                {col('noiPeriods') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Periods</th>}
-                {col('rate')       && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Rate</th>}
-                {col('result')     && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Our Calc → Req</th>}
-                {col('priorResult') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Prior Test</th>}
-                {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Annual NOI</th>}
-                {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>NOI Variance</th>}
-                {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, whiteSpace: 'nowrap' }}>Paydown</th>}
-                {col('dfPaydown') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 400, whiteSpace: 'nowrap' }}>Debt Fund Paydown ({dfMode === 'dy' ? `${dfDYAsIs}% as-is / ${dfDYStab}% stab` : `${dfDSCR}x DSCR`})</th>}
+                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Test Date</th>
+                {col('testType')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Type</th>}
+                {col('property')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Property / Lender</th>}
+                {col('covenant')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Requirement</th>}
+                {col('noiPeriods') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>NOI Periods</th>}
+                {col('rate')       && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Rate</th>}
+                {col('result')     && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Our Calc → Req</th>}
+                {col('priorResult') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Prior Test</th>}
+                {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Annual NOI</th>}
+                {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>NOI Variance</th>}
+                {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Paydown</th>}
+                {col('dfPaydown') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600, whiteSpace: 'nowrap' }}>Debt Fund Paydown ({dfMode === 'dy' ? `${dfDYAsIs}% as-is / ${dfDYStab}% stab` : `${dfDSCR}x DSCR`})</th>}
                 <th style={{ padding: '0.65rem 0.4rem' }}></th>
               </tr>
             </thead>
@@ -1831,7 +1881,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       <div style={{ fontSize: '0.85rem', fontWeight: 700, color: dateColor }}>
                         {isUrgent ? '⚠ ' : isPast ? '✗ ' : ''}{fmtDate(r.covenantDate)}
                       </div>
-                      {r.hidden && <div style={{ display: 'inline-block', marginTop: '0.25rem', padding: '1px 6px', borderRadius: 2, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.08em', background: 'rgba(154,160,170,0.15)', color: 'var(--muted)' }}>HIDDEN</div>}
+                      {r.hidden && <div style={{ display: 'inline-block', marginTop: '0.25rem', padding: '1px 6px', borderRadius: 4, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.04em', background: 'color-mix(in srgb, var(--muted) 15%, transparent)', color: 'var(--muted)' }}>HIDDEN</div>}
                       {days !== null && (
                         <div style={{ fontSize: '0.65rem', color: isUrgent ? 'var(--warn)' : isPast ? 'color-mix(in srgb, var(--fail) 33%, transparent)' : 'var(--faint)' }}>
                           {isPast ? `${Math.abs(days)}d ago` : `${days}d away`}
@@ -1843,11 +1893,11 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     {col('testType') && (
                       <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap' }}>
                         <span style={{
-                          display: 'inline-block', padding: '2px 10px', borderRadius: 2,
-                          fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.08em',
-                          background: r.testType === 'Maturity' ? 'rgba(167,139,250,0.18)' : 'rgba(224,92,32,0.18)',
-                          color: r.testType === 'Maturity' ? 'var(--text2)' : 'var(--accent)',
-                          border: r.testType === 'Maturity' ? '1px solid color-mix(in srgb, var(--text2) 27%, transparent)' : '1px solid color-mix(in srgb, var(--accent) 27%, transparent)',
+                          display: 'inline-block', padding: '2px 10px', borderRadius: 4,
+                          fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
+                          background: r.testType === 'Maturity' ? 'color-mix(in srgb, var(--gold) 13%, transparent)' : 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                          color: r.testType === 'Maturity' ? 'var(--gold)' : 'var(--accent-strong)',
+                          border: r.testType === 'Maturity' ? '1px solid color-mix(in srgb, var(--gold) 25%, transparent)' : '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
                         }}>{r.testType || 'Covenant'}</span>
                       </td>
                     )}
@@ -1861,7 +1911,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                               {expandedFund ? '▼' : '▶'}
                             </button>
                           )}
-                          <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.85rem' }}>{r.property}</div>
+                          <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.85rem' }}>{r.property}</div>
                         </div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.lender}</div>
                         <div style={{ fontSize: '0.7rem', color: 'var(--faint)', marginLeft: isFundRow ? '1.1rem' : 0 }}>{formatCurrency(r.loanAmount)}</div>
@@ -1875,7 +1925,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                         <div style={{ fontSize: '0.78rem', color: 'var(--text2)', fontWeight: 600 }}>
                           {r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x DSCR` : `${r.covenantReq.toFixed(2)}% DY`}
                         </div>
-                        <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: r.waived ? 'rgba(106,158,127,0.15)' : r.satisfied ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: r.waived ? 'var(--pass)' : r.satisfied ? 'var(--pass)' : 'var(--fail)', fontStyle: r.waived ? 'italic' : 'normal' }}>
+                        <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '2px 8px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 700, background: r.waived ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : r.satisfied ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)', color: r.waived ? 'var(--pass)' : r.satisfied ? 'var(--pass)' : 'var(--fail)', fontStyle: r.waived ? 'italic' : 'normal' }}>
                           {r.waived ? '◐ WAIVED' : r.satisfied ? '✓ PASS' : '✗ FAIL'}
                         </span>
                       </td>
@@ -1916,7 +1966,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                             {r.covenantType === 'dscr' ? r.covenantReq.toFixed(2)+'x' : r.covenantReq.toFixed(2)+'%'}
                           </span>
                         </div>
-                        <span style={{ display: 'inline-block', marginTop: '0.2rem', padding: '1px 7px', borderRadius: 2, fontSize: '0.72rem', fontWeight: 600, background: delta >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: delta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
+                        <span style={{ display: 'inline-block', marginTop: '0.2rem', padding: '1px 7px', borderRadius: 4, fontSize: '0.72rem', fontWeight: 600, background: delta >= 0 ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: delta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
                           {delta >= 0 ? '+' : ''}{r.covenantType === 'dscr' ? delta.toFixed(3)+'x' : delta.toFixed(2)+'%'}
                         </span>
                       </td>
@@ -1972,7 +2022,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     {/* ── NOI Variance ── */}
                     {col('noiVariance') && (
                       <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.75rem', fontWeight: 600, background: r.noiVariance >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: r.noiVariance >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
+                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, background: r.noiVariance >= 0 ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: r.noiVariance >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
                           {r.noiVariance >= 0 ? '+' : ''}{formatCurrency(r.noiVariance)}
                         </span>
                       </td>
@@ -2088,11 +2138,11 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                     {/* ── Actions ── */}
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'var(--muted)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
+                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'var(--muted)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}><PencilIcon size={12} /></button>
                       <button onClick={() => requirePin(() => toggleHidden(r.id, r.hidden))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? (r.hidden ? 'var(--pass)' : 'var(--muted)') : 'var(--disabled)', fontSize: '0.78rem', padding: '2px 5px' }} title={pinUnlocked ? (r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)') : 'Unlock to hide'}>{r.hidden ? '↩' : '⊘'}</button>
-                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'color-mix(in srgb, var(--fail) 27%, transparent)' : '#2a2a2a', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
+                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'color-mix(in srgb, var(--fail) 27%, transparent)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
                       <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? 'var(--accent)' : 'var(--faint)' }} title="Show calculation">∑</button>
-                      <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? 'var(--pass)' : 'var(--faint)' }} title="History &amp; notes">⏱</button>
+                      <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? 'var(--pass)' : 'var(--faint)' }} title="History &amp; notes"><ClockIcon size={12} /></button>
                     </td>
                   </tr>
 
@@ -2104,13 +2154,13 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     return (
                       <tr>
                         <td colSpan={colCount} style={{ padding: 0, background: 'var(--bg)' }}>
-                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: 'var(--panel)', borderRadius: 4, border: '1px solid var(--border)', borderLeft: '3px solid var(--accent)' }}>
-                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '0.75rem', fontWeight: 600 }}>Calculation Breakdown — {r.property}</div>
+                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: 'var(--panel)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--accent)' }}>
+                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '0.75rem', fontWeight: 600 }}>Calculation Breakdown — {r.property}</div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem 1.5rem' }}>
 
                               {/* Inputs */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Inputs</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Inputs</div>
                                 {r.variableLoan && r.loanCommitment
                                   ? <MathLine label="Commitment" value={formatCurrency(r.loanCommitment)} />
                                   : <MathLine label="Loan Amount" value={formatCurrency(r.loanAmount)} />}
@@ -2122,7 +2172,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                               {/* What-if NOI */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>What-if NOI</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>What-if NOI</div>
                                 {(() => {
                                   const wiRaw = whatIfNOI[r.id];
                                   const wiNOI = wiRaw !== undefined && wiRaw !== '' ? parseFloat(wiRaw) : null;
@@ -2140,7 +2190,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                         value={wiRaw ?? ''}
                                         placeholder={`Current: ${formatCurrency(r.noi)}`}
                                         onChange={e => setWhatIfNOI(prev => ({ ...prev, [r.id]: e.target.value }))}
-                                        style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text)', padding: '4px 6px', fontSize: '0.75rem', fontFamily: 'inherit', marginBottom: '0.4rem', boxSizing: 'border-box' }}
+                                        style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '4px 6px', fontSize: '0.75rem', fontFamily: 'inherit', marginBottom: '0.4rem', boxSizing: 'border-box' }}
                                       />
                                       {wiVal !== null && !isNaN(wiVal) && (
                                         <div>
@@ -2178,7 +2228,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                               {/* Rate Prongs */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Rate Selection (highest wins)</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Rate Selection (highest wins)</div>
                                 {r.rateCandidates ? r.rateCandidates.map((c, i) => {
                                   const isWinner = c.label === r.rateWinner?.label;
                                   return (
@@ -2206,7 +2256,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                               {/* Debt Service */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Debt Service</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Debt Service</div>
                                 {r.variableLoan && r.variableLoanDetail ? (
                                   <>
                                     <div style={{ fontSize: '0.6rem', color: 'var(--accent)', marginBottom: '0.3rem', fontWeight: 600 }}>T-3 Rolling Interest</div>
@@ -2240,7 +2290,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                               {/* Covenant Result */}
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'Debt Yield'}</div>
+                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'Debt Yield'}</div>
                                 {r.covenantType === 'dscr' ? (
                                   <>
                                     <MathLine label="DSCR" value={`${r.currentVal.toFixed(4)}x`} eq={`${formatCurrency(r.noi)} ÷ ${formatCurrency(r.ads)}`} />
@@ -2271,7 +2321,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                   : calcADS(payBase - r.paydown, r.rate, r.amort);
                                 return (
                                 <div>
-                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Paydown to Clear</div>
+                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Paydown to Clear</div>
                                   <MathLine label="NOI Shortfall" value={formatCurrency(r.noiVariance)} color="var(--fail)" />
                                   <MathLine label="Required Paydown" value={isTBD ? 'TBD' : formatCurrency(r.paydown)} color="var(--accent)" />
                                   {!isTBD && <MathLine label="New Loan Balance" value={formatCurrency(payBase - r.paydown)} eq="after paydown" />}
@@ -2285,7 +2335,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                               {/* NOI Calculation Detail */}
                               {r.noiDetail && (
                                 <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: '0.6rem', marginTop: '0.2rem' }}>
-                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
                                     NOI Build-up {r.noiDetail.fallback ? '— Dec fallback (2027 test date)' : ''}
                                   </div>
                                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
@@ -2384,8 +2434,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     return (
                       <tr>
                         <td colSpan={colCount} style={{ padding: 0, background: 'var(--bg)' }}>
-                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: 'var(--panel)', borderRadius: 4, border: '1px solid var(--border)', borderLeft: '3px solid var(--pass)' }}>
-                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--pass)', marginBottom: '0.75rem', fontWeight: 600 }}>History &amp; Notes — {r.property}</div>
+                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: 'var(--panel)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--pass)' }}>
+                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--pass)', marginBottom: '0.75rem', fontWeight: 600 }}>History &amp; Notes — {r.property}</div>
 
                             {/* Add comment */}
                             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.85rem' }}>
@@ -2395,9 +2445,9 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                 placeholder="Add a note..."
                                 onChange={e => setNewComment(prev => ({ ...prev, [r.id]: e.target.value }))}
                                 onKeyDown={e => e.key === 'Enter' && saveComment(r.id)}
-                                style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text)', padding: '5px 8px', fontSize: '0.75rem', fontFamily: 'inherit' }}
+                                style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '5px 8px', fontSize: '0.75rem', fontFamily: 'inherit' }}
                               />
-                              <button onClick={() => saveComment(r.id)} style={{ padding: '5px 14px', borderRadius: 2, border: 'none', cursor: 'pointer', background: 'var(--pass)', color: '#fff', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>Add</button>
+                              <button onClick={() => saveComment(r.id)} className="btn btn-sm btn-primary">Add</button>
                             </div>
 
                             {/* Events feed */}
@@ -2406,10 +2456,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                             {events !== null && events.length > 0 && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 320, overflowY: 'auto' }}>
                                 {events.map(ev => (
-                                  <div key={ev.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.5rem 0.65rem', background: 'var(--bg)', borderRadius: 3, border: '1px solid var(--border)' }}>
+                                  <div key={ev.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.5rem 0.65rem', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)' }}>
                                     {/* Icon */}
                                     <div style={{ fontSize: '0.75rem', marginTop: '0.05rem', flexShrink: 0, color: ev.type === 'comment' ? 'var(--pass)' : 'var(--accent)' }}>
-                                      {ev.type === 'comment' ? '💬' : '📸'}
+                                      {ev.type === 'comment' ? <CommentIcon size={12} /> : <CameraIcon size={12} />}
                                     </div>
                                     {/* Content */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -2419,14 +2469,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                           isPriorBaseline(ev) ? (
                                             <span style={{
                                               fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                                              padding: '1px 5px', borderRadius: 2,
-                                              background: 'rgba(106,158,127,0.18)', color: 'var(--pass)',
+                                              padding: '1px 5px', borderRadius: 4,
+                                              background: 'color-mix(in srgb, var(--pass) 18%, transparent)', color: 'var(--pass)',
                                             }}>Prior Test</span>
                                           ) : (
                                             <span style={{
                                               fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                                              padding: '1px 5px', borderRadius: 2,
-                                              background: ev.is_monthly === false ? 'rgba(154,160,170,0.12)' : 'rgba(99, 102, 241,0.15)',
+                                              padding: '1px 5px', borderRadius: 4,
+                                              background: ev.is_monthly === false ? 'color-mix(in srgb, var(--muted) 12%, transparent)' : 'color-mix(in srgb, var(--accent) 15%, transparent)',
                                               color: ev.is_monthly === false ? 'var(--muted)' : 'var(--accent)',
                                             }}>{ev.is_monthly === false ? 'Interim' : 'Monthly'}</span>
                                           )
@@ -2499,7 +2549,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       {/* Requirement + individual pass/fail */}
                       {col('covenant') && (
                         <td style={{ padding: '0.5rem 0.75rem' }}>
-                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 700, background: fpPassing === null ? 'rgba(74,79,90,0.2)' : fpPassing ? 'rgba(106,158,127,0.15)' : 'rgba(160,82,82,0.15)', color: fpPassing === null ? 'var(--faint)' : fpPassing ? 'var(--pass)' : 'var(--fail)' }}>
+                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 700, background: fpPassing === null ? 'color-mix(in srgb, var(--faint) 20%, transparent)' : fpPassing ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)', color: fpPassing === null ? 'var(--faint)' : fpPassing ? 'var(--pass)' : 'var(--fail)' }}>
                             {fpPassing === null ? '—' : fpPassing ? '✓ PASS' : '✗ FAIL'}
                           </span>
                         </td>
@@ -2521,7 +2571,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                 <span style={{ fontSize: '0.65rem', color: 'var(--faint)' }}>vs</span>
                                 <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{r.covenantReq.toFixed(2)}x</span>
                               </div>
-                              <span style={{ display: 'inline-block', marginTop: '0.15rem', padding: '1px 6px', borderRadius: 2, fontSize: '0.68rem', fontWeight: 600, background: fpDelta >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: fpDelta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
+                              <span style={{ display: 'inline-block', marginTop: '0.15rem', padding: '1px 6px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 600, background: fpDelta >= 0 ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: fpDelta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
                                 {fpDelta >= 0 ? '+' : ''}{fpDelta.toFixed(3)}x
                               </span>
                             </>
@@ -2541,7 +2591,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       {col('noiVariance') && (
                         <td style={{ padding: '0.5rem 0.75rem' }}>
                           {fpVariance !== null ? (
-                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.72rem', fontWeight: 600, background: fpVariance >= 0 ? 'rgba(106,158,127,0.12)' : 'rgba(160,82,82,0.12)', color: fpVariance >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
+                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.72rem', fontWeight: 600, background: fpVariance >= 0 ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: fpVariance >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
                               {fpVariance >= 0 ? '+' : ''}{formatCurrency(fpVariance)}
                             </span>
                           ) : <span style={{ color: 'var(--faint)' }}>—</span>}
@@ -2860,7 +2910,8 @@ export default function App() {
 
   const LOGO_SRC = "data:image/png;base64,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yWczPcq4uFgS0Utt/P8ybvkd4AlHe5XxegoJsqW9z4f4jCCRmUJW19O0/1totHYcCc5PUXf5Cgx8rvYBEvE6Oq/mOniOzl3lmIdZs4sDLHPQY0IITz7jSPDMGlxOn72dXh/HOuqerqAR6BpqvHvkFlDqgm8if+MTUhgNbmluojjIbXyRI1s4ahIfpPgT0mJHQ0gqMI7O42MkfFO5z7fbfFSRuAcvKTFYcvKxKWdmqXy/yzRcZh2uImHt9mZ4F3WFv4dmaBykss7gKbfstc0ieYivBfPOkDOqrCPx+y6a33w99107FndwCgghPPmMowEEm33RLfv4AMoU3ScbeJu0GFKpVPpe45dJfO/gPjeLtVtFYrg8wGzUR2HhP2vAhUhzdTaJrvHJp9FH2C0v6K2PcBHPzt0Mmzt8FbdE55EIN6a1HzSW9j44w4QQnnzOI1/eKL0Z5bVtVfGUT90wTYvQkWRhXcNTzttylgco28xFklXYg7IU5SKR4upME0JYjJHco9Twvh9Y4HMvEhGMonL+BnUJu8Vi746jlPb3z8j39mtkEY7SnzyOR3HU/GXL7NOLgaPgJSWEMOg7ySr8Nr640yK+OtwmEsafDtkqDM4wIYTBIJnCA8RtGtsIHhK0F2IYDIMQwmAgJKvwKvLFzXB4mt8B8tMNe+AkOKOEEAaDpob76mwOch1PCPEkrMJg0IQQBn0ln6w0WYVvIdGzxAYbKAnDNLIWi6b9D4LChBAGfaXJOh4XkRU4jkJoFlCc4TQp6UFYhcEgCSEMBkqyCi8j0TOL8BaKRVxBmVweDKt8wdkkhLAYu/jc3zJqxObj6hab9WG+NJuT+5TepHoaR2W1rNXg+QqPw5LC1vDlNlfxZAudUEnbGccDxWfx9UM2m1iFjeeniqf5P64c9vul9J9zKLj7EoNbUP44LG3ZBD6QZOepJ2urBF8nhLAYZs1Mokq7g/u+uuUasozm0MjqHTTaeoPeZEFeRWXdwRtcu1mqF1GDvJBe15B192knBUhWoa0et4cL2xY6r3Wap7VqPD8rKCD6bSRwraiiUJ3vopvZl+haPkrHdBJYQseyjY5tFB3rCjr2oA/EBPMOacd31c3E/X5uv5tt97pc7foAG7d5ko6h15z08gVBEARBEARBEASFybLsr4ddhiAIekiWZX877DIE/SHLsr8cdhmCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAh6wP8GMDZpGBxVWa4AAAAASUVORK5CYII=";
   const TTLogo = () => (
-    <img src={LOGO_SRC} alt="Thompson Thrift" style={{ height: 64, objectFit: "contain", filter: "none" }} />
+    // The wordmark PNG is white-on-transparent; darken it on light surfaces.
+    <img src={LOGO_SRC} alt="Thompson Thrift" style={{ height: 44, objectFit: "contain", filter: theme === 'light' ? 'invert(0.82)' : 'none' }} />
   );
 
 
@@ -2888,8 +2939,8 @@ export default function App() {
       {/* ── Header bar ── */}
       <div style={{
         background: "var(--header)",
-        borderBottom: `3px solid ${TT_ORANGE}`,
-        padding: "1.25rem 2rem",
+        borderBottom: "1px solid var(--border)",
+        padding: "0.85rem 2rem",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
@@ -2897,10 +2948,16 @@ export default function App() {
         zIndex: 1,
       }}>
         {/* Logo + Title */}
-        <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "1.1rem" }}>
           <TTLogo />
-          <div style={{ fontSize: "0.68rem", letterSpacing: "0.18em", color: TT_ORANGE, textTransform: "uppercase" }}>
-            Covenant Dashboard
+          <div style={{ width: 1, height: 30, background: "var(--border)", flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text)", letterSpacing: "0.01em", lineHeight: 1.3 }}>
+              Covenant Dashboard
+            </div>
+            <div style={{ fontSize: "0.68rem", color: "var(--muted)", lineHeight: 1.4 }}>
+              Debt &amp; Capital Markets Analytics
+            </div>
           </div>
         </div>
         {/* Right side — theme toggle + SOFR curve status + upload */}
@@ -2910,13 +2967,13 @@ export default function App() {
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           aria-label="Toggle light / dark mode"
           style={{
-            width: 38, height: 38, borderRadius: 8, cursor: 'pointer',
+            width: 34, height: 34, borderRadius: 6, cursor: 'pointer',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             background: 'var(--panel)', border: '1px solid var(--border)',
-            color: 'var(--text2)', fontSize: '1rem', lineHeight: 1, flexShrink: 0,
-            transition: 'background-color 0.15s, border-color 0.15s',
+            color: 'var(--text2)', fontSize: '0.9rem', lineHeight: 1, flexShrink: 0,
+            transition: 'background-color 0.15s ease-out, border-color 0.15s ease-out',
           }}
-        >{theme === 'dark' ? '☀️' : '🌙'}</button>
+        >{theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}</button>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: "0.7rem", color: "var(--faint)" }}>Chatham 1-Mo Term SOFR Forward Curve</div>
           <div style={{ fontSize: "0.7rem", color: sofrUpdated ? "var(--pass)" : "var(--faint)" }}>
@@ -2925,13 +2982,13 @@ export default function App() {
               : "as of 03 Mar 2026 (hardcoded)"}
           </div>
           {pinUnlocked ? (
-            <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 20%, transparent)' }}>
+            <label className="btn btn-sm" style={{ marginTop: '0.35rem', fontSize: '0.66rem', padding: '2px 9px' }}>
               ↑ Update Curve
               <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
             </label>
           ) : (
-            <button onClick={() => setShowPinModal(true)} style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(200,205,214,0.05)', color: 'var(--faint)', outline: '1px solid color-mix(in srgb, var(--faint) 20%, transparent)', border: 'none' }}>
-              🔒 Update Curve
+            <button onClick={() => setShowPinModal(true)} className="btn btn-sm btn-locked" style={{ marginTop: '0.35rem', fontSize: '0.66rem', padding: '2px 9px' }}>
+              <LockIcon size={10} /> Update Curve
             </button>
           )}
         </div>
@@ -2955,19 +3012,19 @@ export default function App() {
           <button
             onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
             title={pinUnlocked ? 'Configure visible tabs' : 'Unlock to configure tabs'}
-            style={{ marginLeft: 'auto', marginBottom: 6, padding: '4px 8px', background: showTabConfig ? 'rgba(99, 102, 241,0.15)' : 'none', border: showTabConfig ? `1px solid color-mix(in srgb, var(--accent) 27%, transparent)` : '1px solid transparent', borderRadius: 4, cursor: 'pointer', color: showTabConfig ? TT_ORANGE : 'var(--faint)', fontSize: '0.9rem', lineHeight: 1 }}
+            style={{ marginLeft: 'auto', marginBottom: 6, padding: '4px 8px', background: showTabConfig ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'none', border: showTabConfig ? `1px solid color-mix(in srgb, var(--accent) 27%, transparent)` : '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: showTabConfig ? TT_ORANGE : 'var(--faint)', fontSize: '0.9rem', lineHeight: 1 }}
           >⚙</button>
           {/* Tab config dropdown */}
           {showTabConfig && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: 'var(--panel2)', border: `1px solid color-mix(in srgb, var(--accent) 27%, transparent)`, borderRadius: 4, padding: '0.75rem 1rem', minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
-              <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: '0.65rem' }}>Visible Tabs</div>
+            <div className="menu" style={{ minWidth: 210, padding: '0.35rem 0 0.6rem' }}>
+              <div className="menu-heading">Visible Tabs</div>
               {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans'],['debt','Debt Dashboard']].map(([key, label]) => (
-                <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ accentColor: TT_ORANGE, width: 14, height: 14 }} />
-                  <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? 'var(--text2)' : 'var(--faint)' }}>{label}</span>
+                <label key={key} className="menu-item" style={{ padding: '0.3rem 0.95rem' }}>
+                  <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ width: 14, height: 14 }} />
+                  <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? 'var(--text)' : 'var(--faint2)' }}>{label}</span>
                 </label>
               ))}
-              <div style={{ marginTop: '0.5rem', fontSize: '0.58rem', color: 'var(--faint)' }}>Changes persist across sessions.</div>
+              <div style={{ marginTop: '0.45rem', padding: '0 0.95rem', fontSize: '0.64rem', color: 'var(--faint2)' }}>Changes persist across sessions.</div>
             </div>
           )}
         </div>
@@ -2989,32 +3046,22 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
             <button
               onClick={() => pinUnlocked ? setPinUnlocked(false) : setShowPinModal(true)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                padding: '2px 8px', borderRadius: 2, border: 'none', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.08em',
-                background: pinUnlocked ? 'rgba(106,158,127,0.10)' : 'transparent',
-                color: pinUnlocked ? 'var(--pass)' : 'var(--faint)',
-                outline: pinUnlocked ? '1px solid rgba(106,158,127,0.25)' : '1px solid var(--border)',
-              }}
+              className="btn btn-sm"
+              style={{ fontSize: '0.66rem', padding: '2px 9px', ...(pinUnlocked ? { color: 'var(--pass)', borderColor: 'color-mix(in srgb, var(--pass) 30%, transparent)', background: 'color-mix(in srgb, var(--pass) 9%, transparent)' } : {}) }}
               title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
             >
-              {pinUnlocked ? '🔓 Editing unlocked' : '🔒 View only'}
+              {pinUnlocked ? <><UnlockIcon size={11} /> Editing unlocked</> : <><LockIcon size={11} /> View only</>}
             </button>
             <button
               onClick={() => signOut()}
               title={userEmail ? `Signed in as ${userEmail} — click to sign out` : 'Sign out'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                padding: '2px 8px', borderRadius: 2, border: 'none', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.08em',
-                background: 'transparent', color: 'var(--faint)', outline: '1px solid var(--border)',
-              }}
+              className="btn btn-sm btn-ghost"
+              style={{ fontSize: '0.66rem', padding: '2px 9px' }}
             >
               {userEmail ? `${userEmail} · Sign out` : 'Sign out'}
             </button>
-            <span style={{ fontSize: "0.85rem", color: "var(--text2)", fontWeight: 700, letterSpacing: "0.06em" }}>
-              Kevin Ashburn · <span style={{ color: TT_ORANGE }}>Thompson Thrift</span>
+            <span style={{ fontSize: "0.8rem", color: "var(--text2)", fontWeight: 600, letterSpacing: "0.01em" }}>
+              Kevin Ashburn · <span style={{ color: "var(--gold)" }}>Thompson Thrift</span>
             </span>
           </div>
         </div>

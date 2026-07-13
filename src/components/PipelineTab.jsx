@@ -247,22 +247,22 @@ export function PipelineTab() {
   };
 
   const pill = (label, color, bg) => (
-    <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: 3,
+    <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: 4,
       background: bg, color, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{label}</span>
   );
   const statusBadge = (d) => {
-    if (d.committed)      return pill('COMMITTED',   'var(--pass)', 'rgba(106,158,127,0.12)');
-    if (d.book_published) return pill('BOOK OUT',    '#c8c05a', 'rgba(200,192,90,0.12)');
-    if (d.status==='active') return pill('IN PROCESS', TT_ORANGE, 'rgba(99, 102, 241,0.12)');
-    return pill('PIPELINE', 'var(--faint2)', 'rgba(106,112,128,0.12)');
+    if (d.committed)      return pill('COMMITTED',   'var(--pass)', 'color-mix(in srgb, var(--pass) 12%, transparent)');
+    if (d.book_published) return pill('BOOK OUT',    'var(--gold)', 'color-mix(in srgb, var(--gold) 12%, transparent)');
+    if (d.status==='active') return pill('IN PROCESS', TT_ORANGE, 'color-mix(in srgb, var(--accent) 12%, transparent)');
+    return pill('PIPELINE', 'var(--faint2)', 'color-mix(in srgb, var(--faint) 12%, transparent)');
   };
   const typeBadge = (d) => d.type === 'Perm/Bridge'
-    ? pill('PERM/BRIDGE', '#9b8fc0', 'rgba(155,143,192,0.12)')
-    : pill('CONST', '#4fa3c8', 'rgba(79,163,200,0.12)');
+    ? pill('PERM/BRIDGE', 'var(--cat-violet)', 'color-mix(in srgb, var(--cat-violet) 12%, transparent)')
+    : pill('CONST', 'var(--cat-blue)', 'color-mix(in srgb, var(--cat-blue) 12%, transparent)');
 
   // ── Input style helpers ────────────────────────────────────────────────────
   const inputSt = (extra = {}) => ({
-    background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3,
+    background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4,
     color: 'var(--text2)', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit',
     width: '100%', boxSizing: 'border-box', ...extra,
   });
@@ -307,7 +307,7 @@ export function PipelineTab() {
 
             {/* ── Col 1: Identity ── */}
             <div>
-              <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.75rem' }}>Identity</div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.75rem' }}>Identity</div>
               {isNew && (
                 <div style={fieldSt}><label style={labelSt}>ID (slug, auto-filled)</label>
                   <input style={inputSt()} value={editForm.id} onChange={e => setF('id', e.target.value)} placeholder="auto from name" />
@@ -346,7 +346,7 @@ export function PipelineTab() {
 
             {/* ── Col 2: Financing ── */}
             <div>
-              <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.75rem' }}>Financing</div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.75rem' }}>Financing</div>
               <div style={fieldSt}><label style={labelSt}>Primary Lender</label>
                 <input style={inputSt()} value={editForm.primary_lender || ''} onChange={e => setF('primary_lender', e.target.value)} placeholder="PNC" />
               </div>
@@ -371,7 +371,7 @@ export function PipelineTab() {
                 ))}
               </div>
               <div style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.75rem' }}>Budget</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.75rem' }}>Budget</div>
                 {[
                   ['total_budget',      'Total Budget'],
                   ['cost_per_unit',     'Cost / Unit'],
@@ -390,7 +390,7 @@ export function PipelineTab() {
 
             {/* ── Col 3: Proforma + Highlights ── */}
             <div>
-              <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.75rem' }}>Proforma</div>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.75rem' }}>Proforma</div>
               {[
                 ['units',    'Total Units',         false],
                 ['avg_rent', 'Avg Rent ($)',         false],
@@ -413,7 +413,7 @@ export function PipelineTab() {
               <div style={{ marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)', marginBottom: '0.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <span style={{ fontSize: '0.6rem', color: 'var(--faint3)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Unit Mix</span>
-                  <button onClick={addUnitType} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--faint2)', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'inherit' }}>+ Row</button>
+                  <button onClick={addUnitType} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--faint2)', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'inherit' }}>+ Row</button>
                 </div>
                 {(editForm.unit_mix || []).map((row, i) => (
                   <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: 4, marginBottom: 4, alignItems: 'center' }}>
@@ -429,7 +429,7 @@ export function PipelineTab() {
 
               {/* Highlights */}
               <div style={{ paddingTop: '0.75rem', borderTop: '1px solid var(--border)' }}>
-                <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.5rem' }}>Market Highlights</div>
+                <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.5rem' }}>Market Highlights</div>
                 <textarea style={{ ...inputSt(), height: 90, resize: 'vertical' }} value={editForm.highlights || ''} onChange={e => setF('highlights', e.target.value)} placeholder="Key market narrative…" />
               </div>
             </div>
@@ -438,11 +438,11 @@ export function PipelineTab() {
           {/* ── Footer buttons ── */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
             <button onClick={() => { setEditId(null); setEditForm(null); }}
-              style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>
+              style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>
               Cancel
             </button>
             <button onClick={saveDeal} disabled={saving}
-              style={{ padding: '7px 22px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>
+              className="btn btn-primary" style={{ padding: '6px 20px', fontSize: '0.78rem', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>
               {saving ? 'Saving…' : isNew ? 'Add Deal' : 'Save Changes'}
             </button>
           </div>
@@ -463,8 +463,8 @@ export function PipelineTab() {
             <strong style={{ color: 'var(--text2)' }}>{deal?.name}</strong> will be permanently removed from the pipeline.
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-            <button onClick={() => setConfirmDel(null)} style={{ padding: '6px 16px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' }}>Cancel</button>
-            <button onClick={() => deleteDeal(confirmDel)} style={{ padding: '6px 16px', borderRadius: 3, border: 'none', background: 'var(--fail)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700 }}>Delete</button>
+            <button onClick={() => setConfirmDel(null)} style={{ padding: '6px 16px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' }}>Cancel</button>
+            <button onClick={() => deleteDeal(confirmDel)} style={{ padding: '6px 16px', borderRadius: 4, border: 'none', background: 'var(--fail)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700 }}>Delete</button>
           </div>
         </div>
       </div>
@@ -484,8 +484,8 @@ export function PipelineTab() {
           <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.5rem' }}>No deals yet</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--faint)', marginBottom: '1.5rem' }}>Start fresh or seed from the 2026 pipeline book</div>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-            <button onClick={startNew} style={{ padding: '8px 20px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: 'pointer', fontWeight: 700, fontFamily: 'inherit', fontSize: '0.8rem' }}>+ Add Deal</button>
-            <button onClick={seedFromBook} disabled={saving} style={{ padding: '8px 20px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', opacity: saving ? 0.6 : 1 }}>
+            <button onClick={startNew} className="btn btn-primary" style={{ padding: '7px 18px', fontSize: '0.78rem' }}>+ Add Deal</button>
+            <button onClick={seedFromBook} disabled={saving} style={{ padding: '8px 20px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Seeding…' : '↓ Seed from Pipeline Book'}
             </button>
           </div>
@@ -503,8 +503,8 @@ export function PipelineTab() {
             { label: 'Needs Lender',          value: needsLender,        sub: 'no lender assigned', warn: needsLender > 0 },
             { label: 'Next Close',            value: nextClose ? nextClose.name.split(',')[0] : '—', sub: nextClose ? fmtDate(nextClose.closing_date) : 'no upcoming dates' },
           ].map(c => (
-            <div key={c.label} style={{ background: 'var(--panel)', border: `1px solid ${c.warn ? 'rgba(196,116,116,0.35)' : 'var(--border)'}`, borderRadius: 6, padding: '0.9rem 1rem' }}>
-              <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.08em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
+            <div key={c.label} style={{ background: 'var(--panel)', border: `1px solid ${c.warn ? 'color-mix(in srgb, var(--fail) 35%, transparent)' : 'var(--border)'}`, borderRadius: 6, padding: '0.9rem 1rem' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.04em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
               <div style={{ fontSize: '1.3rem', fontWeight: 700, color: c.warn ? 'var(--fail)' : 'var(--text2)', lineHeight: 1.1 }}>{c.value}</div>
               <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', marginTop: '0.2rem' }}>{c.sub}</div>
             </div>
@@ -527,7 +527,7 @@ export function PipelineTab() {
                 ))}
                 {upcoming.map(d => {
                   const pct = Math.max(0, Math.min(98, (new Date(d.closing_date) - rangeStart) / span * 100));
-                  const color = d.committed ? 'var(--pass)' : d.book_published ? '#c8c05a' : TT_ORANGE;
+                  const color = d.committed ? 'var(--pass)' : d.book_published ? 'var(--gold)' : TT_ORANGE;
                   return <div key={d.id} title={`${d.name} — ${fmtDate(d.closing_date)}`}
                     style={{ position: 'absolute', top: 4, left: `${pct}%`, transform: 'translateX(-50%)', width: 10, height: 10, borderRadius: '50%', background: color, boxShadow: `0 0 0 2px ${color}40`, cursor: 'default' }} />;
                 })}
@@ -537,7 +537,7 @@ export function PipelineTab() {
                   const days = daysUntil(d.closing_date);
                   return (
                     <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.63rem' }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: d.committed ? 'var(--pass)' : d.book_published ? '#c8c05a' : TT_ORANGE }} />
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: d.committed ? 'var(--pass)' : d.book_published ? 'var(--gold)' : TT_ORANGE }} />
                       <span style={{ color: 'var(--muted)' }}>{d.name.split(',')[0]}</span>
                       <span style={{ color: 'var(--faint)' }}>{fmtDate(d.closing_date)}</span>
                       {days != null && days >= 0 && days <= 60 && <span style={{ color: days <= 30 ? 'var(--fail)' : TT_ORANGE }}>{days}d</span>}
@@ -552,15 +552,11 @@ export function PipelineTab() {
         {/* ── Toolbar ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
           {['All','Construction','Perm/Bridge'].map(o => (
-            <button key={o} onClick={() => setFilterType(o)} style={{
-              padding: '4px 12px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.72rem',
-              fontWeight: 600, fontFamily: 'inherit', letterSpacing: '0.05em',
-              background: filterType===o ? TT_ORANGE : 'var(--border)', color: filterType===o ? '#fff' : 'var(--muted)',
-            }}>{o}</button>
+            <button key={o} onClick={() => setFilterType(o)} className={`chip ${filterType===o ? 'chip-active' : ''}`}>{o}</button>
           ))}
           <div style={{ flex: 1 }} />
           {msg && <span style={{ fontSize: '0.68rem', color: msg.isErr ? 'var(--fail)' : 'var(--pass)' }}>{msg.text}</span>}
-          <button onClick={startNew} style={{ padding: '5px 14px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>+ Add Deal</button>
+          <button onClick={startNew} className="btn btn-sm btn-primary">+ Add Deal</button>
         </div>
 
         {/* ── Deal Cards ── */}
@@ -579,7 +575,7 @@ export function PipelineTab() {
                     {statusBadge(d)}{typeBadge(d)}
                     {covenantMatch && (
                       <span title={`Linked: ${covenantMatch.property} in Covenant Tracker`}
-                        style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 3, background: covenantMatch.satisfied ? 'rgba(106,158,127,0.12)' : 'rgba(196,116,116,0.12)', color: covenantMatch.satisfied ? 'var(--pass)' : 'var(--fail)', fontWeight: 700 }}>
+                        style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 4, background: covenantMatch.satisfied ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: covenantMatch.satisfied ? 'var(--pass)' : 'var(--fail)', fontWeight: 700 }}>
                         ⚡ {covenantMatch.satisfied ? 'Passing' : 'Failing'}
                       </span>
                     )}
@@ -611,7 +607,7 @@ export function PipelineTab() {
                     <div style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 700 }}>{fmt$(d.total_budget)}</div>
                   </div>
                   {/* Edit */}
-                  <button onClick={() => startEdit(d)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--faint2)', cursor: 'pointer', padding: '3px 9px', fontSize: '0.7rem', fontFamily: 'inherit' }}>Edit</button>
+                  <button onClick={() => startEdit(d)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--faint2)', cursor: 'pointer', padding: '3px 9px', fontSize: '0.7rem', fontFamily: 'inherit' }}>Edit</button>
                   {/* Delete */}
                   <button onClick={() => setConfirmDel(d.id)} style={{ background: 'none', border: 'none', color: 'var(--border)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 4px' }} title="Delete deal">✕</button>
                 </div>
@@ -640,12 +636,12 @@ export function PipelineTab() {
                       ))}
                       {d.unit_mix && d.unit_mix.length > 0 && (
                         <div style={{ marginTop: '0.75rem' }}>
-                          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>Unit Mix</div>
+                          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.4rem' }}>Unit Mix</div>
                           {d.unit_mix.map((u, i) => (
                             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
                               <div style={{ fontSize: '0.65rem', color: 'var(--faint2)', width: 90, flexShrink: 0 }}>{u.type}</div>
-                              <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
-                                <div style={{ width: `${u.pct||0}%`, height: '100%', background: TT_ORANGE, borderRadius: 2 }} />
+                              <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
+                                <div style={{ width: `${u.pct||0}%`, height: '100%', background: TT_ORANGE, borderRadius: 4 }} />
                               </div>
                               <div style={{ fontSize: '0.65rem', color: 'var(--muted)', width: 22, textAlign: 'right' }}>{u.count}</div>
                               <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', width: 42, textAlign: 'right' }}>{u.market_rent ? `$${Number(u.market_rent).toLocaleString()}` : '—'}</div>

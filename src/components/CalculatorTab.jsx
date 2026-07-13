@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { formatCurrency, formatPct, dscrColor, dscrClass } from '../format.js';
 import { getSofr, calcADS, getActiveSofrCurve } from '../calc.js';
+import { LockIcon } from '../icons.jsx';
 
 const DY_THRESHOLDS = [0.08, 0.085, 0.09, 0.095, 0.10];
 
@@ -66,10 +67,10 @@ export function CalculatorTab({ thresholds }) {
     <button onClick={() => setLocked(id)} style={{
       padding: "3px 14px", borderRadius: "3px", border: "none", cursor: "pointer",
       fontFamily: "inherit", fontSize: "0.72rem", fontWeight: 600, letterSpacing: "0.05em",
-      background: locked === id ? "rgba(96,165,250,0.2)" : "var(--border)",
+      background: locked === id ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--border)",
       color: locked === id ? "var(--text2)" : "var(--faint)",
       outline: locked === id ? "1px solid var(--text2)" : "1px solid var(--border)",
-    }}>🔒 {label}</button>
+    }}><LockIcon size={11} /> {label}</button>
   );
 
   return (
@@ -78,7 +79,7 @@ export function CalculatorTab({ thresholds }) {
       <div className="section-title">Deal Inputs</div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
-        <span style={{ fontSize: "0.7rem", color: "var(--faint)", letterSpacing: "0.08em" }}>LOCK:</span>
+        <span style={{ fontSize: "0.7rem", color: "var(--faint)", letterSpacing: "0.04em" }}>LOCK:</span>
         {lockBtn("loan", "Loan Amount")}
         {lockBtn("noi", "NOI")}
         <span style={{ fontSize: "0.68rem", color: "var(--faint)" }}>
@@ -90,7 +91,7 @@ export function CalculatorTab({ thresholds }) {
         <div className="card" style={{ borderColor: locked === "loan" ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <div className="label" style={{ margin: 0 }}>Loan Amount</div>
-            {locked === "loan" && <span className="pill blue">🔒 Locked</span>}
+            {locked === "loan" && <span className="pill blue"><LockIcon size={10} style={{ marginRight: 4 }} /> Locked</span>}
           </div>
           <input type="number" value={loanAmount} step={500000} onChange={e => setLoanAmount(+e.target.value)} style={{ marginBottom: "0.75rem" }} />
           <input type="range" min={20000000} max={75000000} step={500000}
@@ -106,7 +107,7 @@ export function CalculatorTab({ thresholds }) {
         <div className="card" style={{ borderColor: locked === "noi" ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <div className="label" style={{ margin: 0 }}>Net Operating Income (NOI)</div>
-            {locked === "noi" && <span className="pill blue">🔒 Locked</span>}
+            {locked === "noi" && <span className="pill blue"><LockIcon size={10} style={{ marginRight: 4 }} /> Locked</span>}
           </div>
           <input type="number" value={noi} step={25000} onChange={e => setNoi(+e.target.value)} style={{ marginBottom: "0.75rem" }} />
           <input type="range" min={500000} max={10000000} step={25000}
@@ -129,7 +130,7 @@ export function CalculatorTab({ thresholds }) {
             style={{ marginBottom: "0.5rem" }} />
           {solvedFromDY ? (
             <div style={{ marginTop: "0.25rem" }}>
-              <div style={{ fontSize: "0.68rem", color: "var(--faint)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
+              <div style={{ fontSize: "0.68rem", color: "var(--faint)", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
                 → {solvedFromDY.label}
               </div>
               <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--pass)" }}>{solvedFromDY.value}</div>
@@ -149,7 +150,7 @@ export function CalculatorTab({ thresholds }) {
             style={{ marginBottom: "0.5rem" }} />
           {solvedFromDSCR ? (
             <div style={{ marginTop: "0.25rem" }}>
-              <div style={{ fontSize: "0.68rem", color: "var(--faint)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
+              <div style={{ fontSize: "0.68rem", color: "var(--faint)", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
                 → {solvedFromDSCR.label}
               </div>
               <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text2)" }}>{solvedFromDSCR.value}</div>
@@ -241,7 +242,7 @@ export function CalculatorTab({ thresholds }) {
               <span style={{ fontSize: "0.78rem", color: "var(--text2)", fontWeight: 600 }}>+ {spread.toFixed(2)}%</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0 0" }}>
-              <span style={{ fontSize: "0.82rem", color: "#ffffff", fontWeight: 600 }}>All-in Rate</span>
+              <span style={{ fontSize: "0.82rem", color: "var(--text)", fontWeight: 600 }}>All-in Rate</span>
               <span style={{ fontSize: "0.82rem", color: "var(--warn)", fontWeight: 700 }}>{formatPct(allInRate, 4)}</span>
             </div>
           </div>
@@ -271,7 +272,7 @@ export function CalculatorTab({ thresholds }) {
               const diff = maxLoan - loanAmount;
               return (
                 <tr key={dy}>
-                  <td style={{ color: "#ffffff", fontWeight: 600 }}>{(dy * 100).toFixed(1)}%</td>
+                  <td style={{ color: "var(--text)", fontWeight: 600 }}>{(dy * 100).toFixed(1)}%</td>
                   <td style={{ color: "var(--pass)", fontWeight: 600 }}>{formatCurrency(maxLoan)}</td>
                   <td>
                     {under

@@ -173,7 +173,7 @@ export function LeasingTab() {
 
   const SortTh = ({ k, label, right }) => (
     <th onClick={() => toggleSort(k)} style={{
-      padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.1em',
+      padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.05em',
       textTransform: 'uppercase', color: sortKey === k ? 'var(--accent)' : 'var(--muted)',
       fontWeight: 400, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
       textAlign: right ? 'right' : 'left',
@@ -191,13 +191,13 @@ export function LeasingTab() {
 
   if (!leasingData) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: '1.25rem' }}>
-      <div style={{ fontSize: '2rem', opacity: 0.3 }}>📊</div>
+      <div style={{ fontSize: '1.7rem', color: 'var(--faint)' }}>▦</div>
       <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600 }}>Leasing vs. Bank Book</div>
       <div style={{ fontSize: '0.75rem', color: 'var(--faint)', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
         Upload your refreshed <strong style={{ color: 'var(--text2)' }}>Lender_Leasing_Comparison.xlsx</strong> file to populate this dashboard.
         Refresh the Excel query first, save, then upload here.
       </div>
-      <label style={{ padding: '8px 22px', borderRadius: 3, background: 'rgba(99, 102, 241,0.15)', color: 'var(--accent)', outline: '1px solid color-mix(in srgb, var(--accent) 33%, transparent)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit' }}>
+      <label style={{ padding: '8px 22px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', outline: '1px solid color-mix(in srgb, var(--accent) 33%, transparent)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit' }}>
         ↑ Upload Excel File
         <input type="file" accept=".xlsx" onChange={handleFile} style={{ display: 'none' }} />
       </label>
@@ -211,7 +211,7 @@ export function LeasingTab() {
       {/* ── Toolbar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
         <div>
-          <div style={{ fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          <div style={{ fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)' }}>
             Data as of {fmtDate(asOfDate)} {weekEnd ? `· Week ending ${weekEnd}` : ''}
           </div>
         </div>
@@ -219,24 +219,24 @@ export function LeasingTab() {
 
         {/* State filter */}
         <select value={filterState} onChange={e => setFilterState(e.target.value)}
-          style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text2)', padding: '4px 10px', fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer' }}>
+          style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', padding: '4px 10px', fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer' }}>
           {states.map(s => <option key={s} value={s}>{s === 'All' ? 'All States' : s}</option>)}
         </select>
 
         {/* Chart toggle */}
-        <div style={{ display: 'flex', background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden', outline: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', background: 'var(--panel2)', borderRadius: 4, overflow: 'hidden', outline: '1px solid var(--border)' }}>
           {[['rent','Rent'], ['occ','Occupancy']].map(([v, label]) => (
             <button key={v} onClick={() => setChartView(v)} style={{
               padding: '4px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
               fontSize: '0.7rem', fontWeight: chartView === v ? 700 : 400,
-              background: chartView === v ? 'rgba(99, 102, 241,0.2)' : 'transparent',
+              background: chartView === v ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'transparent',
               color: chartView === v ? 'var(--accent)' : 'var(--faint)',
             }}>{label}</button>
           ))}
         </div>
 
         {/* Re-upload */}
-        <label style={{ padding: '5px 14px', borderRadius: 2, background: 'rgba(99, 102, 241,0.12)', color: 'var(--accent)', outline: '1px solid color-mix(in srgb, var(--accent) 27%, transparent)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>
+        <label style={{ padding: '5px 14px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', outline: '1px solid color-mix(in srgb, var(--accent) 27%, transparent)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>
           ↑ Re-upload
           <input type="file" accept=".xlsx" onChange={handleFile} style={{ display: 'none' }} />
         </label>
@@ -261,8 +261,8 @@ export function LeasingTab() {
               sub: 'properties at or above',
               color: summary.atOrAboveOcc === filtered.length ? passColor : summary.atOrAboveOcc > filtered.length * 0.5 ? warnColor : failColor },
           ].map((card, i) => (
-            <div key={i} style={{ background: 'var(--panel)', borderRadius: 4, border: '1px solid var(--border)', padding: '0.75rem 0.85rem' }}>
-              <div style={{ fontSize: '0.58rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: '0.3rem' }}>{card.label}</div>
+            <div key={i} style={{ background: 'var(--panel)', borderRadius: 6, border: '1px solid var(--border)', padding: '0.75rem 0.85rem' }}>
+              <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: '0.3rem' }}>{card.label}</div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, color: card.color || 'var(--text2)' }}>{card.value}</div>
               {card.sub && <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.2rem' }}>{card.sub}</div>}
             </div>
@@ -294,14 +294,14 @@ export function LeasingTab() {
         const toX = v => (v / maxVal) * CHART_W_TOTAL;
         const totalH = barRows.length * (BAR_H * 2 + GAP * 3 + 10) + 30;
         return (
-          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, padding: '1rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
-            <div style={{ fontSize: '0.6rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '0.75rem', fontWeight: 600 }}>
+          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '1rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
+            <div style={{ fontSize: '0.6rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '0.75rem', fontWeight: 600 }}>
               {chartView === 'rent' ? 'In-Place Rent vs. Bank Book Rent' : 'Current Occupancy vs. Bank Book Occupancy'}
             </div>
             <div style={{ display: 'flex', gap: '1rem', fontSize: '0.62rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
-              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: passColor, borderRadius: 2, marginRight: 4 }} />At/above bank book</span>
-              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: failColor, borderRadius: 2, marginRight: 4 }} />Below bank book</span>
-              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--border)', borderRadius: 2, marginRight: 4, outline: '1px solid var(--faint)' }} />Bank book target</span>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: passColor, borderRadius: 4, marginRight: 4 }} />At/above bank book</span>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: failColor, borderRadius: 4, marginRight: 4 }} />Below bank book</span>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--border)', borderRadius: 4, marginRight: 4, outline: '1px solid var(--faint)' }} />Bank book target</span>
             </div>
             <svg width={LABEL_W + CHART_W_TOTAL + 120} height={totalH} style={{ display: 'block', fontFamily: 'inherit' }}>
               {barRows.map((row, i) => {
@@ -341,7 +341,7 @@ export function LeasingTab() {
               <SortTh k="rentDelta"   label="Rent Δ" right />
               <SortTh k="occPercent"  label="Curr. Occ" right />
               <SortTh k="bankBookOcc" label="Bank Book Occ" right />
-              <th style={{ padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 400, textAlign: 'right' }}>Occ Δ</th>
+              <th style={{ padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, textAlign: 'right' }}>Occ Δ</th>
               <SortTh k="firstMI"    label="First Move-In" />
               <SortTh k="avgNetMI"   label="Avg Move-Ins/Mo" right />
               <SortTh k="netRental"  label="Wkly Net Rentals" right />
@@ -357,7 +357,7 @@ export function LeasingTab() {
                 <tr key={r.pscode} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--panel2)', borderBottom: '1px solid var(--bg)' }}>
                   {/* Property */}
                   <td style={{ padding: '0.65rem 0.7rem' }}>
-                    <div style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.82rem' }}>{r.property}</div>
+                    <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.82rem' }}>{r.property}</div>
                     <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.1rem' }}>{r.marquee}</div>
                     <div style={{ fontSize: '0.63rem', color: 'var(--border)', marginTop: '0.1rem' }}>{r.totalUnits} units · DOP {fmtDate(r.dopDate)}</div>
                   </td>
@@ -369,8 +369,8 @@ export function LeasingTab() {
                   <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: 'var(--muted)' }}>{fmtCur(r.bankBookRent)}</td>
                   {/* Rent delta */}
                   <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
-                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.75rem', fontWeight: 700,
-                      background: rentOk ? 'rgba(106,158,127,0.15)' : 'rgba(196,116,116,0.15)',
+                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.75rem', fontWeight: 700,
+                      background: rentOk ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)',
                       color: rentOk ? passColor : failColor }}>
                       {fmtPct(r.rentDelta)}
                     </span>
@@ -386,8 +386,8 @@ export function LeasingTab() {
                   {/* Occ delta */}
                   <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
                     {occDelta !== null
-                      ? <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 2, fontSize: '0.75rem', fontWeight: 700,
-                          background: occDelta >= 0 ? 'rgba(106,158,127,0.15)' : 'rgba(196,116,116,0.15)',
+                      ? <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.75rem', fontWeight: 700,
+                          background: occDelta >= 0 ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)',
                           color: occDelta >= 0 ? passColor : failColor }}>
                           {occDelta >= 0 ? '+' : ''}{(occDelta * 100).toFixed(2)}%
                         </span>

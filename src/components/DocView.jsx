@@ -219,10 +219,10 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       <div style={{ position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 1rem', background: '#f1f1f1', borderBottom: `1px solid ${C.line}`, zIndex: 2 }}>
         <span style={{ fontSize: '0.7rem', color: '#666', fontWeight: 600 }}>Doc View</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={downloadExcel} disabled={xlState === 'working'} title="Download this page as a formatted Excel file" style={{ padding: '5px 16px', borderRadius: 3, border: '1px solid #1f4e79', background: xlState === 'working' ? '#9bb0c7' : '#1f4e79', color: '#fff', cursor: xlState === 'working' ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
+          <button onClick={downloadExcel} disabled={xlState === 'working'} title="Download this page as a formatted Excel file" style={{ padding: '5px 16px', borderRadius: 4, border: '1px solid #1f4e79', background: xlState === 'working' ? '#9bb0c7' : '#1f4e79', color: '#fff', cursor: xlState === 'working' ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
             {xlState === 'working' ? 'Generating…' : xlState === 'error' ? 'Export failed — retry' : '⤓ Download Excel'}
           </button>
-          <button onClick={onClose} style={{ padding: '5px 16px', borderRadius: 3, border: '1px solid #999', background: '#fff', color: '#333', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>✕ Close</button>
+          <button onClick={onClose} style={{ padding: '5px 16px', borderRadius: 4, border: '1px solid #999', background: '#fff', color: '#333', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>✕ Close</button>
         </div>
       </div>
 
