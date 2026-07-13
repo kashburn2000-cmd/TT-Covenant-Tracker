@@ -442,7 +442,7 @@ export function PipelineTab() {
               Cancel
             </button>
             <button onClick={saveDeal} disabled={saving}
-              style={{ padding: '7px 22px', borderRadius: 4, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>
+              className="btn btn-primary" style={{ padding: '6px 20px', fontSize: '0.78rem', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>
               {saving ? 'Saving…' : isNew ? 'Add Deal' : 'Save Changes'}
             </button>
           </div>
@@ -484,7 +484,7 @@ export function PipelineTab() {
           <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.5rem' }}>No deals yet</div>
           <div style={{ fontSize: '0.75rem', color: 'var(--faint)', marginBottom: '1.5rem' }}>Start fresh or seed from the 2026 pipeline book</div>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-            <button onClick={startNew} style={{ padding: '8px 20px', borderRadius: 4, border: 'none', background: TT_ORANGE, color: '#fff', cursor: 'pointer', fontWeight: 700, fontFamily: 'inherit', fontSize: '0.8rem' }}>+ Add Deal</button>
+            <button onClick={startNew} className="btn btn-primary" style={{ padding: '7px 18px', fontSize: '0.78rem' }}>+ Add Deal</button>
             <button onClick={seedFromBook} disabled={saving} style={{ padding: '8px 20px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Seeding…' : '↓ Seed from Pipeline Book'}
             </button>
@@ -552,15 +552,11 @@ export function PipelineTab() {
         {/* ── Toolbar ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
           {['All','Construction','Perm/Bridge'].map(o => (
-            <button key={o} onClick={() => setFilterType(o)} style={{
-              padding: '4px 12px', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: '0.72rem',
-              fontWeight: 600, fontFamily: 'inherit', letterSpacing: '0.05em',
-              background: filterType===o ? TT_ORANGE : 'var(--border)', color: filterType===o ? '#fff' : 'var(--muted)',
-            }}>{o}</button>
+            <button key={o} onClick={() => setFilterType(o)} className={`chip ${filterType===o ? 'chip-active' : ''}`}>{o}</button>
           ))}
           <div style={{ flex: 1 }} />
           {msg && <span style={{ fontSize: '0.68rem', color: msg.isErr ? 'var(--fail)' : 'var(--pass)' }}>{msg.text}</span>}
-          <button onClick={startNew} style={{ padding: '5px 14px', borderRadius: 4, border: 'none', background: TT_ORANGE, color: '#fff', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>+ Add Deal</button>
+          <button onClick={startNew} className="btn btn-sm btn-primary">+ Add Deal</button>
         </div>
 
         {/* ── Deal Cards ── */}

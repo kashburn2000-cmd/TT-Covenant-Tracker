@@ -191,7 +191,7 @@ export function LeasingTab() {
 
   if (!leasingData) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: '1.25rem' }}>
-      <div style={{ fontSize: '2rem', opacity: 0.3 }}>📊</div>
+      <div style={{ fontSize: '1.7rem', color: 'var(--faint)' }}>▦</div>
       <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600 }}>Leasing vs. Bank Book</div>
       <div style={{ fontSize: '0.75rem', color: 'var(--faint)', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
         Upload your refreshed <strong style={{ color: 'var(--text2)' }}>Lender_Leasing_Comparison.xlsx</strong> file to populate this dashboard.

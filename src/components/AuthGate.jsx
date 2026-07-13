@@ -88,7 +88,7 @@ export function AuthGate({ children }) {
   if (session === undefined) {
     return (
       <div style={wrap}>
-        <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>⟳ Checking access…</div>
+        <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}><span className="spin" style={{ marginRight: 6 }}>⟳</span>Checking access…</div>
       </div>
     );
   }

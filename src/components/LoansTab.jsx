@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SB_URL, SB_KEY, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
+import { LockIcon } from '../icons.jsx';
 import { slugify } from '../format.js';
 
 // ── Loans Tab ───────────────────────────────────────────────────────────────
@@ -774,7 +775,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
             <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
-            <button onClick={saveLoan} disabled={saving} style={{ padding: '7px 22px', borderRadius: 4, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : isNew ? 'Add Loan' : 'Save Changes'}</button>
+            <button onClick={saveLoan} disabled={saving} className="btn btn-primary" style={{ padding: '6px 20px', fontSize: '0.78rem', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : isNew ? 'Add Loan' : 'Save Changes'}</button>
           </div>
         </div>
       </div>
@@ -813,7 +814,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           <textarea style={inputSt({ minHeight: 220, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={importJson} onChange={e => setImportJson(e.target.value)} spellCheck={false} placeholder='Click "Auto-fill" above, or paste JSON like: { "loan_type": "construction", "borrower_entity": "...", "loan_amount": 51694640 }' />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
             <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
-            <button onClick={importAbstract} disabled={saving} style={{ padding: '7px 22px', borderRadius: 4, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Importing…' : 'Import'}</button>
+            <button onClick={importAbstract} disabled={saving} className="btn btn-primary" style={{ padding: '6px 20px', fontSize: '0.78rem', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Importing…' : 'Import'}</button>
           </div>
         </div>
       </div>
@@ -1063,8 +1064,8 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         <div>
           <label style={labelSt}>View</label>
           <div style={{ display: 'flex', gap: 4 }}>
-            {[['table', '☰ Table'], ['calendar', '📅 Calendar']].map(([v, lbl]) => (
-              <button key={v} onClick={() => setViewMode(v)} style={{ padding: '5px 11px', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: viewMode === v ? TT_ORANGE : 'var(--border)', color: viewMode === v ? '#fff' : 'var(--muted)' }}>{lbl}</button>
+            {[['table', '☰ Table'], ['calendar', '▦ Calendar']].map(([v, lbl]) => (
+              <button key={v} onClick={() => setViewMode(v)} className={`chip ${viewMode === v ? 'chip-active' : ''}`}>{lbl}</button>
             ))}
           </div>
         </div>
@@ -1072,7 +1073,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           <label style={labelSt}>Type</label>
           <div style={{ display: 'flex', gap: 4 }}>
             {[['all', 'All'], ['construction', 'Const'], ['refinance', 'Refi']].map(([v, lbl]) => (
-              <button key={v} onClick={() => setFType(v)} style={{ padding: '5px 11px', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: fType === v ? TT_ORANGE : 'var(--border)', color: fType === v ? '#fff' : 'var(--muted)' }}>{lbl}</button>
+              <button key={v} onClick={() => setFType(v)} className={`chip ${fType === v ? 'chip-active' : ''}`}>{lbl}</button>
             ))}
           </div>
         </div>
@@ -1087,13 +1088,13 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         <div><label style={labelSt}>Repay Guar ≥ %</label><input style={inputSt({ width: 90 })} type="number" value={fGuaranty} onChange={e => setFGuaranty(e.target.value)} placeholder="35" /></div>
         <div><label style={labelSt}>TTH NW ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fNW} onChange={e => setFNW(e.target.value)} placeholder="75" /></div>
         <div><label style={labelSt}>TTH Liq ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fLiq} onChange={e => setFLiq(e.target.value)} placeholder="15" /></div>
-        <button onClick={clearFilters} style={{ padding: '6px 12px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>Clear</button>
+        <button onClick={clearFilters} className="btn btn-sm btn-ghost">Clear</button>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans" style={{ padding: '6px 14px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export Excel</button>
-          <button onClick={exportPDF} style={{ padding: '6px 14px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export PDF</button>
-          <button onClick={() => requirePin(() => setShowImport(true))} style={{ padding: '6px 14px', borderRadius: 4, border: 'none', background: pinUnlocked ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'var(--disabled)', color: pinUnlocked ? TT_ORANGE : 'var(--faint)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600, outline: pinUnlocked ? '1px solid color-mix(in srgb, var(--accent) 33%, transparent)' : 'none' }}>{pinUnlocked ? '⇪ Import Abstract' : '🔒 Import'}</button>
-          <button onClick={() => requirePin(startNew)} style={{ padding: '6px 14px', borderRadius: 4, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700 }}>{pinUnlocked ? '+ Add Loan' : '🔒 Add Loan'}</button>
+          <button onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans" className="btn btn-sm">↓ Export Excel</button>
+          <button onClick={exportPDF} className="btn btn-sm">↓ Export PDF</button>
+          <button onClick={() => requirePin(() => setShowImport(true))} className={`btn btn-sm btn-tinted ${pinUnlocked ? '' : 'btn-locked'}`}>{pinUnlocked ? '⇪ Import Abstract' : <><LockIcon size={11} /> Import</>}</button>
+          <button onClick={() => requirePin(startNew)} className={`btn btn-sm btn-primary ${pinUnlocked ? '' : 'btn-locked'}`}>{pinUnlocked ? '+ Add Loan' : <><LockIcon size={11} /> Add Loan</>}</button>
         </div>
       </div>
 
@@ -1151,7 +1152,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                             <button onClick={() => setConfirmDel(l.id)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 40%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }}>✕</button>
                           </>
                         ) : (
-                          <button onClick={() => requirePin(() => startEdit(l))} title="Unlock to edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }}>🔒</button>
+                          <button onClick={() => requirePin(() => startEdit(l))} title="Unlock to edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', opacity: 0.5, fontSize: '0.75rem', padding: '2px 5px' }}><LockIcon size={12} /></button>
                         )}
                       </td>
                     </tr>

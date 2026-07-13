@@ -4,6 +4,7 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
+import { LockIcon, CameraIcon } from '../icons.jsx';
 import { formatCurrency } from '../format.js';
 import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
 
@@ -541,8 +542,8 @@ function CurveWidget({ pinUnlocked, requirePin }) {
         <button
           onClick={() => requirePin(snapshotNow)}
           title={pinUnlocked ? "Save today's active curve as a snapshot" : 'Unlock to snapshot'}
-          style={{ ...selStyle, cursor: 'pointer', color: 'var(--text2)' }}
-        >{pinUnlocked ? '📷 Snapshot today' : '🔒 Snapshot today'}</button>
+          className={`btn btn-sm ${pinUnlocked ? '' : 'btn-locked'}`}
+        >{pinUnlocked ? <><CameraIcon size={12} /> Snapshot today</> : <><LockIcon size={11} /> Snapshot today</>}</button>
       </div>
       {status && <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{status}</div>}
       {series.length >= 1 ? (
@@ -734,9 +735,6 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
     }
   }
 
-  const uploadBtnStyle = { display: 'inline-block', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.68rem', fontWeight: 600, background: 'color-mix(in srgb, var(--text2) 10%, transparent)', color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 20%, transparent)' };
-  const lockBtnStyle = { ...uploadBtnStyle, background: 'color-mix(in srgb, var(--text2) 5%, transparent)', color: 'var(--faint)', border: 'none' };
-
   function renderWidget(key) {
     switch (key) {
       case 'leverage':   return <LeverageWidget projects={projects} onSetFund={setFund} pinUnlocked={pinUnlocked} requirePin={requirePin} />;
@@ -755,19 +753,19 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
         {pinUnlocked ? (
           <>
-            <label style={uploadBtnStyle}>
+            <label className="btn btn-sm">
               ↑ At Risk Schedule
               <input type="file" accept=".xlsb,.xlsx,.xlsm,.xls" onChange={e => handleScheduleUpload(e, 'at_risk')} style={{ display: 'none' }} />
             </label>
-            <label style={uploadBtnStyle}>
+            <label className="btn btn-sm">
               ↑ Stabilized Schedule
               <input type="file" accept=".xlsx,.xlsm,.xls,.xlsb" onChange={e => handleScheduleUpload(e, 'stabilized')} style={{ display: 'none' }} />
             </label>
           </>
         ) : (
           <>
-            <button onClick={() => requirePin(() => {})} style={lockBtnStyle}>🔒 At Risk Schedule</button>
-            <button onClick={() => requirePin(() => {})} style={lockBtnStyle}>🔒 Stabilized Schedule</button>
+            <button onClick={() => requirePin(() => {})} className="btn btn-sm btn-locked"><LockIcon size={11} /> At Risk Schedule</button>
+            <button onClick={() => requirePin(() => {})} className="btn btn-sm btn-locked"><LockIcon size={11} /> Stabilized Schedule</button>
           </>
         )}
         <div style={{ fontSize: '0.64rem', color: 'var(--faint)', lineHeight: 1.5 }}>
@@ -776,12 +774,12 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
         </div>
         <div style={{ marginLeft: 'auto', position: 'relative' }}>
           {inactive.length > 0 && (
-            <button onClick={() => setShowAdd(v => !v)} style={uploadBtnStyle}>+ Add Widget</button>
+            <button onClick={() => setShowAdd(v => !v)} className="btn btn-sm">+ Add Widget</button>
           )}
           {showAdd && (
-            <div style={{ position: 'absolute', top: '110%', right: 0, zIndex: 300, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 20px rgba(0,0,0,0.4)', minWidth: 200 }}>
+            <div className="menu" style={{ minWidth: 200, zIndex: 300 }}>
               {inactive.map(k => (
-                <button key={k} onClick={() => addWidget(k)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.9rem', background: 'none', border: 'none', color: 'var(--text2)', fontFamily: 'inherit', fontSize: '0.75rem', cursor: 'pointer' }}>
+                <button key={k} onClick={() => addWidget(k)} className="menu-item" style={{ display: 'flex', width: '100%', textAlign: 'left', background: 'none', border: 'none', fontFamily: 'inherit' }}>
                   {WIDGETS[k].title}
                 </button>
               ))}

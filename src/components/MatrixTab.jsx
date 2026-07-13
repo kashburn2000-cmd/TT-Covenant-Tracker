@@ -119,7 +119,7 @@ export function MatrixTab({ thresholds }) {
         </div>
       ) : (
         <div className="card" style={{ textAlign: "center", padding: "3rem 2rem", color: "var(--faint)" }}>
-          <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>📊</div>
+          <div style={{ fontSize: "2rem", marginBottom: "0.75rem", color: "var(--faint)" }}>▦</div>
           <div style={{ fontSize: "0.85rem" }}>Enter an interest rate above to generate the matrix</div>
           <div style={{ fontSize: "0.75rem", color: "var(--faint)", marginTop: "0.4rem" }}>
             Rows: Debt Yield 6%–14% · Columns: I/O, 30yr, 35yr amortization

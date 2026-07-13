@@ -14,6 +14,7 @@ import { PipelineTab } from './components/PipelineTab.jsx';
 import { LandFacilityTab } from './components/LandFacilityTab.jsx';
 import { LeasingTab } from './components/LeasingTab.jsx';
 import { DocView } from './components/DocView.jsx';
+import { LockIcon, UnlockIcon, SunIcon, MoonIcon, EyeIcon, EyeOffIcon, PencilIcon, ClockIcon, CommentIcon, CameraIcon } from './icons.jsx';
 import { LoansTab } from './components/LoansTab.jsx';
 import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
 
@@ -87,6 +88,94 @@ const SHARED_STYLES = `
   .mx-mid  { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); font-weight: 500; }
   .mx-low  { background: color-mix(in srgb, var(--fail) 11%, transparent); color: var(--fail); font-weight: 500; }
   .mx-vlow { background: color-mix(in srgb, var(--fail) 24%, transparent); color: var(--fail); font-weight: 600; }
+
+  /* ── Control system ─────────────────────────────────────────────────────
+     One button vocabulary for the whole app:
+       .btn          neutral secondary action (bordered, quiet)
+       .btn-primary  the one emphasized action in a context (solid blue)
+       .btn-tinted   emphasized-but-lighter action (tinted blue)
+       .btn-danger   destructive / dismiss-with-consequence
+       .btn-ghost    icon-adjacent utility, no chrome until hover
+       .btn-locked   PIN-locked variant of any of the above
+       .btn-sm       compact height for dense toolbars                    */
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 5px 13px; border-radius: 5px;
+    border: 1px solid var(--border); background: var(--panel3); color: var(--text2);
+    font-size: 0.75rem; font-weight: 500; line-height: 1.5;
+    cursor: pointer; white-space: nowrap; user-select: none;
+  }
+  .btn:hover { border-color: var(--border2); color: var(--text); }
+  .btn-primary { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
+  .btn-primary:hover { background: color-mix(in srgb, var(--accent) 86%, #fff); border-color: transparent; color: #fff; }
+  .btn-tinted {
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+    color: var(--accent-strong); font-weight: 600;
+  }
+  .btn-tinted:hover {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    color: var(--accent-strong);
+  }
+  .btn-danger {
+    background: color-mix(in srgb, var(--fail) 12%, transparent);
+    border-color: color-mix(in srgb, var(--fail) 28%, transparent);
+    color: var(--fail);
+  }
+  .btn-danger:hover { background: color-mix(in srgb, var(--fail) 20%, transparent); border-color: color-mix(in srgb, var(--fail) 40%, transparent); color: var(--fail); }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn-ghost:hover { background: var(--row-hover); border-color: transparent; color: var(--text2); }
+  .btn-locked { opacity: 0.55; }
+  .btn-locked:hover { opacity: 0.8; }
+  .btn-sm { padding: 3px 10px; font-size: 0.72rem; }
+
+  /* Filter chips (sort controls, quick filters) */
+  .chip {
+    padding: 3px 11px; border-radius: 5px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted);
+    font-size: 0.72rem; font-weight: 500; cursor: pointer; user-select: none;
+  }
+  .chip:hover { color: var(--text2); border-color: var(--border2); }
+  .chip-active {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    color: var(--accent-strong); font-weight: 600;
+  }
+
+  /* Segmented toggles (DSCR / DY, I-O / Amort) */
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  .seg button {
+    padding: 3px 11px; border: none; background: transparent; color: var(--muted);
+    font-size: 0.72rem; font-weight: 500; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent-strong); font-weight: 600;
+  }
+
+  /* Dropdown menus (export, column picker, tab config, add widget) */
+  .menu {
+    position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 200;
+    background: var(--panel3); border: 1px solid var(--border2); border-radius: 6px;
+    padding: 0.35rem 0; min-width: 160px;
+    box-shadow: 0 10px 28px rgba(2, 6, 12, 0.45);
+  }
+  :root[data-theme="light"] .menu { box-shadow: 0 10px 28px rgba(16, 24, 40, 0.14); }
+  .menu-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.42rem 0.95rem; cursor: pointer; font-size: 0.75rem; color: var(--text2); }
+  .menu-item:hover { background: var(--row-hover); }
+  .menu-heading {
+    padding: 0.3rem 0.95rem 0.45rem; font-size: 0.64rem; letter-spacing: 0.05em;
+    color: var(--muted); text-transform: uppercase; font-weight: 600;
+    border-bottom: 1px solid var(--border); margin-bottom: 0.35rem;
+  }
+
+  /* Sticky table headers — headers stay visible inside scrolling panels */
+  thead th { position: sticky; top: 0; background: var(--panel2); z-index: 2; box-shadow: inset 0 -1px 0 var(--border); }
+
+  .spin { display: inline-block; animation: tt-spin 1.1s linear infinite; }
+  @keyframes tt-spin { to { transform: rotate(360deg); } }
 `;
 
 
@@ -1145,14 +1234,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       {/* ── DB Loading / Error states ── */}
       {dbLoading && (
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)', fontSize: '0.85rem' }}>
-          <div style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>⟳</div>
+          <div className="spin" style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>⟳</div>
           Loading properties from database...
         </div>
       )}
       {dbError && (
         <div style={{ padding: '1rem', marginBottom: '1rem', background: 'color-mix(in srgb, var(--fail) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fail) 25%, transparent)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.78rem', color: 'var(--fail)' }}>⚠ {dbError}</span>
-          <button onClick={loadProperties} style={{ padding: '4px 12px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: 'color-mix(in srgb, var(--fail) 15%, transparent)', color: 'var(--fail)' }}>Retry</button>
+          <button onClick={loadProperties} className="btn btn-sm btn-danger">Retry</button>
         </div>
       )}
       {!dbLoading && (
@@ -1162,39 +1251,35 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         <div style={{ fontSize: '0.7rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
           Covenant Compliance Dashboard
         </div>
-        <button onClick={openDocView} title="View the dashboard styled like the executive Excel doc" style={{
-          padding: '8px 20px', borderRadius: 6, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-          fontSize: '0.78rem', fontWeight: 600, background: 'var(--accent)', color: '#fff',
-          display: 'flex', alignItems: 'center', gap: '0.45rem',
-        }}>
-          <span style={{ fontSize: '0.9rem' }}>▦</span> Open Doc View
+        <button onClick={openDocView} title="View the dashboard styled like the executive Excel doc" className="btn btn-primary" style={{ padding: '7px 18px', fontSize: '0.78rem' }}>
+          <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>▦</span> Open Doc View
         </button>
       </div>
       {/* ── Summary Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-          <div className="card" style={{ textAlign: 'center' }}>
-            <div style={labelStyle}>Total Properties</div>
-            <div style={{ fontSize: '1.7rem', fontWeight: 600, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>{summary.total}</div>
-          </div>
-          <div className="card" style={{ textAlign: 'center' }}>
-            <div style={labelStyle}>Passing</div>
-            <div style={{ fontSize: '1.7rem', fontWeight: 600, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--pass)' }}>{summary.passing}</div>
-          </div>
-          <div className="card" style={{ textAlign: 'center' }}>
-            <div style={labelStyle}>Failing</div>
-            <div style={{ fontSize: '1.7rem', fontWeight: 600, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--fail)' }}>{summary.failing}</div>
-          </div>
-          <div className="card" style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowPaydown(v => !v)}>
-            <div style={{ ...labelStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+          {[
+            { label: 'Total Properties', value: summary.total, color: 'var(--text)', sub: 'active tests tracked' },
+            { label: 'Passing', value: summary.passing, color: summary.passing > 0 ? 'var(--pass)' : 'var(--text)', sub: 'meeting covenant' },
+            { label: 'Failing', value: summary.failing, color: summary.failing > 0 ? 'var(--fail)' : 'var(--text)', sub: 'below requirement' },
+          ].map(c => (
+            <div key={c.label} className="card" style={{ padding: '1rem 1.25rem' }}>
+              <div style={labelStyle}>{c.label}</div>
+              <div className="metric" style={{ color: c.color, lineHeight: 1.15 }}>{c.value}</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--faint2)', marginTop: '0.25rem' }}>{c.sub}</div>
+            </div>
+          ))}
+          <div className="card" style={{ padding: '1rem 1.25rem', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowPaydown(v => !v)} title={showPaydown ? 'Click to hide' : 'Click to reveal'}>
+            <div style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               Potential Maximum Paydown
-              <span style={{ fontSize: '0.95rem', color: showPaydown ? 'var(--accent)' : 'var(--faint)' }}>
-                {showPaydown ? '👁' : '👁'}
+              <span style={{ color: showPaydown ? 'var(--accent-strong)' : 'var(--faint)', display: 'inline-flex' }}>
+                {showPaydown ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}
               </span>
             </div>
             {showPaydown
-              ? <div style={{ fontSize: '1.7rem', fontWeight: 600, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--accent)' }}>{formatCurrency(summary.totalPaydown)}</div>
-              : <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--faint)', letterSpacing: '0.2em' }}>••••••••</div>
+              ? <div className="metric" style={{ color: 'var(--accent-strong)', lineHeight: 1.15 }}>{formatCurrency(summary.totalPaydown)}</div>
+              : <div style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--faint)', letterSpacing: '0.2em', lineHeight: 1.7 }}>••••••••</div>
             }
+            {showPaydown && <div style={{ fontSize: '0.7rem', color: 'var(--faint2)', marginTop: '0.25rem' }}>sum across failing tests</div>}
           </div>
       </div>
 
@@ -1232,18 +1317,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           {/* DSCR / DY mode toggle */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Size by</span>
-            <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', outline: '1px solid var(--border)' }}>
-              {['DSCR', 'DY'].map(opt => {
-                const active = dfMode === opt.toLowerCase();
-                return (
-                  <button key={opt} onClick={() => setDfMode(opt.toLowerCase())} style={{
-                    padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                    fontSize: '0.7rem', fontWeight: 600,
-                    background: active ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'var(--panel2)',
-                    color: active ? 'var(--accent)' : 'var(--faint)',
-                  }}>{opt}</button>
-                );
-              })}
+            <div className="seg">
+              {['DSCR', 'DY'].map(opt => (
+                <button key={opt} className={dfMode === opt.toLowerCase() ? 'on' : ''} onClick={() => setDfMode(opt.toLowerCase())}>{opt}</button>
+              ))}
             </div>
           </div>
 
@@ -1302,18 +1379,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           {dfMode === 'dscr' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Amortization</span>
-              <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', outline: '1px solid var(--border)' }}>
-                {['I/O', 'Amort'].map(opt => {
-                  const active = opt === 'I/O' ? dfIO : !dfIO;
-                  return (
-                    <button key={opt} onClick={() => setDfIO(opt === 'I/O')} style={{
-                      padding: '3px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                      fontSize: '0.7rem', fontWeight: 600,
-                      background: active ? 'color-mix(in srgb, var(--text2) 15%, transparent)' : 'var(--panel2)',
-                      color: active ? 'var(--text2)' : 'var(--faint)',
-                    }}>{opt}</button>
-                  );
-                })}
+              <div className="seg">
+                {['I/O', 'Amort'].map(opt => (
+                  <button key={opt} className={(opt === 'I/O' ? dfIO : !dfIO) ? 'on' : ''} onClick={() => setDfIO(opt === 'I/O')}>{opt}</button>
+                ))}
               </div>
               {!dfIO && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -1335,15 +1404,9 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       {/* ── Toolbar ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.68rem', color: 'var(--muted)', letterSpacing: '0.04em' }}>SORT:</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Sort by</span>
           {[['covenantDate','Date'],['property','Property'],['satisfied','Status']].map(([f,l]) => (
-            <button key={f} onClick={() => setSortField(f)} style={{
-              padding: '3px 10px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.7rem', fontWeight: 600,
-              background: sortField === f ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'var(--panel)',
-              color: sortField === f ? 'var(--accent)' : 'var(--muted)',
-              outline: sortField === f ? '1px solid color-mix(in srgb, var(--accent) 33%, transparent)' : '1px solid var(--border)',
-            }}>{l}</button>
+            <button key={f} onClick={() => setSortField(f)} className={`chip ${sortField === f ? 'chip-active' : ''}`}>{l}</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1363,101 +1426,63 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           )}
           {/* File Upload */}
           {pinUnlocked ? (
-            <label style={{
-              padding: '5px 14px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: 'color-mix(in srgb, var(--text2) 12%, transparent)', color: 'var(--text2)',
-              outline: '1px solid color-mix(in srgb, var(--text2) 27%, transparent)', display: 'inline-block',
-            }}>
+            <label className="btn btn-sm">
               ↑ Upload Forecast
               <input type="file" accept=".xlsx" onChange={handleFileUpload} style={{ display: 'none' }} />
             </label>
           ) : (
-            <button onClick={() => requirePin(() => {})} style={{
-              padding: '5px 14px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: 'color-mix(in srgb, var(--text2) 5%, transparent)', color: 'var(--faint)',
-              outline: '1px solid color-mix(in srgb, var(--faint) 20%, transparent)',
-            }}>🔒 Upload Forecast</button>
+            <button onClick={() => requirePin(() => {})} className="btn btn-sm btn-locked">
+              <LockIcon size={11} /> Upload Forecast
+            </button>
           )}
           {exportMsg && <span style={{ fontSize: '0.7rem', color: 'var(--pass)' }}>{exportMsg}</span>}
           {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? 'var(--pass)' : 'var(--text2)' }}>{uploadStatus}</span>}
           <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowExportMenu(v => !v)} style={{
-              padding: '5px 14px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: showExportMenu ? 'color-mix(in srgb, var(--pass) 25%, transparent)' : 'color-mix(in srgb, var(--pass) 15%, transparent)',
-              color: 'var(--pass)', outline: '1px solid color-mix(in srgb, var(--pass) 27%, transparent)',
-            }}>↓ Export ▾</button>
+            <button onClick={() => setShowExportMenu(v => !v)} className="btn btn-sm" style={showExportMenu ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>↓ Export ▾</button>
             {showExportMenu && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 100,
-                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
-                padding: '0.35rem 0', minWidth: 150, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-              }}>
+              <div className="menu" style={{ minWidth: 150 }}>
                 {[
-                  ['Excel', () => exportXLSX(), 'var(--pass)', "Drops straight into the workbook's Covenant Dashboard Export tab"],
-                  ['CSV', () => exportCSV(), 'var(--pass)', ''],
-                  ['PDF', () => exportPDF(), 'var(--accent)', ''],
-                ].map(([label, fn, color, tip]) => (
-                  <div key={label} title={tip} onClick={() => { fn(); setShowExportMenu(false); }} style={{
-                    display: 'flex', alignItems: 'center', gap: '0.5rem',
-                    padding: '0.4rem 0.95rem', cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, color,
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--panel)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                    <span style={{ opacity: 0.7 }}>↓</span>{label}
+                  ['Excel', () => exportXLSX(), "Drops straight into the workbook's Covenant Dashboard Export tab"],
+                  ['CSV', () => exportCSV(), ''],
+                  ['PDF', () => exportPDF(), ''],
+                ].map(([label, fn, tip]) => (
+                  <div key={label} title={tip} className="menu-item" onClick={() => { fn(); setShowExportMenu(false); }}>
+                    <span style={{ opacity: 0.6 }}>↓</span>{label}
                   </div>
                 ))}
               </div>
             )}
           </div>
           <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowColPicker(v => !v)} style={{
-              padding: '5px 14px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: showColPicker ? 'color-mix(in srgb, var(--text2) 15%, transparent)' : 'color-mix(in srgb, var(--text2) 10%, transparent)',
-              color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 27%, transparent)',
-            }}>⊞ Columns</button>
+            <button onClick={() => setShowColPicker(v => !v)} className="btn btn-sm" style={showColPicker ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>⊞ Columns</button>
             {showColPicker && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 100,
-                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
-                padding: '0.6rem 0', minWidth: 180, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-              }}>
-                <div style={{ padding: '0.25rem 0.85rem 0.5rem', fontSize: '0.6rem', letterSpacing: '0.06em', color: 'var(--faint)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', marginBottom: '0.4rem' }}>Toggle Columns</div>
+              <div className="menu" style={{ minWidth: 190, padding: '0.35rem 0 0.5rem' }}>
+                <div className="menu-heading">Toggle Columns</div>
                 {ALL_COLS.map(c => (
-                  <div key={c.key} onClick={() => toggleCol(c.key)} style={{
-                    display: 'flex', alignItems: 'center', gap: '0.6rem',
-                    padding: '0.35rem 0.85rem', cursor: 'pointer',
-                    background: 'transparent',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--panel)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <div key={c.key} onClick={() => toggleCol(c.key)} className="menu-item" style={{ padding: '0.32rem 0.95rem' }}>
                     <div style={{
                       width: 14, height: 14, borderRadius: 4, flexShrink: 0,
-                      background: visibleCols[c.key] ? 'var(--text2)' : 'transparent',
-                      border: `1px solid ${visibleCols[c.key] ? 'var(--text2)' : 'var(--border2)'}`,
+                      background: visibleCols[c.key] ? 'var(--accent)' : 'transparent',
+                      border: `1px solid ${visibleCols[c.key] ? 'var(--accent)' : 'var(--border2)'}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: 'var(--panel2)', fontWeight: 900 }}>✓</span>}
+                      {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: '#fff', fontWeight: 700 }}>✓</span>}
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: visibleCols[c.key] ? 'var(--text)' : 'var(--faint)' }}>{c.label}</span>
+                    <span style={{ fontSize: '0.75rem', color: visibleCols[c.key] ? 'var(--text)' : 'var(--faint2)' }}>{c.label}</span>
                   </div>
                 ))}
               </div>
             )}
           </div>
           {hiddenCount > 0 && (
-            <button onClick={() => setShowHidden(v => !v)} title="Hidden tests are kept in the database but excluded from the dashboard, summary and exports" style={{
-              padding: '5px 14px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.72rem', fontWeight: 600, background: showHidden ? 'color-mix(in srgb, var(--muted) 22%, transparent)' : 'color-mix(in srgb, var(--muted) 10%, transparent)',
-              color: 'var(--muted)', outline: '1px solid color-mix(in srgb, var(--muted) 27%, transparent)',
-            }}>{showHidden ? '🙈 Hide Hidden' : `👁 Show Hidden (${hiddenCount})`}</button>
+            <button onClick={() => setShowHidden(v => !v)} title="Hidden tests are kept in the database but excluded from the dashboard, summary and exports" className="btn btn-sm" style={showHidden ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>
+              {showHidden ? <EyeOffIcon size={12} /> : <EyeIcon size={12} />} {showHidden ? 'Hide Hidden' : `Show Hidden (${hiddenCount})`}
+            </button>
           )}
-          <button onClick={() => requirePin(() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); })} style={{
-            padding: '5px 14px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-            fontSize: '0.72rem', fontWeight: 600,
-            background: showForm ? 'color-mix(in srgb, var(--fail) 14%, transparent)' : 'color-mix(in srgb, var(--accent) 14%, transparent)',
-            color: showForm ? 'var(--fail)' : pinUnlocked ? 'var(--accent-strong)' : 'var(--faint)',
-            outline: showForm ? '1px solid color-mix(in srgb, var(--fail) 30%, transparent)' : '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
-          }}>{showForm ? '✕ Cancel' : (pinUnlocked ? '+ Add Property' : '🔒 Add Property')}</button>
+          <button onClick={() => requirePin(() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); })}
+            className={`btn btn-sm ${showForm ? 'btn-danger' : `btn-tinted ${pinUnlocked ? '' : 'btn-locked'}`}`}>
+            {showForm ? '✕ Cancel' : pinUnlocked ? '+ Add Property' : <><LockIcon size={11} /> Add Property</>}
+          </button>
         </div>
       </div>
 
@@ -1487,8 +1512,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   Monthly baseline update
                 </label>
               )}
-              <button onClick={() => setShowUploadResults(false)} style={{ padding: '4px 12px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.7rem', background: 'var(--panel)', color: 'var(--muted)', outline: '1px solid var(--border)' }}>Dismiss</button>
-              <button onClick={() => uploadMode === 'prior' ? applyAsPriorTest() : applyUploadResults()} style={{ padding: '4px 12px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700, background: 'var(--text2)', color: 'var(--panel2)' }}>{uploadMode === 'prior' ? 'Set as Prior Test' : 'Apply All Updates'}</button>
+              <button onClick={() => setShowUploadResults(false)} className="btn btn-sm btn-ghost">Dismiss</button>
+              <button onClick={() => uploadMode === 'prior' ? applyAsPriorTest() : applyUploadResults()} className="btn btn-sm btn-primary">{uploadMode === 'prior' ? 'Set as Prior Test' : 'Apply All Updates'}</button>
             </div>
           </div>
           {uploadMode === 'prior' && (
@@ -1809,7 +1834,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
             <input type="text" value={form.note || ''} placeholder="e.g. NOI: T1 Dec 2026 annualized"
               onChange={e => setF('note', e.target.value)} style={inputStyle} />
           </div>
-          <button onClick={saveForm} style={{ padding: '6px 20px', borderRadius: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', fontWeight: 700, background: 'var(--accent)', color: '#fff' }}>
+          <button onClick={saveForm} className="btn btn-primary" style={{ padding: '6px 20px', fontSize: '0.8rem' }}>
             {editId !== null ? 'Save Changes' : 'Add Property'}
           </button>
         </div>
@@ -2113,11 +2138,11 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                     {/* ── Actions ── */}
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'var(--muted)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}>✏</button>
+                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'var(--muted)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}><PencilIcon size={12} /></button>
                       <button onClick={() => requirePin(() => toggleHidden(r.id, r.hidden))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? (r.hidden ? 'var(--pass)' : 'var(--muted)') : 'var(--disabled)', fontSize: '0.78rem', padding: '2px 5px' }} title={pinUnlocked ? (r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)') : 'Unlock to hide'}>{r.hidden ? '↩' : '⊘'}</button>
                       <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'color-mix(in srgb, var(--fail) 27%, transparent)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
                       <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? 'var(--accent)' : 'var(--faint)' }} title="Show calculation">∑</button>
-                      <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? 'var(--pass)' : 'var(--faint)' }} title="History &amp; notes">⏱</button>
+                      <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? 'var(--pass)' : 'var(--faint)' }} title="History &amp; notes"><ClockIcon size={12} /></button>
                     </td>
                   </tr>
 
@@ -2422,7 +2447,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                 onKeyDown={e => e.key === 'Enter' && saveComment(r.id)}
                                 style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '5px 8px', fontSize: '0.75rem', fontFamily: 'inherit' }}
                               />
-                              <button onClick={() => saveComment(r.id)} style={{ padding: '5px 14px', borderRadius: 4, border: 'none', cursor: 'pointer', background: 'var(--pass)', color: '#fff', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>Add</button>
+                              <button onClick={() => saveComment(r.id)} className="btn btn-sm btn-primary">Add</button>
                             </div>
 
                             {/* Events feed */}
@@ -2434,7 +2459,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                   <div key={ev.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.5rem 0.65rem', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)' }}>
                                     {/* Icon */}
                                     <div style={{ fontSize: '0.75rem', marginTop: '0.05rem', flexShrink: 0, color: ev.type === 'comment' ? 'var(--pass)' : 'var(--accent)' }}>
-                                      {ev.type === 'comment' ? '💬' : '📸'}
+                                      {ev.type === 'comment' ? <CommentIcon size={12} /> : <CameraIcon size={12} />}
                                     </div>
                                     {/* Content */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -2948,7 +2973,7 @@ export default function App() {
             color: 'var(--text2)', fontSize: '0.9rem', lineHeight: 1, flexShrink: 0,
             transition: 'background-color 0.15s ease-out, border-color 0.15s ease-out',
           }}
-        >{theme === 'dark' ? '☀️' : '🌙'}</button>
+        >{theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}</button>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: "0.7rem", color: "var(--faint)" }}>Chatham 1-Mo Term SOFR Forward Curve</div>
           <div style={{ fontSize: "0.7rem", color: sofrUpdated ? "var(--pass)" : "var(--faint)" }}>
@@ -2957,13 +2982,13 @@ export default function App() {
               : "as of 03 Mar 2026 (hardcoded)"}
           </div>
           {pinUnlocked ? (
-            <label style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'color-mix(in srgb, var(--text2) 10%, transparent)', color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 20%, transparent)' }}>
+            <label className="btn btn-sm" style={{ marginTop: '0.35rem', fontSize: '0.66rem', padding: '2px 9px' }}>
               ↑ Update Curve
               <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
             </label>
           ) : (
-            <button onClick={() => setShowPinModal(true)} style={{ marginTop: '0.35rem', display: 'inline-block', padding: '3px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, background: 'color-mix(in srgb, var(--text2) 5%, transparent)', color: 'var(--faint)', outline: '1px solid color-mix(in srgb, var(--faint) 20%, transparent)', border: 'none' }}>
-              🔒 Update Curve
+            <button onClick={() => setShowPinModal(true)} className="btn btn-sm btn-locked" style={{ marginTop: '0.35rem', fontSize: '0.66rem', padding: '2px 9px' }}>
+              <LockIcon size={10} /> Update Curve
             </button>
           )}
         </div>
@@ -2991,15 +3016,15 @@ export default function App() {
           >⚙</button>
           {/* Tab config dropdown */}
           {showTabConfig && (
-            <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: 'var(--panel2)', border: `1px solid color-mix(in srgb, var(--accent) 27%, transparent)`, borderRadius: 6, padding: '0.75rem 1rem', minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
-              <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: '0.65rem' }}>Visible Tabs</div>
+            <div className="menu" style={{ minWidth: 210, padding: '0.35rem 0 0.6rem' }}>
+              <div className="menu-heading">Visible Tabs</div>
               {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans'],['debt','Debt Dashboard']].map(([key, label]) => (
-                <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ accentColor: TT_ORANGE, width: 14, height: 14 }} />
-                  <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? 'var(--text2)' : 'var(--faint)' }}>{label}</span>
+                <label key={key} className="menu-item" style={{ padding: '0.3rem 0.95rem' }}>
+                  <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ width: 14, height: 14 }} />
+                  <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? 'var(--text)' : 'var(--faint2)' }}>{label}</span>
                 </label>
               ))}
-              <div style={{ marginTop: '0.5rem', fontSize: '0.58rem', color: 'var(--faint)' }}>Changes persist across sessions.</div>
+              <div style={{ marginTop: '0.45rem', padding: '0 0.95rem', fontSize: '0.64rem', color: 'var(--faint2)' }}>Changes persist across sessions.</div>
             </div>
           )}
         </div>
@@ -3021,27 +3046,17 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
             <button
               onClick={() => pinUnlocked ? setPinUnlocked(false) : setShowPinModal(true)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                padding: '2px 8px', borderRadius: 4, border: 'none', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.04em',
-                background: pinUnlocked ? 'color-mix(in srgb, var(--pass) 10%, transparent)' : 'transparent',
-                color: pinUnlocked ? 'var(--pass)' : 'var(--faint)',
-                outline: pinUnlocked ? '1px solid color-mix(in srgb, var(--pass) 25%, transparent)' : '1px solid var(--border)',
-              }}
+              className="btn btn-sm"
+              style={{ fontSize: '0.66rem', padding: '2px 9px', ...(pinUnlocked ? { color: 'var(--pass)', borderColor: 'color-mix(in srgb, var(--pass) 30%, transparent)', background: 'color-mix(in srgb, var(--pass) 9%, transparent)' } : {}) }}
               title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
             >
-              {pinUnlocked ? '🔓 Editing unlocked' : '🔒 View only'}
+              {pinUnlocked ? <><UnlockIcon size={11} /> Editing unlocked</> : <><LockIcon size={11} /> View only</>}
             </button>
             <button
               onClick={() => signOut()}
               title={userEmail ? `Signed in as ${userEmail} — click to sign out` : 'Sign out'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                padding: '2px 8px', borderRadius: 4, border: 'none', cursor: 'pointer',
-                fontFamily: 'inherit', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.04em',
-                background: 'transparent', color: 'var(--faint)', outline: '1px solid var(--border)',
-              }}
+              className="btn btn-sm btn-ghost"
+              style={{ fontSize: '0.66rem', padding: '2px 9px' }}
             >
               {userEmail ? `${userEmail} · Sign out` : 'Sign out'}
             </button>

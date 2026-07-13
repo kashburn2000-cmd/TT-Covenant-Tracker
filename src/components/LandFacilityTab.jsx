@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
+import { LockIcon } from '../icons.jsx';
 
 // ── Land Facility Tab ─────────────────────────────────────────────────────────
 // Tracks the Simmons Bank $45M guidance line — individual draws, payoff status,
@@ -473,8 +474,8 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
           style={{ ...inputSt, width: 100 }}
           disabled={!pinUnlocked}
         />
-        <button onClick={() => requirePin(saveThreshold)} style={{ padding: '5px 14px', borderRadius: 4, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
-          {pinUnlocked ? 'Save' : '🔒 Save'}
+        <button onClick={() => requirePin(saveThreshold)} className={`btn btn-sm btn-primary ${pinUnlocked ? '' : 'btn-locked'}`}>
+          {pinUnlocked ? 'Save' : <><LockIcon size={11} /> Save</>}
         </button>
         {threshold > 0 && (
           <div style={{ marginLeft: '0.5rem', fontSize: '0.72rem', color: totalOutstanding > threshold ? 'var(--fail)' : 'var(--pass)' }}>
@@ -490,11 +491,11 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.85rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
           <div style={{ fontSize: '0.65rem', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Simmons Bank — Land Draws</div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <button onClick={exportLandPDF} style={{ padding: '4px 14px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>
+            <button onClick={exportLandPDF} className="btn btn-sm">
               ↓ Export PDF
             </button>
-            <button onClick={() => requirePin(() => { setForm(EMPTY_DRAW); setEditId('new'); setShowForm(true); })} style={{ padding: '4px 14px', borderRadius: 4, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: pinUnlocked ? 'pointer' : 'default', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
-              {pinUnlocked ? '+ Add Draw' : '🔒 Add Draw'}
+            <button onClick={() => requirePin(() => { setForm(EMPTY_DRAW); setEditId('new'); setShowForm(true); })} className={`btn btn-sm btn-primary ${pinUnlocked ? '' : 'btn-locked'}`}>
+              {pinUnlocked ? '+ Add Draw' : <><LockIcon size={11} /> Add Draw</>}
             </button>
           </div>
         </div>
@@ -533,7 +534,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <button onClick={saveDraw} style={{ padding: '5px 16px', background: TT_ORANGE, border: 'none', borderRadius: 4, color: '#fff', fontFamily: 'inherit', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+              <button onClick={saveDraw} className="btn btn-sm btn-primary">Save</button>
               <button onClick={() => { setShowForm(false); setEditId(null); }} style={{ padding: '5px 12px', background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--muted)', fontFamily: 'inherit', fontSize: '0.75rem', cursor: 'pointer' }}>Cancel</button>
             </div>
           </div>
@@ -583,7 +584,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
                         <button onClick={() => setDeleteId(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 27%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }} title="Delete">✕</button>
                       </>
                     ) : (
-                      <button onClick={() => requirePin(() => startEdit(d))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title="Unlock to edit">🔒</button>
+                      <button onClick={() => requirePin(() => startEdit(d))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', opacity: 0.5, fontSize: '0.75rem', padding: '2px 5px' }} title="Unlock to edit"><LockIcon size={12} /></button>
                     )}
                   </td>
                 </tr>

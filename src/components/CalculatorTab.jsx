@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { formatCurrency, formatPct, dscrColor, dscrClass } from '../format.js';
 import { getSofr, calcADS, getActiveSofrCurve } from '../calc.js';
+import { LockIcon } from '../icons.jsx';
 
 const DY_THRESHOLDS = [0.08, 0.085, 0.09, 0.095, 0.10];
 
@@ -69,7 +70,7 @@ export function CalculatorTab({ thresholds }) {
       background: locked === id ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--border)",
       color: locked === id ? "var(--text2)" : "var(--faint)",
       outline: locked === id ? "1px solid var(--text2)" : "1px solid var(--border)",
-    }}>🔒 {label}</button>
+    }}><LockIcon size={11} /> {label}</button>
   );
 
   return (
@@ -90,7 +91,7 @@ export function CalculatorTab({ thresholds }) {
         <div className="card" style={{ borderColor: locked === "loan" ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <div className="label" style={{ margin: 0 }}>Loan Amount</div>
-            {locked === "loan" && <span className="pill blue">🔒 Locked</span>}
+            {locked === "loan" && <span className="pill blue"><LockIcon size={10} style={{ marginRight: 4 }} /> Locked</span>}
           </div>
           <input type="number" value={loanAmount} step={500000} onChange={e => setLoanAmount(+e.target.value)} style={{ marginBottom: "0.75rem" }} />
           <input type="range" min={20000000} max={75000000} step={500000}
@@ -106,7 +107,7 @@ export function CalculatorTab({ thresholds }) {
         <div className="card" style={{ borderColor: locked === "noi" ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
             <div className="label" style={{ margin: 0 }}>Net Operating Income (NOI)</div>
-            {locked === "noi" && <span className="pill blue">🔒 Locked</span>}
+            {locked === "noi" && <span className="pill blue"><LockIcon size={10} style={{ marginRight: 4 }} /> Locked</span>}
           </div>
           <input type="number" value={noi} step={25000} onChange={e => setNoi(+e.target.value)} style={{ marginBottom: "0.75rem" }} />
           <input type="range" min={500000} max={10000000} step={25000}
