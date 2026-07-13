@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiveSofrCurve, setActive10YCurve, fuzzyMatch, parseMonthLabel, parseCellNumber, computeNOI, calcCovenantRow } from './calc.js';
 import { SB_URL, SB_HEADERS } from './supabase.js';
+import { supabase, signOut } from './auth.js';
 import { TT_NAVY, TT_ORANGE } from './theme.js';
 import { formatCurrency } from './format.js';
 import { PRIOR_TAG, isPriorBaseline, findPriorTest } from './priorTest.js';
@@ -2576,18 +2577,31 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 // ── Root App ──────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("covenant");
+  const [activeTab, setActiveTab] = useState("debt");
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
   const [tHigh, setTHigh] = useState("1.25");
   const [tMid,  setTMid]  = useState("1.10");
   const [tLow,  setTLow]  = useState("1.00");
   const [sofrUpdated, setSofrUpdated] = useState(null);
+  const [userEmail, setUserEmail] = useState(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null));
+  }, []);
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinPendingAction, setPinPendingAction] = useState(null);
   const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land','loans','debt'];
   const [visibleTabs, setVisibleTabs] = useState({ calculator:false, matrix:false, covenant:true, leasing:false, pipeline:false, land:false, loans:true, debt:true });
   const [showTabConfig, setShowTabConfig] = useState(false);
+
+  // If the active tab ends up hidden (e.g. the saved visibleTabs setting loads
+  // after mount and excludes the default), fall back to the first visible tab.
+  useEffect(() => {
+    if (!visibleTabs[activeTab]) {
+      const first = ['debt','covenant','loans','calculator','matrix','land','leasing','pipeline'].find(t => visibleTabs[t]);
+      if (first) setActiveTab(first);
+    }
+  }, [visibleTabs, activeTab]);
 
   // ── Light / dark theme (system default, remembered once toggled) ──
   const [theme, setTheme] = useState(() => {
@@ -2829,7 +2843,7 @@ export default function App() {
     setVisibleTabs(next);
     // If the active tab is being hidden, switch to first visible tab
     if (!next[activeTab]) {
-      const first = ['covenant','calculator','matrix','land','leasing','pipeline','loans','debt'].find(t => next[t]);
+      const first = ['debt','covenant','loans','calculator','matrix','land','leasing','pipeline'].find(t => next[t]);
       if (first) setActiveTab(first);
     }
     try {
@@ -2986,6 +3000,18 @@ export default function App() {
               title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
             >
               {pinUnlocked ? '🔓 Editing unlocked' : '🔒 View only'}
+            </button>
+            <button
+              onClick={() => signOut()}
+              title={userEmail ? `Signed in as ${userEmail} — click to sign out` : 'Sign out'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                padding: '2px 8px', borderRadius: 2, border: 'none', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.08em',
+                background: 'transparent', color: 'var(--faint)', outline: '1px solid var(--border)',
+              }}
+            >
+              {userEmail ? `${userEmail} · Sign out` : 'Sign out'}
             </button>
             <span style={{ fontSize: "0.85rem", color: "var(--text2)", fontWeight: 700, letterSpacing: "0.06em" }}>
               Kevin Ashburn · <span style={{ color: TT_ORANGE }}>Thompson Thrift</span>

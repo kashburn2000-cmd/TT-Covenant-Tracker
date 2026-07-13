@@ -19,8 +19,9 @@ jobs:
       - name: Query Supabase REST endpoint
         env:
           SB_URL: https://ngflppgqohmkkfiljqma.supabase.co
-          # Falls back to the publishable key already embedded in the client
-          # bundle. Override by setting a SUPABASE_KEY repo secret.
+          # The publishable key still works here: with row-level security on
+          # (db/security_setup.sql), this SELECT returns zero rows but still
+          # touches the database, which is all the keep-alive needs.
           SB_KEY: ${{ secrets.SUPABASE_KEY || 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5' }}
         run: |
           set -euo pipefail
