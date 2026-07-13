@@ -14,6 +14,7 @@ import { LandFacilityTab } from './components/LandFacilityTab.jsx';
 import { LeasingTab } from './components/LeasingTab.jsx';
 import { DocView } from './components/DocView.jsx';
 import { LoansTab } from './components/LoansTab.jsx';
+import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
 
 
 // 12 blank rows for a new variable-loan balance schedule. Never mutated in place
@@ -2584,8 +2585,8 @@ export default function App() {
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinPendingAction, setPinPendingAction] = useState(null);
-  const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land','loans'];
-  const [visibleTabs, setVisibleTabs] = useState({ calculator:false, matrix:false, covenant:true, leasing:false, pipeline:false, land:false, loans:true });
+  const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land','loans','debt'];
+  const [visibleTabs, setVisibleTabs] = useState({ calculator:false, matrix:false, covenant:true, leasing:false, pipeline:false, land:false, loans:true, debt:true });
   const [showTabConfig, setShowTabConfig] = useState(false);
 
   // ── Light / dark theme (system default, remembered once toggled) ──
@@ -2779,6 +2780,21 @@ export default function App() {
         if (ty.ok) setActive10YCurve(tenYPoints);
       }
 
+      // Also record today's curves as dated snapshots for the Debt Dashboard's
+      // Forward Curve Tracker. Best-effort: skipped silently if the
+      // curve_snapshots table hasn't been created yet.
+      try {
+        const d = new Date();
+        const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const snaps = [{ curve_date: today, curve_type: 'sofr_1m', points: points.map(p => ({ date: p.date, rate: p.sofr })), source: 'chatham_upload' }];
+        if (tenYPoints.length >= 2) snaps.push({ curve_date: today, curve_type: 'ust_10y', points: tenYPoints, source: 'chatham_upload' });
+        await fetch(`${SB_URL}/rest/v1/curve_snapshots?on_conflict=curve_date,curve_type`, {
+          method: 'POST',
+          headers: { ...SB_HEADERS, Prefer: 'return=representation,resolution=merge-duplicates' },
+          body: JSON.stringify(snaps),
+        });
+      } catch (err) { console.warn('Could not save curve snapshot:', err); }
+
       const now = new Date();
       setSofrUpdated(now);
 
@@ -2813,7 +2829,7 @@ export default function App() {
     setVisibleTabs(next);
     // If the active tab is being hidden, switch to first visible tab
     if (!next[activeTab]) {
-      const first = ['covenant','calculator','matrix','land','leasing','pipeline','loans'].find(t => next[t]);
+      const first = ['covenant','calculator','matrix','land','leasing','pipeline','loans','debt'].find(t => next[t]);
       if (first) setActiveTab(first);
     }
     try {
@@ -2920,6 +2936,7 @@ export default function App() {
           {visibleTabs.pipeline   && <button className={`tab-btn ${activeTab === "pipeline"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("pipeline")}>Lender Pipeline</button>}
           {visibleTabs.land       && <button className={`tab-btn ${activeTab === "land"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("land")}>Land Facility</button>}
           {visibleTabs.loans      && <button className={`tab-btn ${activeTab === "loans"      ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("loans")}>Loans</button>}
+          {visibleTabs.debt       && <button className={`tab-btn ${activeTab === "debt"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("debt")}>Debt Dashboard</button>}
           {/* Gear button */}
           <button
             onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
@@ -2930,7 +2947,7 @@ export default function App() {
           {showTabConfig && (
             <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 200, background: 'var(--panel2)', border: `1px solid color-mix(in srgb, var(--accent) 27%, transparent)`, borderRadius: 4, padding: '0.75rem 1rem', minWidth: 200, boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
               <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700, marginBottom: '0.65rem' }}>Visible Tabs</div>
-              {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans']].map(([key, label]) => (
+              {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans'],['debt','Debt Dashboard']].map(([key, label]) => (
                 <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem', cursor: 'pointer' }}>
                   <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ accentColor: TT_ORANGE, width: 14, height: 14 }} />
                   <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? 'var(--text2)' : 'var(--faint)' }}>{label}</span>
@@ -2948,6 +2965,7 @@ export default function App() {
         {activeTab === "pipeline"   && <PipelineTab />}
         {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
         {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+        {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
 
         {/* ── Footer ── */}
         <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid var(--border)`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>

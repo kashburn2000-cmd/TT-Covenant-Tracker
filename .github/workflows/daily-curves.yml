@@ -1,0 +1,32 @@
+name: Daily Rate Pull
+
+# Pulls the day's rates into Supabase for the Debt Dashboard's Forward Curve
+# Tracker: 10-Year Treasury yield (treasury.gov) and 30-day Average SOFR
+# (NY Fed) into rate_history, plus — once CME API credentials are added as
+# repo secrets and scripts/pull-curves.mjs is wired to them — the 1-Mo Term
+# SOFR forward curve into curve_snapshots.
+
+on:
+  schedule:
+    # Weekdays at 22:47 UTC (~5:47pm ET), after both sources publish their
+    # end-of-day figures. Off-the-hour minute avoids GitHub's cron congestion.
+    - cron: '47 22 * * 1-5'
+  workflow_dispatch: {}
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pull rates into Supabase
+        env:
+          SB_URL: https://ngflppgqohmkkfiljqma.supabase.co
+          # Falls back to the publishable key already embedded in the client
+          # bundle. Override by setting a SUPABASE_KEY repo secret.
+          SB_KEY: ${{ secrets.SUPABASE_KEY || 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5' }}
+          CME_API_ID: ${{ secrets.CME_API_ID }}
+          CME_API_SECRET: ${{ secrets.CME_API_SECRET }}
+        run: node scripts/pull-curves.mjs
