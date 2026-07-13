@@ -24,9 +24,10 @@ jobs:
       - name: Pull rates into Supabase
         env:
           SB_URL: https://ngflppgqohmkkfiljqma.supabase.co
-          # Falls back to the publishable key already embedded in the client
-          # bundle. Override by setting a SUPABASE_KEY repo secret.
-          SB_KEY: ${{ secrets.SUPABASE_KEY || 'sb_publishable_aAX4IKlu0a7JgG2bIz3_1Q_nD4DMYr5' }}
+          # Must be the project's SECRET (service_role) key, set as the
+          # SUPABASE_KEY repo secret. Row-level security (db/security_setup.sql)
+          # blocks writes from the publishable key, so there is no fallback.
+          SB_KEY: ${{ secrets.SUPABASE_KEY }}
           CME_API_ID: ${{ secrets.CME_API_ID }}
           CME_API_SECRET: ${{ secrets.CME_API_SECRET }}
         run: node scripts/pull-curves.mjs

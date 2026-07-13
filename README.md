@@ -232,7 +232,38 @@ With Variable Loan Balance enabled, the **NOI Adjustments** section appears. Ent
 
 ## Access Control
 
-The app uses a PIN (`1234`) to gate add, edit, and delete operations. All read/view functionality is open.
+Access is two-layered:
+
+1. **Sign-in required (Supabase Auth).** The entire app sits behind a login
+   screen — nothing renders and no data loads without a valid session.
+   Accounts are **invite-only**: there is no sign-up form, and every data
+   request carries the signed-in user's access token. Row-level security
+   (`db/security_setup.sql`) rejects the bare publishable key, so extracting
+   it from the JS bundle no longer grants any data access.
+2. **Edit PIN.** Within the app, a PIN (`src/components/PinModal.jsx`) gates
+   add/edit/delete operations, so signed-in viewers can't accidentally change
+   data. This is a convenience layer, not a security boundary — real
+   protection comes from layer 1.
+
+### One-time security setup
+
+1. Run [`db/security_setup.sql`](db/security_setup.sql) in the Supabase SQL
+   editor. This enables row-level security on every table (and the
+   `loan-docs` storage bucket) and restricts access to authenticated users.
+2. In the Supabase Dashboard → **Authentication → Sign In / Up**, turn OFF
+   **"Allow new users to sign up"** so only invited users can get accounts.
+3. **Authentication → URL Configuration** — set the Site URL to the app's
+   Vercel domain so invite and password-reset emails link back correctly.
+4. In the GitHub repo → **Settings → Secrets and variables → Actions**, add
+   `SUPABASE_KEY` = the project's **secret (service_role) key** (Dashboard →
+   Settings → API keys). The daily rate-pull Action needs it to keep writing
+   to `rate_history` once RLS is on. Never put this key in client code.
+
+### Inviting users
+
+Supabase Dashboard → **Authentication → Users → "Invite user"**. The invitee
+receives an email link, lands on the app, and is prompted to choose a
+password. To revoke someone, delete (or ban) their user on the same page.
 
 ---
 
