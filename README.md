@@ -70,6 +70,54 @@ replacing loose Word docs.
 SQL editor (creates the `loans` table, indexes, and the private `loan-docs`
 Storage bucket). Full how-to in [`ingest/README.md`](ingest/README.md).
 
+### Debt Dashboard (sandbox)
+A drag-and-drop dashboard of movable, resizable widgets. Drag by the title
+bar, resize from the bottom-right corner, remove with ✕ and re-add via
+**+ Add Widget** — the layout is shared company-wide and saves automatically
+between sessions.
+
+- **Leverage Tracker** — headline Portfolio LTC / LTV (weighted by loan size)
+  plus a sortable per-project table across both schedules. Fund is manual: the
+  sheets don't carry it, so click the Fund cell to assign one (PIN-gated).
+  Fund tags stick across re-uploads by property-name matching.
+- **Maturity Schedule** — every loan maturity from both schedules in one
+  chronological list, grouped by year, color-coded by time remaining
+  (<6 mo red, <12 mo yellow). The covenant page keeps its own maturities.
+- **Repayment Guaranty Hub** — TTH repayment guaranty % and $ per project
+  (pulled from the At Risk schedule), with total exposure and a
+  loan-weighted average %.
+- **Forward Curve Tracker** — dated snapshots of the 1-Mo Term SOFR (and
+  10-Year Treasury) forward curves, overlaid oldest→newest, with a
+  month-end comparison mode. Snapshots accumulate from Chatham curve
+  uploads, the widget's **Snapshot today** button, and — once CME API
+  credentials are added — the daily rate pull.
+
+**Data in:** upload the **At Risk** construction schedule (`.xlsb`) and the
+**Stabilized** portfolio summary (`.xlsx`) from the toolbar (PIN-gated).
+Parsing is header-based, so column reordering in future workbook versions is
+tolerated; on the Stabilized sheet only the residential section (below
+"TT Commercial Subtotal") is imported. Re-uploading replaces that schedule's
+data; fund assignments are preserved.
+
+**Setup:** run [`db/debt_dashboard_setup.sql`](db/debt_dashboard_setup.sql)
+once in the Supabase SQL editor (creates `debt_projects`, `curve_snapshots`,
+`rate_history`, and `dashboard_layouts`).
+
+### Daily Rate Pull
+[`.github/workflows/daily-curves.yml`](.github/workflows/daily-curves.yml)
+runs [`scripts/pull-curves.mjs`](scripts/pull-curves.mjs) every weekday
+evening and stores, into `rate_history`:
+
+- **10-Year Treasury yield** — free, from treasury.gov (no key needed)
+- **30-day Average SOFR** — free, from the NY Fed (no key needed)
+
+The 1-Mo **Term SOFR forward curve** itself is CME-licensed data. Once CME
+API access is purchased, add `CME_API_ID` / `CME_API_SECRET` as GitHub repo
+secrets and implement `fetchCmeTermSofrCurve()` in `scripts/pull-curves.mjs`
+(the function is the single marked TODO; everything downstream — snapshot
+storage and charting — is already wired). Until then, forward-curve history
+builds from Chatham uploads and the in-app snapshot button.
+
 ---
 
 ## Tech Stack
@@ -93,6 +141,10 @@ Storage bucket). Full how-to in [`ingest/README.md`](ingest/README.md).
 | `sofr_curve` | Chatham 1-Mo Term SOFR forward curve |
 | `ten_year_curve` | Chatham 10-Year Treasury forward curve |
 | `settings` | App-level config (reserved) |
+| `debt_projects` | Projects from the At Risk / Stabilized schedule uploads — see `db/debt_dashboard_setup.sql` |
+| `curve_snapshots` | Dated forward-curve snapshots (one per day per curve) |
+| `rate_history` | Daily spot prints (10Y Treasury, 30-day Avg SOFR) from the rate-pull Action |
+| `dashboard_layouts` | Saved Debt Dashboard widget layouts |
 
 ### Key `properties` Columns
 
