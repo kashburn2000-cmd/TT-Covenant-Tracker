@@ -118,6 +118,44 @@ secrets and implement `fetchCmeTermSofrCurve()` in `scripts/pull-curves.mjs`
 storage and charting — is already wired). Until then, forward-curve history
 builds from Chatham uploads and the in-app snapshot button.
 
+### Power BI Integration
+The covenant math lives in client-side JavaScript (`src/calc.js`), so the
+database alone can't feed Power BI the numbers the site shows.
+[`db/powerbi_views.sql`](db/powerbi_views.sql) ports that engine into SQL —
+line for line, including three-prong rate selection with forward-curve
+interpolation, T-3 rolling interest for variable loans, and the
+paydown-to-cure bisection — and exposes it as read-only views in a dedicated
+`powerbi` schema (invisible to the app's REST API):
+
+| View | Contents |
+|---|---|
+| `powerbi.covenant_dashboard` | One row per covenant test with the full live calculation chain — matches the site's Covenant Tracker (hidden tests excluded) |
+| `powerbi.covenant_dashboard_all` | Same, including hidden tests |
+| `powerbi.fund_property_detail` | Per-property DSCR sub-rows for fund loans (the expandable 2022 Fund rows) |
+| `powerbi.covenant_history` | Saved test snapshots and comments — DSCR/DY trend over time |
+| `powerbi.forward_curves` | The active SOFR / 10-Year forward curves (uploaded rows, or the built-in Chatham fallback) |
+
+**Setup:**
+1. Run [`db/powerbi_views.sql`](db/powerbi_views.sql) once in the Supabase
+   SQL editor.
+2. Create a read-only login for Power BI —
+   `create role powerbi_reader login password '<strong-password>';` — then
+   re-run the script so its grants apply. The role can read the `powerbi`
+   views and nothing else.
+3. In Power BI Desktop: **Get Data → PostgreSQL**, server = the Supabase
+   connection-pooler host in **session mode** (Dashboard → Settings →
+   Database), database `postgres`, user `powerbi_reader`, then pick the
+   views from the `powerbi` schema and set a scheduled refresh in the
+   Power BI Service.
+
+**Correctness:** the SQL port is proven equivalent to the JS engine by
+[`scripts/validate-powerbi-views.mjs`](scripts/validate-powerbi-views.mjs),
+which runs both implementations over identical fixtures — every scenario in
+`src/calc.test.js`, the seed rows, and ~150 randomized property
+configurations — across three curve modes (~13,000 comparisons). Re-run it
+against a scratch Postgres (instructions in the script header) whenever
+`src/calc.js` or the views change.
+
 ---
 
 ## Tech Stack
