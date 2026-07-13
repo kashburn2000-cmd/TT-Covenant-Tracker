@@ -44,7 +44,7 @@ export function PinModal({ onSuccess, onClose }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderTop: `3px solid ${TT_ORANGE}`, borderRadius: 6, padding: '2rem', width: 280, textAlign: 'center' }}>
-        <div style={{ fontSize: '0.65rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: TT_ORANGE, marginBottom: '1.25rem', fontWeight: 600 }}>
+        <div style={{ fontSize: '0.72rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text2)', marginBottom: '1.25rem', fontWeight: 600 }}>
           Enter PIN to Edit
         </div>
         {/* Dot indicators */}
@@ -64,7 +64,7 @@ export function PinModal({ onSuccess, onClose }) {
           {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d, i) => (
             <button key={i} onClick={() => d === '⌫' ? setDigits(p => p.slice(0,-1)) : d && handleDigit(d)}
               style={{
-                padding: '0.75rem', borderRadius: 4, border: '1px solid var(--border)',
+                padding: '0.75rem', borderRadius: 6, border: '1px solid var(--border)',
                 background: d ? 'var(--panel2)' : 'transparent',
                 color: d === '⌫' ? 'var(--muted)' : 'var(--text)',
                 fontSize: d === '⌫' ? '1rem' : '1.1rem', fontWeight: 600,

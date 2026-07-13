@@ -61,7 +61,7 @@ export function MatrixTab({ thresholds }) {
       {validRate ? (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ padding: "1rem 1.25rem 0.65rem", borderBottom: "1px solid var(--border)" }}>
-            <div style={{ fontSize: "0.68rem", letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--pass)", marginBottom: "0.2rem" }}>
+            <div style={{ fontSize: "0.68rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--pass)", marginBottom: "0.2rem" }}>
               DY vs DSCR Comparison Matrix
             </div>
             <div style={{ fontSize: "0.72rem", color: "var(--faint)" }}>
@@ -73,11 +73,11 @@ export function MatrixTab({ thresholds }) {
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 400 }}>
               <thead>
                 <tr style={{ borderBottom: "2px solid var(--border)", background: "var(--bg)" }}>
-                  <th style={{ padding: "0.65rem 1.25rem", textAlign: "left", width: 100, color: "var(--text2)", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                  <th style={{ padding: "0.65rem 1.25rem", textAlign: "left", width: 100, color: "var(--text2)", fontSize: "0.66rem", letterSpacing: "0.05em", textTransform: "uppercase" }}>
                     Debt Yield
                   </th>
                   {AMORT_COLS.map(col => (
-                    <th key={col.label} style={{ padding: "0.65rem 1rem", textAlign: "center", color: "var(--text2)", fontSize: "0.66rem", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    <th key={col.label} style={{ padding: "0.65rem 1rem", textAlign: "center", color: "var(--text2)", fontSize: "0.66rem", letterSpacing: "0.05em", textTransform: "uppercase" }}>
                       {col.label}
                     </th>
                   ))}
@@ -85,15 +85,15 @@ export function MatrixTab({ thresholds }) {
               </thead>
               <tbody>
                 {DY_ROWS.map((dy, i) => (
-                  <tr key={dy} style={{ background: i % 2 === 0 ? "transparent" : "#252830" }}>
-                    <td style={{ padding: "0.55rem 1.25rem", fontWeight: 700, color: "#ffffff", borderBottom: "1px solid #0f172a", fontSize: "0.85rem", textAlign: "left" }}>
+                  <tr key={dy} style={{ background: i % 2 === 0 ? "transparent" : "var(--panel2)" }}>
+                    <td style={{ padding: "0.55rem 1.25rem", fontWeight: 700, color: "var(--text)", borderBottom: "1px solid var(--border)", fontSize: "0.85rem", textAlign: "left" }}>
                       {dy.toFixed(1)}%
                     </td>
                     {AMORT_COLS.map(col => {
                       const dscr = getDSCR(dy, col.years);
                       return (
                         <td key={col.label} className={cellClass(dscr)}
-                          style={{ padding: "0.55rem 1rem", borderBottom: "1px solid #0f172a", textAlign: "center" }}>
+                          style={{ padding: "0.55rem 1rem", borderBottom: "1px solid var(--border)", textAlign: "center" }}>
                           {dscr !== null ? `${dscr.toFixed(3)}x` : "—"}
                         </td>
                       );
@@ -111,7 +111,7 @@ export function MatrixTab({ thresholds }) {
               { cls: "mx-vlow", label: `< ${thresholds.low.toFixed(2)}x — Distressed` },
             ].map(({ cls, label }) => (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <div className={cls} style={{ width: 24, height: 12, borderRadius: 2 }} />
+                <div className={cls} style={{ width: 24, height: 12, borderRadius: 4 }} />
                 <span style={{ fontSize: "0.68rem", color: "var(--faint)" }}>{label}</span>
               </div>
             ))}
@@ -121,7 +121,7 @@ export function MatrixTab({ thresholds }) {
         <div className="card" style={{ textAlign: "center", padding: "3rem 2rem", color: "var(--faint)" }}>
           <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>📊</div>
           <div style={{ fontSize: "0.85rem" }}>Enter an interest rate above to generate the matrix</div>
-          <div style={{ fontSize: "0.75rem", color: "#334155", marginTop: "0.4rem" }}>
+          <div style={{ fontSize: "0.75rem", color: "var(--faint)", marginTop: "0.4rem" }}>
             Rows: Debt Yield 6%–14% · Columns: I/O, 30yr, 35yr amortization
           </div>
         </div>

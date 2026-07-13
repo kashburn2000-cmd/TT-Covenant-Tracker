@@ -44,9 +44,9 @@ function useAppTheme() {
 // ── Small shared UI pieces ────────────────────────────────────────────────────
 function StatTile({ label, value, sub }) {
   return (
-    <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, padding: '0.8rem 1rem', minWidth: 130, flex: '1 1 130px' }}>
+    <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.8rem 1rem', minWidth: 130, flex: '1 1 130px' }}>
       <div className="label" style={{ marginBottom: '0.3rem' }}>{label}</div>
-      <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text)' }}>{value}</div>
+      <div style={{ fontSize: '1.45rem', fontWeight: 600, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>{value}</div>
       {sub && <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.2rem' }}>{sub}</div>}
     </div>
   );
@@ -79,7 +79,7 @@ function Th({ label, k, sort, right }) {
 }
 
 // width:auto overrides the app-wide `select { width: 100% }` rule
-const selStyle = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', padding: '0.25rem 0.5rem', fontFamily: 'inherit', fontSize: '0.72rem', outline: 'none', width: 'auto' };
+const selStyle = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '0.25rem 0.5rem', fontFamily: 'inherit', fontSize: '0.72rem', outline: 'none', width: 'auto' };
 const SOURCE_LABEL = { at_risk: 'Construction', stabilized: 'Stabilized' };
 
 function SourceFilter({ value, onChange }) {
@@ -223,7 +223,7 @@ function MaturityWidget({ projects }) {
               return (
                 <React.Fragment key={p.id}>
                   {yearHeader && (
-                    <tr><td colSpan={5} style={{ background: 'var(--panel2)', color: TT_ORANGE, fontSize: '0.65rem', letterSpacing: '0.12em', fontWeight: 700, padding: '0.35rem 0.85rem' }}>{year}</td></tr>
+                    <tr><td colSpan={5} style={{ background: 'var(--panel2)', color: 'var(--muted)', fontSize: '0.66rem', letterSpacing: '0.06em', fontWeight: 600, textTransform: 'uppercase', padding: '0.35rem 0.85rem' }}>{year}</td></tr>
                   )}
                   <tr>
                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(p.maturity_date)}</td>
@@ -306,8 +306,8 @@ function GuarantyWidget({ projects }) {
 // ── Forward Curve Tracker ─────────────────────────────────────────────────────
 // Snapshot series are ordinal in time, so they wear a validated one-hue ramp:
 // older curves lighter, the newest darkest/strongest.
-const RAMP_LIGHT = ['#818cf8', '#6366f1', '#4f46e5', '#3730a3', '#1e1b4b'];
-const RAMP_DARK  = ['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe'];
+const RAMP_LIGHT = ['#A9C0E8', '#7FA0D6', '#5B82C4', '#3B62A8', '#1F4178'];
+const RAMP_DARK  = ['#33507F', '#40639E', '#537ABD', '#7398D8', '#9DBAEF'];
 const rampColors = (n, theme) => {
   const ramp = theme === 'light' ? RAMP_LIGHT : RAMP_DARK;
   if (n <= 0) return [];
@@ -424,7 +424,7 @@ function CurveChart({ series, theme }) {
       {hover && (
         <div style={{
           position: 'absolute', left: Math.min(hover.px + 10, dims.w - 170), top: 8, pointerEvents: 'none',
-          background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, padding: '0.5rem 0.65rem',
+          background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.5rem 0.65rem',
           boxShadow: 'var(--shadow)', fontSize: '0.7rem', minWidth: 150, zIndex: 5,
         }}>
           <div style={{ color: 'var(--muted)', marginBottom: 4 }}>{new Date(hover.xMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
@@ -734,8 +734,8 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
     }
   }
 
-  const uploadBtnStyle = { display: 'inline-block', padding: '5px 12px', borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.68rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 20%, transparent)' };
-  const lockBtnStyle = { ...uploadBtnStyle, background: 'rgba(200,205,214,0.05)', color: 'var(--faint)', border: 'none' };
+  const uploadBtnStyle = { display: 'inline-block', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.68rem', fontWeight: 600, background: 'color-mix(in srgb, var(--text2) 10%, transparent)', color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 20%, transparent)' };
+  const lockBtnStyle = { ...uploadBtnStyle, background: 'color-mix(in srgb, var(--text2) 5%, transparent)', color: 'var(--faint)', border: 'none' };
 
   function renderWidget(key) {
     switch (key) {
@@ -779,7 +779,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
             <button onClick={() => setShowAdd(v => !v)} style={uploadBtnStyle}>+ Add Widget</button>
           )}
           {showAdd && (
-            <div style={{ position: 'absolute', top: '110%', right: 0, zIndex: 300, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.4)', minWidth: 200 }}>
+            <div style={{ position: 'absolute', top: '110%', right: 0, zIndex: 300, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 20px rgba(0,0,0,0.4)', minWidth: 200 }}>
               {inactive.map(k => (
                 <button key={k} onClick={() => addWidget(k)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '0.6rem 0.9rem', background: 'none', border: 'none', color: 'var(--text2)', fontFamily: 'inherit', fontSize: '0.75rem', cursor: 'pointer' }}>
                   {WIDGETS[k].title}
@@ -809,9 +809,9 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
             compactor={verticalCompactor}
           >
             {widgets.map(key => (
-              <div key={key} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, boxShadow: 'var(--shadow)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div key={key} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: 'var(--shadow)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div className="widget-drag" style={{ display: 'flex', alignItems: 'center', padding: '0.55rem 0.9rem', borderBottom: '1px solid var(--border)', cursor: 'grab', userSelect: 'none', flexShrink: 0 }}>
-                  <span style={{ fontSize: '0.66rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: TT_ORANGE, fontWeight: 700 }}>{WIDGETS[key].title}</span>
+                  <span style={{ fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>{WIDGETS[key].title}</span>
                   <span style={{ marginLeft: 'auto', color: 'var(--faint)', fontSize: '0.7rem', letterSpacing: '0.2em' }}>⠿</span>
                   <button
                     onClick={() => removeWidget(key)}

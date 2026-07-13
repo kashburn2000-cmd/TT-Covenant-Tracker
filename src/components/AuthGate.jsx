@@ -77,11 +77,11 @@ export function AuthGate({ children }) {
   // ── Styles (theme vars come from index.html, so they work outside App) ──
   const wrap = { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', fontFamily: "'Inter', sans-serif", padding: '1rem' };
   const card = { background: 'var(--panel)', border: '1px solid var(--border)', borderTop: '3px solid var(--accent)', borderRadius: 6, padding: '2.25rem 2rem', width: 360, maxWidth: '100%', boxShadow: 'var(--shadow)' };
-  const title = { fontSize: '0.68rem', letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 700, marginBottom: '0.4rem', textAlign: 'center' };
+  const title = { fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 700, marginBottom: '0.4rem', textAlign: 'center' };
   const sub = { fontSize: '0.78rem', color: 'var(--muted)', textAlign: 'center', marginBottom: '1.5rem' };
-  const label = { fontSize: '0.62rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block' };
-  const input = { width: '100%', padding: '0.55rem 0.75rem', fontSize: '0.85rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text)', fontFamily: 'inherit', outline: 'none', marginBottom: '0.9rem' };
-  const button = { width: '100%', padding: '0.6rem', borderRadius: 4, border: 'none', cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', background: 'var(--accent)', color: '#fff', opacity: busy ? 0.6 : 1 };
+  const label = { fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block' };
+  const input = { width: '100%', padding: '0.55rem 0.75rem', fontSize: '0.85rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', outline: 'none', marginBottom: '0.9rem' };
+  const button = { width: '100%', padding: '0.6rem', borderRadius: 6, border: 'none', cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600, letterSpacing: '0.01em', background: 'var(--accent)', color: '#fff', opacity: busy ? 0.6 : 1 };
   const errStyle = { fontSize: '0.75rem', color: 'var(--fail)', marginBottom: '0.9rem', lineHeight: 1.4 };
   const noticeStyle = { fontSize: '0.75rem', color: 'var(--pass)', marginBottom: '0.9rem', lineHeight: 1.4 };
 

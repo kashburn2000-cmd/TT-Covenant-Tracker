@@ -507,10 +507,10 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   // and extension maturities come straight off the loan; covenant test dates are derived
   // from the DSCR test frequency, stepping forward from the closing date to maturity.
   const CAL_EVENT_META = {
-    closing:   { label: 'Closing',        fg: '#4fa3c8', bg: 'rgba(79,163,200,0.16)' },
-    maturity:  { label: 'Maturity',       fg: '#6366f1', bg: 'rgba(99,102,241,0.20)' },
-    extension: { label: 'Ext. Maturity',  fg: '#9b8fc0', bg: 'rgba(155,143,192,0.18)' },
-    covenant:  { label: 'Covenant Test',  fg: 'var(--pass)', bg: 'rgba(106,158,127,0.16)' },
+    closing:   { label: 'Closing',        fg: 'var(--cat-blue)', bg: 'color-mix(in srgb, var(--cat-blue) 16%, transparent)' },
+    maturity:  { label: 'Maturity',       fg: 'var(--accent)', bg: 'color-mix(in srgb, var(--accent) 20%, transparent)' },
+    extension: { label: 'Ext. Maturity',  fg: 'var(--cat-violet)', bg: 'color-mix(in srgb, var(--cat-violet) 18%, transparent)' },
+    covenant:  { label: 'Covenant Test',  fg: 'var(--pass)', bg: 'color-mix(in srgb, var(--pass) 16%, transparent)' },
   };
   const isoOf  = d => (typeof d === 'string' ? d.slice(0, 10) : '');
   const parseISO = d => { const m = (d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12) : null; };
@@ -682,14 +682,14 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   }
 
   // ── Styles ───────────────────────────────────────────────────────────────────
-  const inputSt = (extra = {}) => ({ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 3, color: 'var(--text2)', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', ...extra });
+  const inputSt = (extra = {}) => ({ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', ...extra });
   const labelSt = { fontSize: '0.6rem', color: 'var(--faint3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
   const fieldSt = { marginBottom: '0.6rem' };
-  const groupHdr = { fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.6rem' };
+  const groupHdr = { fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.6rem' };
   const typeBadge = l => (
-    <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '2px 7px', borderRadius: 3, whiteSpace: 'nowrap',
-      background: l.loan_type === 'construction' ? 'rgba(79,163,200,0.12)' : 'rgba(155,143,192,0.14)',
-      color: l.loan_type === 'construction' ? '#4fa3c8' : '#9b8fc0' }}>
+    <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap',
+      background: l.loan_type === 'construction' ? 'color-mix(in srgb, var(--cat-blue) 12%, transparent)' : 'color-mix(in srgb, var(--cat-violet) 14%, transparent)',
+      color: l.loan_type === 'construction' ? 'var(--cat-blue)' : 'var(--cat-violet)' }}>
       {(LOAN_TYPE_LABEL[l.loan_type] || l.loan_type || '').toUpperCase()}
     </span>
   );
@@ -748,7 +748,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
             <div style={{ marginBottom: '0.75rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <span style={groupHdr}>Participants</span>
-                <button onClick={addParticipant} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--faint2)', borderRadius: 3, padding: '2px 8px', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'inherit' }}>+ Row</button>
+                <button onClick={addParticipant} style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--faint2)', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'inherit' }}>+ Row</button>
               </div>
               {(editForm.participants || []).map((row, i) => (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1fr auto', gap: 4, marginBottom: 4, alignItems: 'center' }}>
@@ -773,8 +773,8 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.75rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
-            <button onClick={saveLoan} disabled={saving} style={{ padding: '7px 22px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : isNew ? 'Add Loan' : 'Save Changes'}</button>
+            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
+            <button onClick={saveLoan} disabled={saving} style={{ padding: '7px 22px', borderRadius: 4, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : isNew ? 'Add Loan' : 'Save Changes'}</button>
           </div>
         </div>
       </div>
@@ -796,24 +796,24 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           </div>
 
           {/* Step 1 — attach + auto-fill */}
-          <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, padding: '0.85rem 1rem', marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.6rem' }}>Step 1 — Source document</div>
+          <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.85rem 1rem', marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.6rem' }}>Step 1 — Source document</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-              <label style={{ padding: '6px 14px', borderRadius: 3, cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, background: 'rgba(200,205,214,0.10)', color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 20%, transparent)' }}>
+              <label style={{ padding: '6px 14px', borderRadius: 4, cursor: 'pointer', fontSize: '0.74rem', fontWeight: 600, background: 'color-mix(in srgb, var(--text2) 10%, transparent)', color: 'var(--text2)', outline: '1px solid color-mix(in srgb, var(--text2) 20%, transparent)' }}>
                 {importFile ? '✓ ' + importFile.name : '↑ Attach .docx'}
                 <input type="file" accept=".docx" onChange={e => setImportFile(e.target.files[0] || null)} style={{ display: 'none' }} />
               </label>
-              <button onClick={autofillFromDocx} disabled={!importFile} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', cursor: importFile ? 'pointer' : 'default', fontSize: '0.74rem', fontWeight: 700, fontFamily: 'inherit', background: importFile ? TT_ORANGE : 'var(--disabled)', color: importFile ? '#fff' : 'var(--faint)' }}>↳ Auto-fill fields from .docx</button>
+              <button onClick={autofillFromDocx} disabled={!importFile} style={{ padding: '6px 14px', borderRadius: 4, border: 'none', cursor: importFile ? 'pointer' : 'default', fontSize: '0.74rem', fontWeight: 700, fontFamily: 'inherit', background: importFile ? TT_ORANGE : 'var(--disabled)', color: importFile ? '#fff' : 'var(--faint)' }}>↳ Auto-fill fields from .docx</button>
               {importFile && <button onClick={() => setImportFile(null)} style={{ background: 'none', border: 'none', color: 'var(--fail)', cursor: 'pointer', fontSize: '0.72rem', fontFamily: 'inherit' }}>remove</button>}
             </div>
           </div>
 
           {/* Step 2 — review/paste JSON */}
-          <div style={{ fontSize: '0.6rem', color: TT_ORANGE, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.4rem' }}>Step 2 — Review fields (auto-filled or pasted)</div>
+          <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.4rem' }}>Step 2 — Review fields (auto-filled or pasted)</div>
           <textarea style={inputSt({ minHeight: 220, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={importJson} onChange={e => setImportJson(e.target.value)} spellCheck={false} placeholder='Click "Auto-fill" above, or paste JSON like: { "loan_type": "construction", "borrower_entity": "...", "loan_amount": 51694640 }' />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ padding: '7px 18px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
-            <button onClick={importAbstract} disabled={saving} style={{ padding: '7px 22px', borderRadius: 3, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Importing…' : 'Import'}</button>
+            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
+            <button onClick={importAbstract} disabled={saving} style={{ padding: '7px 22px', borderRadius: 4, border: 'none', background: TT_ORANGE, color: '#fff', cursor: saving ? 'wait' : 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit', opacity: saving ? 0.7 : 1 }}>{saving ? 'Importing…' : 'Import'}</button>
           </div>
         </div>
       </div>
@@ -831,8 +831,8 @@ export function LoansTab({ pinUnlocked, requirePin }) {
             <strong style={{ color: 'var(--text2)' }}>{loan?.property_name || loan?.borrower_entity}</strong> will be permanently removed. The source .docx in Storage is not deleted.
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-            <button onClick={() => setConfirmDel(null)} style={{ padding: '6px 16px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' }}>Cancel</button>
-            <button onClick={() => deleteLoan(confirmDel)} style={{ padding: '6px 16px', borderRadius: 3, border: 'none', background: 'var(--fail)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700 }}>Delete</button>
+            <button onClick={() => setConfirmDel(null)} style={{ padding: '6px 16px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' }}>Cancel</button>
+            <button onClick={() => deleteLoan(confirmDel)} style={{ padding: '6px 16px', borderRadius: 4, border: 'none', background: 'var(--fail)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem', fontWeight: 700 }}>Delete</button>
           </div>
         </div>
       </div>
@@ -840,7 +840,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   };
 
   const SortHdr = ({ field, label, align = 'left' }) => (
-    <th onClick={() => toggleSort(field)} style={{ padding: '0.55rem 0.85rem', textAlign: align, cursor: 'pointer', color: sortField === field ? TT_ORANGE : 'var(--muted)', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none' }}>
+    <th onClick={() => toggleSort(field)} style={{ padding: '0.55rem 0.85rem', textAlign: align, cursor: 'pointer', color: sortField === field ? TT_ORANGE : 'var(--muted)', fontWeight: 600, letterSpacing: '0.04em', fontSize: '0.62rem', textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none' }}>
       {label}{sortField === field ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
     </th>
   );
@@ -855,7 +855,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     ));
     const Prose = ({ k, v }) => (!v ? null : (
       <div style={{ marginBottom: '0.6rem' }}>
-        <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>{k}</div>
+        <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>{k}</div>
         <div style={{ fontSize: '0.74rem', color: 'var(--muted)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v}</div>
       </div>
     ));
@@ -917,7 +917,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           <Prose k="Notes" v={l.notes} />
           {tsEntries.length > 0 && (
             <div style={{ marginTop: '0.5rem' }}>
-              <div style={{ fontSize: '0.58rem', color: TT_ORANGE, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4, fontWeight: 700 }}>{LOAN_TYPE_LABEL[l.loan_type]}-specific</div>
+              <div style={{ fontSize: '0.62rem', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, fontWeight: 600 }}>{LOAN_TYPE_LABEL[l.loan_type]}-specific</div>
               {tsEntries.map(([k, v]) => (
                 <div key={k} style={{ marginBottom: 5 }}>
                   <span style={{ fontSize: '0.62rem', color: 'var(--faint3)' }}>{k}: </span>
@@ -952,7 +952,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     const navMonth = delta => setCalRef(new Date(y, m + delta, 1));
     const goToday  = () => { const n = new Date(); setCalRef(new Date(n.getFullYear(), n.getMonth(), 1)); };
 
-    const navBtn = { padding: '5px 12px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' };
+    const navBtn = { padding: '5px 12px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.78rem' };
     const dowSt  = { padding: '0.4rem 0.5rem', textAlign: 'center', color: 'var(--faint2)', fontWeight: 600, letterSpacing: '0.06em', fontSize: '0.58rem', textTransform: 'uppercase' };
 
     const selectedLoan = expandedId != null ? loans.find(l => l.id === expandedId) : null;
@@ -976,9 +976,9 @@ export function LoansTab({ pinUnlocked, requirePin }) {
               return (
                 <button key={k} onClick={() => setCalTypes(t => ({ ...t, [k]: !t[k] }))}
                   title={on ? 'Click to hide' : 'Click to show'}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 3, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', fontWeight: 600,
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', fontWeight: 600,
                     border: `1px solid ${on ? meta.fg + '66' : 'var(--border)'}`, background: on ? meta.bg : 'transparent', color: on ? meta.fg : 'var(--faint)' }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: on ? meta.fg : 'var(--border)' }} />
+                  <span style={{ width: 8, height: 8, borderRadius: 4, background: on ? meta.fg : 'var(--border)' }} />
                   {meta.label}
                 </button>
               );
@@ -998,15 +998,15 @@ export function LoansTab({ pinUnlocked, requirePin }) {
               const evts = byDay[iso] || [];
               const isToday = iso === todayISO;
               return (
-                <div key={i} style={{ minHeight: 92, padding: '4px 4px 6px', borderRight: (i % 7 !== 6) ? '1px solid var(--bg)' : 'none', borderBottom: '1px solid var(--bg)', background: isToday ? 'rgba(99, 102, 241,0.06)' : 'transparent', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <div style={{ fontSize: '0.66rem', fontWeight: isToday ? 700 : 500, color: isToday ? TT_ORANGE : 'var(--faint2)', alignSelf: 'flex-end', padding: '1px 4px', borderRadius: 3, background: isToday ? 'rgba(99, 102, 241,0.16)' : 'transparent' }}>{d}</div>
+                <div key={i} style={{ minHeight: 92, padding: '4px 4px 6px', borderRight: (i % 7 !== 6) ? '1px solid var(--bg)' : 'none', borderBottom: '1px solid var(--bg)', background: isToday ? 'color-mix(in srgb, var(--accent) 6%, transparent)' : 'transparent', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div style={{ fontSize: '0.66rem', fontWeight: isToday ? 700 : 500, color: isToday ? TT_ORANGE : 'var(--faint2)', alignSelf: 'flex-end', padding: '1px 4px', borderRadius: 4, background: isToday ? 'color-mix(in srgb, var(--accent) 16%, transparent)' : 'transparent' }}>{d}</div>
                   {evts.map((e, j) => {
                     const meta = CAL_EVENT_META[e.type];
                     return (
                       <button key={j} onClick={() => setExpandedId(prev => prev === e.loan.id ? null : e.loan.id)}
                         title={`${meta.label}: ${e.name}${e.freq ? ` (${e.freq})` : ''}`}
                         style={{ textAlign: 'left', border: 'none', cursor: 'pointer', borderLeft: `3px solid ${meta.fg}`, background: meta.bg, color: meta.fg,
-                          borderRadius: 2, padding: '2px 5px', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, lineHeight: 1.25,
+                          borderRadius: 4, padding: '2px 5px', fontFamily: 'inherit', fontSize: '0.62rem', fontWeight: 600, lineHeight: 1.25,
                           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
                         {e.name}
                       </button>
@@ -1040,7 +1040,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       <EditModal />
       <ImportModal />
       <ConfirmDeleteModal />
-      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msg.isErr ? 'color-mix(in srgb, var(--fail) 14%, var(--panel))' : 'color-mix(in srgb, var(--pass) 14%, var(--panel))', border: `1px solid ${msg.isErr ? 'var(--fail)' : 'var(--pass)'}`, color: msg.isErr ? 'var(--fail)' : 'var(--pass)', padding: '8px 18px', borderRadius: 4, fontSize: '0.78rem', boxShadow: 'var(--shadow)' }}>{msg.text}</div>}
+      {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msg.isErr ? 'color-mix(in srgb, var(--fail) 14%, var(--panel))' : 'color-mix(in srgb, var(--pass) 14%, var(--panel))', border: `1px solid ${msg.isErr ? 'var(--fail)' : 'var(--pass)'}`, color: msg.isErr ? 'var(--fail)' : 'var(--pass)', padding: '8px 18px', borderRadius: 6, fontSize: '0.78rem', boxShadow: 'var(--shadow)' }}>{msg.text}</div>}
 
       {/* ── Summary cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
@@ -1051,7 +1051,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           { label: 'In Database', value: loans.length, sub: 'all loans' },
         ].map(c => (
           <div key={c.label} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.9rem 1rem', boxShadow: 'var(--shadow)' }}>
-            <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.08em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
+            <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.04em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
             <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text2)', lineHeight: 1.1 }}>{c.value}</div>
             <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', marginTop: '0.2rem' }}>{c.sub}</div>
           </div>
@@ -1064,7 +1064,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           <label style={labelSt}>View</label>
           <div style={{ display: 'flex', gap: 4 }}>
             {[['table', '☰ Table'], ['calendar', '📅 Calendar']].map(([v, lbl]) => (
-              <button key={v} onClick={() => setViewMode(v)} style={{ padding: '5px 11px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: viewMode === v ? TT_ORANGE : 'var(--border)', color: viewMode === v ? '#fff' : 'var(--muted)' }}>{lbl}</button>
+              <button key={v} onClick={() => setViewMode(v)} style={{ padding: '5px 11px', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: viewMode === v ? TT_ORANGE : 'var(--border)', color: viewMode === v ? '#fff' : 'var(--muted)' }}>{lbl}</button>
             ))}
           </div>
         </div>
@@ -1072,7 +1072,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           <label style={labelSt}>Type</label>
           <div style={{ display: 'flex', gap: 4 }}>
             {[['all', 'All'], ['construction', 'Const'], ['refinance', 'Refi']].map(([v, lbl]) => (
-              <button key={v} onClick={() => setFType(v)} style={{ padding: '5px 11px', borderRadius: 3, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: fType === v ? TT_ORANGE : 'var(--border)', color: fType === v ? '#fff' : 'var(--muted)' }}>{lbl}</button>
+              <button key={v} onClick={() => setFType(v)} style={{ padding: '5px 11px', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, fontFamily: 'inherit', background: fType === v ? TT_ORANGE : 'var(--border)', color: fType === v ? '#fff' : 'var(--muted)' }}>{lbl}</button>
             ))}
           </div>
         </div>
@@ -1087,13 +1087,13 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         <div><label style={labelSt}>Repay Guar ≥ %</label><input style={inputSt({ width: 90 })} type="number" value={fGuaranty} onChange={e => setFGuaranty(e.target.value)} placeholder="35" /></div>
         <div><label style={labelSt}>TTH NW ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fNW} onChange={e => setFNW(e.target.value)} placeholder="75" /></div>
         <div><label style={labelSt}>TTH Liq ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fLiq} onChange={e => setFLiq(e.target.value)} placeholder="15" /></div>
-        <button onClick={clearFilters} style={{ padding: '6px 12px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>Clear</button>
+        <button onClick={clearFilters} style={{ padding: '6px 12px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.7rem', fontFamily: 'inherit' }}>Clear</button>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans" style={{ padding: '6px 14px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export Excel</button>
-          <button onClick={exportPDF} style={{ padding: '6px 14px', borderRadius: 3, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export PDF</button>
-          <button onClick={() => requirePin(() => setShowImport(true))} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? 'rgba(99, 102, 241,0.18)' : 'var(--disabled)', color: pinUnlocked ? TT_ORANGE : 'var(--faint)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600, outline: pinUnlocked ? '1px solid color-mix(in srgb, var(--accent) 33%, transparent)' : 'none' }}>{pinUnlocked ? '⇪ Import Abstract' : '🔒 Import'}</button>
-          <button onClick={() => requirePin(startNew)} style={{ padding: '6px 14px', borderRadius: 3, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700 }}>{pinUnlocked ? '+ Add Loan' : '🔒 Add Loan'}</button>
+          <button onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans" style={{ padding: '6px 14px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export Excel</button>
+          <button onClick={exportPDF} style={{ padding: '6px 14px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem' }}>↓ Export PDF</button>
+          <button onClick={() => requirePin(() => setShowImport(true))} style={{ padding: '6px 14px', borderRadius: 4, border: 'none', background: pinUnlocked ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'var(--disabled)', color: pinUnlocked ? TT_ORANGE : 'var(--faint)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600, outline: pinUnlocked ? '1px solid color-mix(in srgb, var(--accent) 33%, transparent)' : 'none' }}>{pinUnlocked ? '⇪ Import Abstract' : '🔒 Import'}</button>
+          <button onClick={() => requirePin(startNew)} style={{ padding: '6px 14px', borderRadius: 4, border: 'none', background: pinUnlocked ? TT_ORANGE : 'var(--disabled)', color: pinUnlocked ? '#fff' : 'var(--faint)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 700 }}>{pinUnlocked ? '+ Add Loan' : '🔒 Add Loan'}</button>
         </div>
       </div>
 
@@ -1112,13 +1112,13 @@ export function LoansTab({ pinUnlocked, requirePin }) {
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 <SortHdr field="property_name" label="Property" />
-                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Type</th>
+                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.04em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Type</th>
                 <SortHdr field="lead_lender" label="Lender" />
                 <SortHdr field="maturity_date" label="Maturity" />
                 <SortHdr field="loan_amount" label="Loan Amount" align="right" />
                 <SortHdr field="repayment_guaranty_pct" label="Repay Guar" align="right" />
-                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: 'var(--muted)', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>DSCR</th>
-                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: 'var(--muted)', fontWeight: 400, letterSpacing: '0.08em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Doc</th>
+                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.04em', fontSize: '0.62rem', textTransform: 'uppercase' }}>DSCR</th>
+                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.04em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Doc</th>
                 <th style={{ width: 70 }} />
               </tr>
             </thead>
@@ -1141,7 +1141,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                       <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', textAlign: 'right' }}>{l.dscr_covenant != null ? `${Number(l.dscr_covenant).toFixed(2)}x` : '—'}</td>
                       <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                         {l.source_doc_path
-                          ? <button onClick={() => downloadDoc(l)} title="Download source .docx" style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 3, color: TT_ORANGE, cursor: 'pointer', padding: '3px 8px', fontSize: '0.68rem', fontFamily: 'inherit' }}>↓ .docx</button>
+                          ? <button onClick={() => downloadDoc(l)} title="Download source .docx" style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: TT_ORANGE, cursor: 'pointer', padding: '3px 8px', fontSize: '0.68rem', fontFamily: 'inherit' }}>↓ .docx</button>
                           : <span style={{ fontSize: '0.68rem', color: 'var(--border)' }}>—</span>}
                       </td>
                       <td style={{ padding: '0.65rem 0.5rem', whiteSpace: 'nowrap', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
@@ -1156,7 +1156,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                       </td>
                     </tr>
                     {isOpen && (
-                      <tr><td colSpan={9} style={{ padding: 0, background: '#1b1e25' }}><Detail l={l} /></td></tr>
+                      <tr><td colSpan={9} style={{ padding: 0, background: 'var(--panel3)' }}><Detail l={l} /></td></tr>
                     )}
                   </React.Fragment>
                 );
