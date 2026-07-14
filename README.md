@@ -8,6 +8,8 @@ An internal web application for tracking loan covenant compliance across Thompso
 
 The dashboard provides real-time DSCR and Debt Yield calculations, covenant test tracking, and NOI analysis across individual properties and portfolio-level fund loans. It ingests monthly forecast files from accounting and automatically updates NOI figures across all tracked properties.
 
+The site is view-only by default: row-level edit, hide, and delete buttons across all tabs only appear in **edit mode**, entered by clicking the lock in the footer and typing the PIN.
+
 ---
 
 ## Features
@@ -97,6 +99,9 @@ between sessions.
 - **Maturity Schedule** — every loan maturity from both schedules in one
   chronological list, grouped by year, color-coded by time remaining
   (<6 mo red, <12 mo yellow). The covenant page keeps its own maturities.
+  In edit mode each row carries the same pencil (edit figures / remove sold
+  deals) and hide buttons as the Leverage Tracker, so stale entries can be
+  cleaned up in place.
 - **Repayment Guaranty Hub** — TTH repayment guaranty % and $ per project
   (pulled from the At Risk schedule), with total exposure and a
   loan-weighted average %.

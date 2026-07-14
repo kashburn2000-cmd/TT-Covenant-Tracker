@@ -35,7 +35,7 @@ const EMPTY_DEAL = {
   highlights: '', sort_order: 0,
 };
 
-export function PipelineTab() {
+export function PipelineTab({ pinUnlocked = true }) {
 
   const [deals,       setDeals]       = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -717,10 +717,13 @@ export function PipelineTab() {
                     <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Total Budget</div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 700 }}>{fmt$(d.total_budget)}</div>
                   </div>
-                  {/* Edit */}
-                  <button onClick={() => startEdit(d)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--faint2)', cursor: 'pointer', padding: '3px 9px', fontSize: '0.7rem', fontFamily: 'inherit' }}>Edit</button>
-                  {/* Delete */}
-                  <button onClick={() => setConfirmDel(d.id)} style={{ background: 'none', border: 'none', color: 'var(--border)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 4px' }} title="Delete deal">✕</button>
+                  {/* Edit / Delete — only in edit mode (PIN unlocked) */}
+                  {pinUnlocked && (
+                    <>
+                      <button onClick={() => startEdit(d)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--faint2)', cursor: 'pointer', padding: '3px 9px', fontSize: '0.7rem', fontFamily: 'inherit' }}>Edit</button>
+                      <button onClick={() => setConfirmDel(d.id)} style={{ background: 'none', border: 'none', color: 'var(--border)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 4px' }} title="Delete deal">✕</button>
+                    </>
+                  )}
                 </div>
 
                 {/* Expanded detail */}

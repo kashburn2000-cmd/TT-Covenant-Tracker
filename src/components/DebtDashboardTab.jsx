@@ -211,7 +211,7 @@ const Ov = ({ p, k, type }) => (p._edited?.[k]
   : null);
 
 // ── Leverage Tracker ──────────────────────────────────────────────────────────
-function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPatch, pinUnlocked, requirePin }) {
+function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPatch, pinUnlocked }) {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [fundFilter, setFundFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -288,11 +288,13 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
             <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '2px 0' }}>
               <span>{p.name}</span>
               <span style={{ color: 'var(--faint)' }}>{SOURCE_LABEL[p.source]} · {fmtM(p.loan_amount)}</span>
-              <button
-                onClick={() => requirePin(() => onPatch(p, { removed: false }))}
-                title={pinUnlocked ? 'Restore this project to the dashboard' : 'Unlock to restore'}
-                className="btn btn-sm" style={{ marginLeft: 'auto' }}
-              >Restore</button>
+              {pinUnlocked && (
+                <button
+                  onClick={() => onPatch(p, { removed: false })}
+                  title="Restore this project to the dashboard"
+                  className="btn btn-sm" style={{ marginLeft: 'auto' }}
+                >Restore</button>
+              )}
             </div>
           ))}
         </div>
@@ -316,7 +318,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
             <Th label="LTC" k="ltc" sort={sort} right />
             <Th label="LTV" k="ltv" sort={sort} right />
             <Th label="Maturity" k="maturity_date" sort={sort} />
-            <th />
+            {pinUnlocked && <th />}
           </tr></thead>
           <tbody>
             {rows.map(p => (
@@ -335,12 +337,14 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                       <option value="residential">Residential</option>
                       <option value="commercial">Commercial</option>
                     </select>
-                  ) : (
+                  ) : pinUnlocked ? (
                     <span
-                      onClick={() => requirePin(() => setEditingCategory(p.id))}
-                      title={pinUnlocked ? 'Click to edit type' : 'Unlock to edit type'}
+                      onClick={() => setEditingCategory(p.id)}
+                      title="Click to edit type"
                       style={{ cursor: 'pointer', color: p.category ? 'var(--muted)' : 'var(--faint)', borderBottom: '1px dashed var(--border)' }}
                     >{CATEGORY_LABEL[p.category] || '+ set'}</span>
+                  ) : (
+                    <span style={{ color: p.category ? 'var(--muted)' : 'var(--faint)' }}>{CATEGORY_LABEL[p.category] || '—'}</span>
                   )}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
@@ -352,12 +356,14 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                       onKeyDown={e => { if (e.key === 'Enter') commitFund(p); if (e.key === 'Escape') setEditingFund(null); }}
                       style={{ ...selStyle, width: 110 }}
                     />
-                  ) : (
+                  ) : pinUnlocked ? (
                     <span
-                      onClick={() => requirePin(() => { setEditingFund(p.id); setFundDraft(p.fund || ''); })}
-                      title={pinUnlocked ? 'Click to edit fund' : 'Unlock to edit fund'}
+                      onClick={() => { setEditingFund(p.id); setFundDraft(p.fund || ''); }}
+                      title="Click to edit fund"
                       style={{ cursor: 'pointer', color: p.fund ? 'var(--text)' : 'var(--faint)', borderBottom: '1px dashed var(--border)' }}
                     >{p.fund || '+ assign'}</span>
+                  ) : (
+                    <span style={{ color: p.fund ? 'var(--text)' : 'var(--faint)' }}>{p.fund || '—'}</span>
                   )}
                 </td>
                 <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{SOURCE_LABEL[p.source]}</td>
@@ -368,20 +374,22 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltc)}<Ov p={p} k="ltc" type="percent" /></td>
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltv)}<Ov p={p} k="ltv" type="percent" /></td>
                 <td style={{ whiteSpace: 'nowrap' }}>{p.maturity_date ? fmtDate(p.maturity_date) : (p.is_committed ? 'Not closed' : '—')}<Ov p={p} k="maturity_date" type="date" /></td>
-                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <button
-                    onClick={() => requirePin(() => setEditing(p))}
-                    title={pinUnlocked ? 'Edit deal figures / maturity, or remove the project' : 'Unlock to edit'}
-                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
-                  ><PencilIcon size={12} /></button>
-                  <button
-                    onClick={() => requirePin(() => onSetHidden(p, !p.hidden))}
-                    title={p.hidden
-                      ? (pinUnlocked ? 'Restore — show this property in all widgets again' : 'Unlock to restore')
-                      : (pinUnlocked ? 'Hide this property from all widgets (restore via "Show hidden")' : 'Unlock to hide')}
-                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1, marginLeft: 4 }}
-                  >{p.hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}</button>
-                </td>
+                {pinUnlocked && (
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button
+                      onClick={() => setEditing(p)}
+                      title="Edit deal figures / maturity, or remove the project (sold)"
+                      style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
+                    ><PencilIcon size={12} /></button>
+                    <button
+                      onClick={() => onSetHidden(p, !p.hidden)}
+                      title={p.hidden
+                        ? 'Restore — show this property in all widgets again'
+                        : 'Hide this property from all widgets (restore via "Show hidden")'}
+                      style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1, marginLeft: 4 }}
+                    >{p.hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}</button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -402,8 +410,9 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
 }
 
 // ── Maturity Schedule ─────────────────────────────────────────────────────────
-function MaturityWidget({ projects }) {
+function MaturityWidget({ projects, onSetHidden, onPatch, pinUnlocked }) {
   const [sourceFilter, setSourceFilter] = useState('all');
+  const [editing, setEditing] = useState(null); // project row open in the edit modal
   const rows = useMemo(() => projects
     .filter(p => p.maturity_date && (sourceFilter === 'all' || p.source === sourceFilter))
     .sort((a, b) => a.maturity_date.localeCompare(b.maturity_date)), [projects, sourceFilter]);
@@ -416,13 +425,14 @@ function MaturityWidget({ projects }) {
     return ['green', m < 24 ? `${Math.ceil(m)} mo` : `${(m / 12).toFixed(1)} yr`];
   };
 
+  const cols = pinUnlocked ? 6 : 5;
   let lastYear = null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
       <div><SourceFilter value={sourceFilter} onChange={setSourceFilter} /></div>
       <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th>Maturity</th><th>Property</th><th>Lender</th><th style={{ textAlign: 'right' }}>Loan</th><th>Time left</th></tr></thead>
+          <thead><tr><th>Maturity</th><th>Property</th><th>Lender</th><th style={{ textAlign: 'right' }}>Loan</th><th>Time left</th>{pinUnlocked && <th />}</tr></thead>
           <tbody>
             {rows.map(p => {
               const year = p.maturity_date.slice(0, 4);
@@ -432,14 +442,28 @@ function MaturityWidget({ projects }) {
               return (
                 <React.Fragment key={p.id}>
                   {yearHeader && (
-                    <tr><td colSpan={5} style={{ background: 'var(--panel2)', color: 'var(--muted)', fontSize: '0.66rem', letterSpacing: '0.06em', fontWeight: 600, textTransform: 'uppercase', padding: '0.35rem 0.85rem' }}>{year}</td></tr>
+                    <tr><td colSpan={cols} style={{ background: 'var(--panel2)', color: 'var(--muted)', fontSize: '0.66rem', letterSpacing: '0.06em', fontWeight: 600, textTransform: 'uppercase', padding: '0.35rem 0.85rem' }}>{year}</td></tr>
                   )}
                   <tr>
-                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(p.maturity_date)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(p.maturity_date)}<Ov p={p} k="maturity_date" type="date" /></td>
                     <td>{p.name}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.lender || '—'}</td>
-                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{p.lender || '—'}<Ov p={p} k="lender" type="text" /></td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}<Ov p={p} k="loan_amount" type="currency" /></td>
                     <td><span className={`pill ${cls}`}>{label}</span></td>
+                    {pinUnlocked && (
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={() => setEditing(p)}
+                          title="Edit deal figures / maturity, or remove the project (sold)"
+                          style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
+                        ><PencilIcon size={12} /></button>
+                        <button
+                          onClick={() => onSetHidden(p, true)}
+                          title={'Hide this property from all widgets (restore via "Show hidden" in the Leverage Tracker)'}
+                          style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1, marginLeft: 4 }}
+                        ><EyeOffIcon size={13} /></button>
+                      </td>
+                    )}
                   </tr>
                 </React.Fragment>
               );
@@ -448,6 +472,14 @@ function MaturityWidget({ projects }) {
         </table>
         {rows.length === 0 && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>No maturities to show yet.</div>}
       </div>
+      {editing && (
+        <ProjectEditModal
+          project={editing}
+          onSave={ov => onPatch(editing, { overrides: ov })}
+          onRemove={() => onPatch(editing, { removed: true })}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1183,10 +1215,17 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
           onSetCategory={(p, category) => patchProject(p, { category })}
           onSetHidden={(p, hidden) => patchProject(p, { hidden })}
           onPatch={(p, patch) => patchProject(p, patch)}
-          pinUnlocked={pinUnlocked} requirePin={requirePin}
+          pinUnlocked={pinUnlocked}
         />
       );
-      case 'maturities': return <MaturityWidget projects={visibleProjects} />;
+      case 'maturities': return (
+        <MaturityWidget
+          projects={visibleProjects}
+          onSetHidden={(p, hidden) => patchProject(p, { hidden })}
+          onPatch={(p, patch) => patchProject(p, patch)}
+          pinUnlocked={pinUnlocked}
+        />
+      );
       case 'guaranty':   return <GuarantyWidget projects={visibleProjects} />;
       case 'curve':      return <CurveWidget pinUnlocked={pinUnlocked} requirePin={requirePin} />;
       default: return null;
