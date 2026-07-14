@@ -85,7 +85,15 @@ between sessions.
   (PIN-gated) — with a matching filter and sortable column. The eye button
   on a row **hides that property from every widget** (and from all totals);
   hidden rows survive re-uploads and can be restored via the "Show hidden"
-  toggle.
+  toggle. The pencil button opens a **per-project editor** (PIN-gated) for
+  figures the schedules don't capture — lender, maturity, loan, cost, value,
+  LTC/LTV, guaranty % and $. Edits apply on top of the schedule data, survive
+  re-uploads, mark their cells with an orange dot (hover shows the schedule
+  figure), and can be reset to the schedule value per field; LTC/LTV
+  recalculate automatically when their inputs are edited. The editor's
+  **Remove project** action takes a sold/paid-off deal out of every widget
+  permanently (it stays removed on re-upload); restore any time via
+  "Removed (n)" in the toolbar.
 - **Maturity Schedule** — every loan maturity from both schedules in one
   chronological list, grouped by year, color-coded by time remaining
   (<6 mo red, <12 mo yellow). The covenant page keeps its own maturities.
@@ -103,13 +111,15 @@ between sessions.
 Parsing is header-based, so column reordering in future workbook versions is
 tolerated; on the Stabilized sheet only the residential section (below
 "TT Commercial Subtotal") is imported. Re-uploading replaces that schedule's
-data; fund assignments, type flags, and hidden properties are preserved.
+data; fund assignments, type flags, hidden/removed state, and manual field
+edits are preserved.
 
 **Setup:** run [`db/debt_dashboard_setup.sql`](db/debt_dashboard_setup.sql)
 once in the Supabase SQL editor (creates `debt_projects`, `curve_snapshots`,
 `rate_history`, and `dashboard_layouts`). The script is idempotent — installs
-created before the type flag / hide feature should re-run it once to pick up
-the new `category` and `hidden` columns.
+created before the type flag / hide / remove / manual-edit features should
+re-run it once to pick up the new `category`, `hidden`, `removed`, and
+`overrides` columns.
 
 ### Daily Rate Pull
 [`.github/workflows/daily-curves.yml`](.github/workflows/daily-curves.yml)
