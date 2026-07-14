@@ -9,8 +9,11 @@ import { formatCurrency } from '../format.js';
 import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
 import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 
-// Upsert variant of the shared headers (PostgREST merges on the on_conflict target)
-const SB_UPSERT = { ...SB_HEADERS, Prefer: 'return=representation,resolution=merge-duplicates' };
+// Upsert variant of the shared headers (PostgREST merges on the on_conflict
+// target). Must be built per-call: setAccessToken() swaps the Authorization
+// header on SB_HEADERS after sign-in, and a module-level copy would freeze the
+// pre-login anon key and every write would fail row-level security (42501).
+const SB_UPSERT = () => ({ ...SB_HEADERS, Prefer: 'return=representation,resolution=merge-duplicates' });
 
 const LAYOUT_KEY = 'shared'; // one company-wide layout; per-person keys can come later
 
@@ -572,7 +575,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
       if (ty.length > 1) rows.push({ curve_date: todayISO(), curve_type: 'ust_10y', points: ty.map(r => ({ date: r.date, rate: parseFloat(r.rate) })), source: 'manual' });
       if (!rows.length) { setStatus('No active curve found to snapshot.'); return; }
       const res = await fetch(`${SB_URL}/rest/v1/curve_snapshots?on_conflict=curve_date,curve_type`, {
-        method: 'POST', headers: SB_UPSERT, body: JSON.stringify(rows),
+        method: 'POST', headers: SB_UPSERT(), body: JSON.stringify(rows),
       });
       if (!res.ok) throw new Error(await res.text());
       setStatus(`✓ Saved today's ${rows.map(r => (r.curve_type === 'sofr_1m' ? 'SOFR' : '10Y')).join(' + ')} snapshot`);
@@ -624,7 +627,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
         const rows = [{ curve_date: f.date, curve_type: 'sofr_1m', points: f.sofrPoints, source: 'chatham_backfill' }];
         if (f.tenYPoints.length >= 2) rows.push({ curve_date: f.date, curve_type: 'ust_10y', points: f.tenYPoints, source: 'chatham_backfill' });
         const res = await fetch(`${SB_URL}/rest/v1/curve_snapshots?on_conflict=curve_date,curve_type`, {
-          method: 'POST', headers: SB_UPSERT, body: JSON.stringify(rows),
+          method: 'POST', headers: SB_UPSERT(), body: JSON.stringify(rows),
         });
         if (!res.ok) throw new Error(await res.text());
         saved++;
@@ -822,7 +825,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
     saveTimer.current = setTimeout(async () => {
       try {
         await fetch(`${SB_URL}/rest/v1/dashboard_layouts?on_conflict=key`, {
-          method: 'POST', headers: SB_UPSERT,
+          method: 'POST', headers: SB_UPSERT(),
           body: JSON.stringify({ key: LAYOUT_KEY, layout: nextLayout, widgets: nextWidgets, updated_at: new Date().toISOString() }),
         });
       } catch (err) { console.warn('Could not save layout:', err); }
