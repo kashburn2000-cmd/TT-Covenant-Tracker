@@ -4,9 +4,10 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
-import { LockIcon, CameraIcon, EyeIcon, EyeOffIcon } from '../icons.jsx';
+import { LockIcon, CameraIcon, EyeIcon, EyeOffIcon, PencilIcon } from '../icons.jsx';
 import { formatCurrency } from '../format.js';
 import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
+import { OVERRIDE_FIELDS, applyOverrides, fieldToInput, parseFieldInput, sameValue } from '../projectOverrides.js';
 import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
@@ -98,20 +99,135 @@ function SourceFilter({ value, onChange }) {
   );
 }
 
+// ── Project edit modal ────────────────────────────────────────────────────────
+// Manual edits for figures the schedules don't capture (payoffs, extensions,
+// re-margins…). Edits are stored as overrides on top of the schedule data, so
+// they survive re-uploads and each field can be reset to the schedule value.
+const fmtSched = (type, v) => {
+  if (v == null) return '—';
+  if (type === 'currency') return formatCurrency(v);
+  if (type === 'percent') return `${Math.round(v * 1e6) / 1e4}%`;
+  if (type === 'date') return fmtDate(v);
+  return String(v);
+};
+
+function ProjectEditModal({ project, onSave, onRemove, onClose }) {
+  const [drafts, setDrafts] = useState(() => Object.fromEntries(
+    OVERRIDE_FIELDS.map(f => [f.key, fieldToInput(f.type, project[f.key])])
+  ));
+  const [dirty, setDirty] = useState({});
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const setDraft = (key, value) => {
+    setDrafts(d => ({ ...d, [key]: value }));
+    setDirty(d => ({ ...d, [key]: true }));
+    setError('');
+  };
+
+  function save() {
+    const next = { ...(project.overrides || {}) };
+    for (const f of OVERRIDE_FIELDS) {
+      if (!dirty[f.key]) continue;
+      const parsed = parseFieldInput(f.type, drafts[f.key]);
+      if (!parsed.ok) { setError(`${f.label}: could not read "${drafts[f.key]}"`); return; }
+      // An edit that matches the schedule isn't an override — drop it so the
+      // field tracks future uploads again.
+      if (sameValue(parsed.value, project._base[f.key])) delete next[f.key];
+      else next[f.key] = parsed.value;
+    }
+    onSave(next);
+    onClose();
+  }
+
+  function remove() {
+    const ok = window.confirm(
+      `Remove "${project.name}" from the dashboard?\n\n` +
+      'Use this when a project is sold or paid off. It disappears from every widget and stays removed on future schedule uploads. ' +
+      'You can restore it any time via "Removed" in the Leverage Tracker.'
+    );
+    if (!ok) return;
+    onRemove();
+    onClose();
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderTop: `3px solid ${TT_ORANGE}`, borderRadius: 6, padding: '1.5rem 1.75rem', width: 460, maxWidth: '92vw', maxHeight: '88vh', overflow: 'auto' }}>
+        <div style={{ fontSize: '0.72rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>Edit project</div>
+        <div style={{ fontSize: '0.95rem', fontWeight: 600, margin: '0.25rem 0 0.35rem' }}>{project.name}</div>
+        <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '1rem' }}>
+          Edits apply on top of the uploaded schedule and survive re-uploads. Fields left matching the schedule keep tracking future uploads.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '0.45rem 0.6rem', alignItems: 'center' }}>
+          {OVERRIDE_FIELDS.map(f => {
+            const overridden = f.key in (project.overrides || {});
+            const touched = overridden || dirty[f.key];
+            return (
+              <React.Fragment key={f.key}>
+                <label style={{ fontSize: '0.72rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{f.label}</label>
+                <div>
+                  <input
+                    type={f.type === 'date' ? 'date' : 'text'}
+                    value={drafts[f.key]}
+                    onChange={e => setDraft(f.key, e.target.value)}
+                    placeholder={f.type === 'percent' ? 'e.g. 65' : ''}
+                    style={{ ...selStyle, width: '100%', boxSizing: 'border-box', borderColor: touched ? TT_ORANGE : 'var(--border)' }}
+                  />
+                  {touched && (
+                    <div style={{ fontSize: '0.64rem', color: 'var(--faint)', marginTop: 2 }}>Schedule: {fmtSched(f.type, project._base[f.key])}</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => setDraft(f.key, fieldToInput(f.type, project._base[f.key]))}
+                  title={`Reset to schedule value (${fmtSched(f.type, project._base[f.key])})`}
+                  className="btn btn-ghost btn-sm"
+                  style={{ visibility: touched ? 'visible' : 'hidden', padding: '0.2rem 0.4rem' }}
+                >↺</button>
+              </React.Fragment>
+            );
+          })}
+        </div>
+        {error && <div style={{ fontSize: '0.72rem', color: 'var(--fail)', marginTop: '0.75rem' }}>{error}</div>}
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem', alignItems: 'center' }}>
+          <button onClick={remove} className="btn btn-danger btn-sm" title="Remove this project from the dashboard (sold / paid off)">Remove project…</button>
+          <button onClick={onClose} className="btn btn-sm" style={{ marginLeft: 'auto' }}>Cancel</button>
+          <button onClick={save} className="btn btn-primary btn-sm">Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Orange dot marking a manually edited value; hover shows the schedule figure
+const Ov = ({ p, k, type }) => (p._edited?.[k]
+  ? <span title={`Manually edited — schedule: ${fmtSched(type, p._base[k])}`} style={{ color: TT_ORANGE, marginLeft: 3, cursor: 'help' }}>•</span>
+  : null);
+
 // ── Leverage Tracker ──────────────────────────────────────────────────────────
-function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, pinUnlocked, requirePin }) {
+function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPatch, pinUnlocked, requirePin }) {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [fundFilter, setFundFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showHidden, setShowHidden] = useState(false);
+  const [showRemoved, setShowRemoved] = useState(false);
   const [editingFund, setEditingFund] = useState(null); // project id being edited
   const [fundDraft, setFundDraft] = useState('');
   const [editingCategory, setEditingCategory] = useState(null); // project id being edited
+  const [editing, setEditing] = useState(null); // project row open in the edit modal
   const sort = useSort('name');
 
   const funds = useMemo(() => [...new Set(projects.map(p => p.fund).filter(Boolean))].sort(), [projects]);
-  const hiddenCount = useMemo(() => projects.filter(p => p.hidden).length, [projects]);
+  const removed = useMemo(() => projects.filter(p => p.removed), [projects]);
+  const hiddenCount = useMemo(() => projects.filter(p => p.hidden && !p.removed).length, [projects]);
   const rows = useMemo(() => projects
+    .filter(p => !p.removed)
     .filter(p => showHidden || !p.hidden)
     .filter(p => sourceFilter === 'all' || p.source === sourceFilter)
     .filter(p => fundFilter === 'all' || (fundFilter === '(unassigned)' ? !p.fund : p.fund === fundFilter))
@@ -159,7 +275,28 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, pinUn
             Show hidden ({hiddenCount})
           </label>
         )}
+        {removed.length > 0 && (
+          <button onClick={() => setShowRemoved(v => !v)} className="btn btn-ghost btn-sm">
+            Removed ({removed.length}) {showRemoved ? '▴' : '▾'}
+          </button>
+        )}
       </div>
+      {showRemoved && removed.length > 0 && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem' }}>
+          <div style={{ color: 'var(--muted)', marginBottom: 6 }}>Removed projects (sold / paid off) — excluded from every widget, and stay removed when schedules are re-uploaded.</div>
+          {removed.map(p => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '2px 0' }}>
+              <span>{p.name}</span>
+              <span style={{ color: 'var(--faint)' }}>{SOURCE_LABEL[p.source]} · {fmtM(p.loan_amount)}</span>
+              <button
+                onClick={() => requirePin(() => onPatch(p, { removed: false }))}
+                title={pinUnlocked ? 'Restore this project to the dashboard' : 'Unlock to restore'}
+                className="btn btn-sm" style={{ marginLeft: 'auto' }}
+              >Restore</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
         <StatTile label="Portfolio LTC" value={fmtPct(totals.ltc)} sub="Σ loan ÷ Σ project cost (construction)" />
         <StatTile label="Portfolio LTV" value={fmtPct(totals.ltv)} sub="Σ loan ÷ Σ value" />
@@ -224,20 +361,25 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, pinUn
                   )}
                 </td>
                 <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{SOURCE_LABEL[p.source]}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{p.lender || '—'}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.project_cost)}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.appraised_value)}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltc)}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltv)}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{p.maturity_date ? fmtDate(p.maturity_date) : (p.is_committed ? 'Not closed' : '—')}</td>
-                <td style={{ textAlign: 'right' }}>
+                <td style={{ whiteSpace: 'nowrap' }}>{p.lender || '—'}<Ov p={p} k="lender" type="text" /></td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}<Ov p={p} k="loan_amount" type="currency" /></td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.project_cost)}<Ov p={p} k="project_cost" type="currency" /></td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.appraised_value)}<Ov p={p} k="appraised_value" type="currency" /></td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltc)}<Ov p={p} k="ltc" type="percent" /></td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltv)}<Ov p={p} k="ltv" type="percent" /></td>
+                <td style={{ whiteSpace: 'nowrap' }}>{p.maturity_date ? fmtDate(p.maturity_date) : (p.is_committed ? 'Not closed' : '—')}<Ov p={p} k="maturity_date" type="date" /></td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <button
+                    onClick={() => requirePin(() => setEditing(p))}
+                    title={pinUnlocked ? 'Edit deal figures / maturity, or remove the project' : 'Unlock to edit'}
+                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
+                  ><PencilIcon size={12} /></button>
                   <button
                     onClick={() => requirePin(() => onSetHidden(p, !p.hidden))}
                     title={p.hidden
                       ? (pinUnlocked ? 'Restore — show this property in all widgets again' : 'Unlock to restore')
                       : (pinUnlocked ? 'Hide this property from all widgets (restore via "Show hidden")' : 'Unlock to hide')}
-                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
+                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1, marginLeft: 4 }}
                   >{p.hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}</button>
                 </td>
               </tr>
@@ -247,6 +389,14 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, pinUn
         <datalist id="tt-fund-options">{funds.map(f => <option key={f} value={f} />)}</datalist>
         {rows.length === 0 && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>No projects — upload the At Risk / Stabilized schedules above.</div>}
       </div>
+      {editing && (
+        <ProjectEditModal
+          project={editing}
+          onSave={ov => onPatch(editing, { overrides: ov })}
+          onRemove={() => onPatch(editing, { removed: true })}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
@@ -959,9 +1109,9 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       if (!ok) { setUploadStatus(''); return; }
 
       setUploadStatus('Saving…');
-      // Carry manual edits (fund tag, type flag, hidden state) across the
-      // replace by matching on name_key. An existing category wins over the
-      // freshly inferred one so manual overrides stick.
+      // Carry manual edits (fund tag, type flag, hidden/removed state, field
+      // overrides) across the replace by matching on name_key. An existing
+      // category wins over the freshly inferred one so manual overrides stick.
       const existing = projects.filter(p => p.source === source);
       const prevByKey = new Map(existing.map(p => [p.name_key, p]));
       const rows = parsedProjects.map(p => {
@@ -971,6 +1121,8 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
           fund: prev?.fund || null,
           category: prev?.category || p.category || null,
           hidden: prev?.hidden || false,
+          removed: prev?.removed || false,
+          overrides: prev?.overrides || {},
           uploaded_at: new Date().toISOString(),
         };
       });
@@ -1015,18 +1167,22 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
     }
   }
 
+  // Every widget shows effective values (schedule data + manual overrides).
   // Hidden rows only ever render inside the Leverage Tracker (via its "Show
-  // hidden" toggle); every other widget sees the visible set.
-  const visibleProjects = useMemo(() => projects.filter(p => !p.hidden), [projects]);
+  // hidden" toggle), removed rows only in its "Removed" manager; every other
+  // widget sees the visible set.
+  const merged = useMemo(() => projects.map(applyOverrides), [projects]);
+  const visibleProjects = useMemo(() => merged.filter(p => !p.hidden && !p.removed), [merged]);
 
   function renderWidget(key) {
     switch (key) {
       case 'leverage':   return (
         <LeverageWidget
-          projects={projects}
+          projects={merged}
           onSetFund={(p, fund) => patchProject(p, { fund })}
           onSetCategory={(p, category) => patchProject(p, { category })}
           onSetHidden={(p, hidden) => patchProject(p, { hidden })}
+          onPatch={(p, patch) => patchProject(p, patch)}
           pinUnlocked={pinUnlocked} requirePin={requirePin}
         />
       );
