@@ -28,12 +28,19 @@ CREATE TABLE IF NOT EXISTS debt_projects (
   guaranty_pct numeric,            -- Repayment Guaranty % — TTH (decimal)
   guaranty_amt numeric,            -- Repayment Guaranty $ — TTH
   fund text,                       -- manual entry on the site; not present in the sheets
+  category text CHECK (category IN ('residential', 'commercial')), -- inferred from Property Type on upload; manually overridable on the site
+  hidden boolean NOT NULL DEFAULT false, -- hidden rows are excluded from every widget; survives re-uploads via name_key
   is_committed boolean DEFAULT false, -- At Risk rows with no closed loan yet
   sort_order int,
   uploaded_at timestamptz DEFAULT now(),
   UNIQUE (source, name_key)
 );
 CREATE INDEX IF NOT EXISTS debt_projects_source_idx ON debt_projects (source);
+
+-- Migration for installs created before the residential/commercial flag and
+-- hide feature existed — no-ops on fresh installs, safe to re-run any time.
+ALTER TABLE debt_projects ADD COLUMN IF NOT EXISTS category text CHECK (category IN ('residential', 'commercial'));
+ALTER TABLE debt_projects ADD COLUMN IF NOT EXISTS hidden boolean NOT NULL DEFAULT false;
 
 -- One row per (day, curve). points is the full forward curve for that day:
 -- [{ "date": "2026-08-01", "rate": 4.12 }, ...]. Written automatically by the

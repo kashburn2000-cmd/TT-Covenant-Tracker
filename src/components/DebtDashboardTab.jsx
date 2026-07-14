@@ -4,7 +4,7 @@ import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
-import { LockIcon, CameraIcon } from '../icons.jsx';
+import { LockIcon, CameraIcon, EyeIcon, EyeOffIcon } from '../icons.jsx';
 import { formatCurrency } from '../format.js';
 import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
 import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
@@ -86,6 +86,7 @@ function Th({ label, k, sort, right }) {
 // width:auto overrides the app-wide `select { width: 100% }` rule
 const selStyle = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '0.25rem 0.5rem', fontFamily: 'inherit', fontSize: '0.72rem', outline: 'none', width: 'auto' };
 const SOURCE_LABEL = { at_risk: 'Construction', stabilized: 'Stabilized' };
+const CATEGORY_LABEL = { residential: 'Residential', commercial: 'Commercial' };
 
 function SourceFilter({ value, onChange }) {
   return (
@@ -98,28 +99,37 @@ function SourceFilter({ value, onChange }) {
 }
 
 // ── Leverage Tracker ──────────────────────────────────────────────────────────
-function LeverageWidget({ projects, onSetFund, pinUnlocked, requirePin }) {
+function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, pinUnlocked, requirePin }) {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [fundFilter, setFundFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [showHidden, setShowHidden] = useState(false);
   const [editingFund, setEditingFund] = useState(null); // project id being edited
   const [fundDraft, setFundDraft] = useState('');
+  const [editingCategory, setEditingCategory] = useState(null); // project id being edited
   const sort = useSort('name');
 
   const funds = useMemo(() => [...new Set(projects.map(p => p.fund).filter(Boolean))].sort(), [projects]);
+  const hiddenCount = useMemo(() => projects.filter(p => p.hidden).length, [projects]);
   const rows = useMemo(() => projects
+    .filter(p => showHidden || !p.hidden)
     .filter(p => sourceFilter === 'all' || p.source === sourceFilter)
     .filter(p => fundFilter === 'all' || (fundFilter === '(unassigned)' ? !p.fund : p.fund === fundFilter))
-    .sort(sort.cmp), [projects, sourceFilter, fundFilter, sort.sortKey, sort.sortDir]);
+    .filter(p => categoryFilter === 'all' || (categoryFilter === '(unset)' ? !p.category : p.category === categoryFilter))
+    .sort(sort.cmp), [projects, sourceFilter, fundFilter, categoryFilter, showHidden, sort.sortKey, sort.sortDir]);
 
-  // Weighted portfolio ratios: only rows carrying both sides of each ratio count
+  // Weighted portfolio ratios: only rows carrying both sides of each ratio
+  // count, and hidden rows never count (even when revealed via "Show hidden").
   const totals = useMemo(() => {
-    let loanC = 0, cost = 0, loanV = 0, value = 0, loanAll = 0;
+    let loanC = 0, cost = 0, loanV = 0, value = 0, loanAll = 0, n = 0;
     for (const p of rows) {
+      if (p.hidden) continue;
+      n++;
       if (p.loan_amount != null) loanAll += p.loan_amount;
       if (p.loan_amount != null && p.project_cost) { loanC += p.loan_amount; cost += p.project_cost; }
       if (p.loan_amount != null && p.appraised_value) { loanV += p.loan_amount; value += p.appraised_value; }
     }
-    return { ltc: cost ? loanC / cost : null, ltv: value ? loanV / value : null, loanAll };
+    return { ltc: cost ? loanC / cost : null, ltv: value ? loanV / value : null, loanAll, n };
   }, [rows]);
 
   const commitFund = (p) => {
@@ -137,16 +147,29 @@ function LeverageWidget({ projects, onSetFund, pinUnlocked, requirePin }) {
           {funds.map(f => <option key={f} value={f}>{f}</option>)}
           <option value="(unassigned)">Unassigned</option>
         </select>
+        <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={selStyle}>
+          <option value="all">All types</option>
+          <option value="residential">Residential</option>
+          <option value="commercial">Commercial</option>
+          <option value="(unset)">Untyped</option>
+        </select>
+        {hiddenCount > 0 && (
+          <label style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} style={{ accentColor: TT_ORANGE }} />
+            Show hidden ({hiddenCount})
+          </label>
+        )}
       </div>
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
         <StatTile label="Portfolio LTC" value={fmtPct(totals.ltc)} sub="Σ loan ÷ Σ project cost (construction)" />
         <StatTile label="Portfolio LTV" value={fmtPct(totals.ltv)} sub="Σ loan ÷ Σ value" />
-        <StatTile label="Total debt" value={fmtM(totals.loanAll)} sub={`${rows.length} project${rows.length === 1 ? '' : 's'}`} />
+        <StatTile label="Total debt" value={fmtM(totals.loanAll)} sub={`${totals.n} project${totals.n === 1 ? '' : 's'}`} />
       </div>
       <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr>
             <Th label="Property" k="name" sort={sort} />
+            <Th label="Type" k="category" sort={sort} />
             <Th label="Fund" k="fund" sort={sort} />
             <Th label="Stage" k="source" sort={sort} />
             <Th label="Lender" k="lender" sort={sort} />
@@ -156,11 +179,33 @@ function LeverageWidget({ projects, onSetFund, pinUnlocked, requirePin }) {
             <Th label="LTC" k="ltc" sort={sort} right />
             <Th label="LTV" k="ltv" sort={sort} right />
             <Th label="Maturity" k="maturity_date" sort={sort} />
+            <th />
           </tr></thead>
           <tbody>
             {rows.map(p => (
-              <tr key={p.id}>
+              <tr key={p.id} style={p.hidden ? { opacity: 0.45 } : undefined}>
                 <td style={{ whiteSpace: 'nowrap' }}>{p.name}{p.is_committed && <span className="pill blue" style={{ marginLeft: 6 }}>COMMITTED</span>}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  {editingCategory === p.id ? (
+                    <select
+                      autoFocus value={p.category || ''}
+                      onChange={e => { onSetCategory(p, e.target.value || null); setEditingCategory(null); }}
+                      onBlur={() => setEditingCategory(null)}
+                      onKeyDown={e => { if (e.key === 'Escape') setEditingCategory(null); }}
+                      style={{ ...selStyle, padding: '1px 4px' }}
+                    >
+                      <option value="">—</option>
+                      <option value="residential">Residential</option>
+                      <option value="commercial">Commercial</option>
+                    </select>
+                  ) : (
+                    <span
+                      onClick={() => requirePin(() => setEditingCategory(p.id))}
+                      title={pinUnlocked ? 'Click to edit type' : 'Unlock to edit type'}
+                      style={{ cursor: 'pointer', color: p.category ? 'var(--muted)' : 'var(--faint)', borderBottom: '1px dashed var(--border)' }}
+                    >{CATEGORY_LABEL[p.category] || '+ set'}</span>
+                  )}
+                </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {editingFund === p.id ? (
                     <input
@@ -186,6 +231,15 @@ function LeverageWidget({ projects, onSetFund, pinUnlocked, requirePin }) {
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltc)}</td>
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltv)}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{p.maturity_date ? fmtDate(p.maturity_date) : (p.is_committed ? 'Not closed' : '—')}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <button
+                    onClick={() => requirePin(() => onSetHidden(p, !p.hidden))}
+                    title={p.hidden
+                      ? (pinUnlocked ? 'Restore — show this property in all widgets again' : 'Unlock to restore')
+                      : (pinUnlocked ? 'Hide this property from all widgets (restore via "Show hidden")' : 'Unlock to hide')}
+                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
+                  >{p.hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}</button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -900,15 +954,26 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       const ok = window.confirm(
         `Found ${parsedProjects.length} projects in the ${label} schedule.` +
         (warnings.length ? `\n\nWarnings:\n${warnings.join('\n')}` : '') +
-        `\n\nReplace the current ${label} data? (Fund assignments are kept.)`
+        `\n\nReplace the current ${label} data? (Fund tags, type flags, and hidden properties are kept.)`
       );
       if (!ok) { setUploadStatus(''); return; }
 
       setUploadStatus('Saving…');
-      // Carry manual fund tags across the replace by matching on name_key
+      // Carry manual edits (fund tag, type flag, hidden state) across the
+      // replace by matching on name_key. An existing category wins over the
+      // freshly inferred one so manual overrides stick.
       const existing = projects.filter(p => p.source === source);
-      const fundByKey = new Map(existing.filter(p => p.fund).map(p => [p.name_key, p.fund]));
-      const rows = parsedProjects.map(p => ({ ...p, fund: fundByKey.get(p.name_key) || null, uploaded_at: new Date().toISOString() }));
+      const prevByKey = new Map(existing.map(p => [p.name_key, p]));
+      const rows = parsedProjects.map(p => {
+        const prev = prevByKey.get(p.name_key);
+        return {
+          ...p,
+          fund: prev?.fund || null,
+          category: prev?.category || p.category || null,
+          hidden: prev?.hidden || false,
+          uploaded_at: new Date().toISOString(),
+        };
+      });
 
       const del = await fetch(`${SB_URL}/rest/v1/debt_projects?source=eq.${source}`, { method: 'DELETE', headers: SB_HEADERS });
       if (!del.ok) throw new Error('Could not clear old rows: HTTP ' + del.status);
@@ -924,28 +989,49 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       setUploadTimes(t => ({ ...t, [stampKey]: now }));
       setUploadStatus(`✓ ${label} schedule updated — ${inserted.length} projects loaded from ${file.name}`);
     } catch (err) {
-      setUploadStatus(`Error uploading ${label} schedule: ` + err.message);
+      const hint = /PGRST204|column/.test(err.message)
+        ? ' — if this mentions a missing column, re-run db/debt_dashboard_setup.sql once in the Supabase SQL editor.'
+        : '';
+      setUploadStatus(`Error uploading ${label} schedule: ` + err.message + hint);
     }
   }
 
-  async function setFund(project, fund) {
-    setProjects(prev => prev.map(p => (p.id === project.id ? { ...p, fund } : p)));
+  // Optimistic single-row update (fund tag, type flag, hidden state) with
+  // rollback of exactly the patched fields on failure.
+  async function patchProject(project, patch) {
+    setProjects(prev => prev.map(p => (p.id === project.id ? { ...p, ...patch } : p)));
     try {
       const res = await fetch(`${SB_URL}/rest/v1/debt_projects?id=eq.${project.id}`, {
-        method: 'PATCH', headers: SB_HEADERS, body: JSON.stringify({ fund }),
+        method: 'PATCH', headers: SB_HEADERS, body: JSON.stringify(patch),
       });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!res.ok) throw new Error(await res.text() || 'HTTP ' + res.status);
     } catch (err) {
-      alert('Could not save fund assignment: ' + err.message);
-      setProjects(prev => prev.map(p => (p.id === project.id ? { ...p, fund: project.fund } : p)));
+      const hint = /PGRST204|column/.test(err.message)
+        ? '\n\nIf this mentions a missing column, re-run db/debt_dashboard_setup.sql once in the Supabase SQL editor to add the new columns.'
+        : '';
+      alert('Could not save change: ' + err.message + hint);
+      const revert = Object.fromEntries(Object.keys(patch).map(k => [k, project[k]]));
+      setProjects(prev => prev.map(p => (p.id === project.id ? { ...p, ...revert } : p)));
     }
   }
+
+  // Hidden rows only ever render inside the Leverage Tracker (via its "Show
+  // hidden" toggle); every other widget sees the visible set.
+  const visibleProjects = useMemo(() => projects.filter(p => !p.hidden), [projects]);
 
   function renderWidget(key) {
     switch (key) {
-      case 'leverage':   return <LeverageWidget projects={projects} onSetFund={setFund} pinUnlocked={pinUnlocked} requirePin={requirePin} />;
-      case 'maturities': return <MaturityWidget projects={projects} />;
-      case 'guaranty':   return <GuarantyWidget projects={projects} />;
+      case 'leverage':   return (
+        <LeverageWidget
+          projects={projects}
+          onSetFund={(p, fund) => patchProject(p, { fund })}
+          onSetCategory={(p, category) => patchProject(p, { category })}
+          onSetHidden={(p, hidden) => patchProject(p, { hidden })}
+          pinUnlocked={pinUnlocked} requirePin={requirePin}
+        />
+      );
+      case 'maturities': return <MaturityWidget projects={visibleProjects} />;
+      case 'guaranty':   return <GuarantyWidget projects={visibleProjects} />;
       case 'curve':      return <CurveWidget pinUnlocked={pinUnlocked} requirePin={requirePin} />;
       default: return null;
     }

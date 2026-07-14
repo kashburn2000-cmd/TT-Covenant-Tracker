@@ -11,9 +11,17 @@
 // files carry stray spaces ("Property             Type").
 const norm = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase();
 
-// Stable key for matching the same project across uploads (fund tags survive
-// re-uploads by joining on this).
+// Stable key for matching the same project across uploads (fund tags, type
+// flags, and hidden state survive re-uploads by joining on this).
 export const nameKey = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Residential vs. commercial flag, inferred from the sheet's Property Type
+// text. Manual overrides on the site win over this on re-upload.
+export function inferCategory(propertyType) {
+  const t = norm(propertyType);
+  if (!t) return null;
+  return /resi|multi ?family|apartment|build.for.rent|bfr|senior/.test(t) ? 'residential' : 'commercial';
+}
 
 // Numeric cell → number or null. Sheets use "-" and "N/A" for missing values.
 function num(v) {
@@ -116,6 +124,7 @@ export function parseAtRiskRows(rows) {
       name_key: nameKey(name),
       location: String(get('location') || '').trim() || null,
       property_type: String(get('type') || '').trim() || null,
+      category: inferCategory(get('type')),
       units: get('units') != null ? String(get('units')).trim() : null,
       lender: String(get('lender') || '').trim() || null,
       maturity_date: maturity,
@@ -203,6 +212,7 @@ export function parseStabilizedRows(rows) {
       name_key: nameKey(rawName),
       location: String(get('location') || '').trim() || null,
       property_type: type || 'Residential',
+      category: inferCategory(type || 'Residential'),
       units: get('units') != null ? String(get('units')).trim() : null,
       lender: String(get('lender') || '').trim() || null,
       maturity_date: cellToISODate(get('maturity')),
