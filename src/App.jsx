@@ -2139,9 +2139,13 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
                     {/* ── Actions ── */}
                     <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
-                      <button onClick={() => requirePin(() => startEdit(r))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'var(--muted)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Edit' : 'Unlock to edit'}><PencilIcon size={12} /></button>
-                      <button onClick={() => requirePin(() => toggleHidden(r.id, r.hidden))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? (r.hidden ? 'var(--pass)' : 'var(--muted)') : 'var(--disabled)', fontSize: '0.78rem', padding: '2px 5px' }} title={pinUnlocked ? (r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)') : 'Unlock to hide'}>{r.hidden ? '↩' : '⊘'}</button>
-                      <button onClick={() => requirePin(() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: pinUnlocked ? 'color-mix(in srgb, var(--fail) 27%, transparent)' : 'var(--disabled)', fontSize: '0.75rem', padding: '2px 5px' }} title={pinUnlocked ? 'Delete' : 'Unlock to delete'}>✕</button>
+                      {pinUnlocked && (
+                        <>
+                          <button onClick={() => startEdit(r)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.75rem', padding: '2px 5px' }} title="Edit"><PencilIcon size={12} /></button>
+                          <button onClick={() => toggleHidden(r.id, r.hidden)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: r.hidden ? 'var(--pass)' : 'var(--muted)', fontSize: '0.78rem', padding: '2px 5px' }} title={r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)'}>{r.hidden ? '↩' : '⊘'}</button>
+                          <button onClick={() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 27%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }} title="Delete">✕</button>
+                        </>
+                      )}
                       <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? 'var(--accent)' : 'var(--faint)' }} title="Show calculation">∑</button>
                       <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? 'var(--pass)' : 'var(--faint)' }} title="History &amp; notes"><ClockIcon size={12} /></button>
                     </td>
@@ -2984,7 +2988,7 @@ export default function App() {
         {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
         {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} />}
         {activeTab === "leasing"    && <LeasingTab />}
-        {activeTab === "pipeline"   && <PipelineTab />}
+        {activeTab === "pipeline"   && <PipelineTab pinUnlocked={pinUnlocked} />}
         {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
         {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
         {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}

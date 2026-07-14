@@ -578,13 +578,11 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
                   </td>
                   <td style={{ padding: '0.7rem 1rem', fontSize: '0.72rem', color: 'var(--faint)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.note || '—'}</td>
                   <td style={{ padding: '0.7rem 0.75rem', whiteSpace: 'nowrap' }}>
-                    {pinUnlocked ? (
+                    {pinUnlocked && (
                       <>
                         <button onClick={() => startEdit(d)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.75rem', padding: '2px 5px' }} title="Edit">✏</button>
                         <button onClick={() => setDeleteId(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 27%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }} title="Delete">✕</button>
                       </>
-                    ) : (
-                      <button onClick={() => requirePin(() => startEdit(d))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', opacity: 0.5, fontSize: '0.75rem', padding: '2px 5px' }} title="Unlock to edit"><LockIcon size={12} /></button>
                     )}
                   </td>
                 </tr>

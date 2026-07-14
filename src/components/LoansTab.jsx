@@ -1146,13 +1146,11 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                           : <span style={{ fontSize: '0.68rem', color: 'var(--border)' }}>—</span>}
                       </td>
                       <td style={{ padding: '0.65rem 0.5rem', whiteSpace: 'nowrap', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                        {pinUnlocked ? (
+                        {pinUnlocked && (
                           <>
                             <button onClick={() => startEdit(l)} title="Edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.75rem', padding: '2px 5px' }}>✏</button>
                             <button onClick={() => setConfirmDel(l.id)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 40%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }}>✕</button>
                           </>
-                        ) : (
-                          <button onClick={() => requirePin(() => startEdit(l))} title="Unlock to edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', opacity: 0.5, fontSize: '0.75rem', padding: '2px 5px' }}><LockIcon size={12} /></button>
                         )}
                       </td>
                     </tr>
