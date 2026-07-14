@@ -1038,9 +1038,13 @@ export function LoansTab({ pinUnlocked, requirePin }) {
 
   return (
     <div style={{ padding: '1.5rem 0', position: 'relative' }}>
-      <EditModal />
-      <ImportModal />
-      <ConfirmDeleteModal />
+      {/* Rendered as function calls, NOT <EditModal /> elements: these closures are
+          recreated on every render, so mounting them as JSX elements makes React see a
+          new component type each keystroke and remount the modal — blurring the focused
+          input after one character. */}
+      {EditModal()}
+      {ImportModal()}
+      {ConfirmDeleteModal()}
       {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msg.isErr ? 'color-mix(in srgb, var(--fail) 14%, var(--panel))' : 'color-mix(in srgb, var(--pass) 14%, var(--panel))', border: `1px solid ${msg.isErr ? 'var(--fail)' : 'var(--pass)'}`, color: msg.isErr ? 'var(--fail)' : 'var(--pass)', padding: '8px 18px', borderRadius: 6, fontSize: '0.78rem', boxShadow: 'var(--shadow)' }}>{msg.text}</div>}
 
       {/* ── Summary cards ── */}

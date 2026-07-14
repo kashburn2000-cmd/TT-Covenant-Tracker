@@ -578,8 +578,12 @@ export function PipelineTab({ pinUnlocked = true }) {
   // ── Main render ────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: '1.5rem 0', position: 'relative' }}>
-      <EditModal />
-      <ConfirmDeleteModal />
+      {/* Rendered as function calls, NOT <EditModal /> elements: these closures are
+          recreated on every render, so mounting them as JSX elements makes React see a
+          new component type each keystroke and remount the modal — blurring the focused
+          input after one character. */}
+      {EditModal()}
+      {ConfirmDeleteModal()}
       <input ref={packageInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={handlePackageFile} />
 
       {/* ── Empty state ── */}
