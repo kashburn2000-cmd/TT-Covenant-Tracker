@@ -80,6 +80,12 @@ between sessions.
   plus a sortable per-project table across both schedules. Fund is manual: the
   sheets don't carry it, so click the Fund cell to assign one (PIN-gated).
   Fund tags stick across re-uploads by property-name matching.
+  Each row also carries a **Residential / Commercial type flag** — inferred
+  from the sheet's Property Type on upload, click the Type cell to override
+  (PIN-gated) — with a matching filter and sortable column. The eye button
+  on a row **hides that property from every widget** (and from all totals);
+  hidden rows survive re-uploads and can be restored via the "Show hidden"
+  toggle.
 - **Maturity Schedule** — every loan maturity from both schedules in one
   chronological list, grouped by year, color-coded by time remaining
   (<6 mo red, <12 mo yellow). The covenant page keeps its own maturities.
@@ -97,11 +103,13 @@ between sessions.
 Parsing is header-based, so column reordering in future workbook versions is
 tolerated; on the Stabilized sheet only the residential section (below
 "TT Commercial Subtotal") is imported. Re-uploading replaces that schedule's
-data; fund assignments are preserved.
+data; fund assignments, type flags, and hidden properties are preserved.
 
 **Setup:** run [`db/debt_dashboard_setup.sql`](db/debt_dashboard_setup.sql)
 once in the Supabase SQL editor (creates `debt_projects`, `curve_snapshots`,
-`rate_history`, and `dashboard_layouts`).
+`rate_history`, and `dashboard_layouts`). The script is idempotent — installs
+created before the type flag / hide feature should re-run it once to pick up
+the new `category` and `hidden` columns.
 
 ### Daily Rate Pull
 [`.github/workflows/daily-curves.yml`](.github/workflows/daily-curves.yml)

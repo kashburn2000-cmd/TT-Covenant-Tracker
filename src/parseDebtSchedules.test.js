@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAtRiskRows, parseStabilizedRows, cellToISODate, nameKey } from './parseDebtSchedules.js';
+import { parseAtRiskRows, parseStabilizedRows, cellToISODate, nameKey, inferCategory } from './parseDebtSchedules.js';
 
 // Fixtures mirror the real workbooks' header text and section structure
 // (extra columns the parser ignores are omitted for brevity).
@@ -61,6 +61,14 @@ describe('parseAtRiskRows', () => {
   it('throws a clear error on the wrong workbook', () => {
     expect(() => parseAtRiskRows([[], ['Some', 'Other', 'Sheet']])).toThrow(/At Risk/);
   });
+
+  it('infers the residential/commercial category from Property Type', () => {
+    const rows = atRiskFixture();
+    rows[3][3] = 'Retail'; // TTRG Commercial One
+    const { projects } = parseAtRiskRows(rows);
+    expect(projects[0].category).toBe('commercial');
+    expect(projects[1].category).toBe('residential');
+  });
 });
 
 // Stabilized: guaranty group headers sit one row above the main header
@@ -97,6 +105,7 @@ describe('parseStabilizedRows', () => {
     expect(p.loan_amount).toBe(64275000);
     expect(p.ltv).toBe(0.52);
     expect(p.pct_leased).toBe(0.9);
+    expect(p.category).toBe('residential');
     expect(p.maturity_date).toBe('2035-08-01');
     expect(projects[1].guaranty_pct).toBe(0.5);
     expect(projects[1].guaranty_amt).toBe(22250000);
@@ -132,6 +141,21 @@ describe('cellToISODate', () => {
     expect(cellToISODate('N/A')).toBeNull();
     expect(cellToISODate(null)).toBeNull();
     expect(cellToISODate(0.5)).toBeNull(); // a percentage, not a date serial
+  });
+});
+
+describe('inferCategory', () => {
+  it('maps Property Type text to residential/commercial (null when blank)', () => {
+    expect(inferCategory('Residential')).toBe('residential');
+    expect(inferCategory('Residential ')).toBe('residential');
+    expect(inferCategory('Multifamily')).toBe('residential');
+    expect(inferCategory('Multi Family')).toBe('residential');
+    expect(inferCategory('Build-for-Rent')).toBe('residential');
+    expect(inferCategory('Retail')).toBe('commercial');
+    expect(inferCategory('Mixed-Use')).toBe('commercial');
+    expect(inferCategory('Industrial')).toBe('commercial');
+    expect(inferCategory('')).toBeNull();
+    expect(inferCategory(null)).toBeNull();
   });
 });
 
