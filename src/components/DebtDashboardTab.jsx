@@ -318,7 +318,7 @@ const rampColors = (n, theme) => {
   return Array.from({ length: n }, (_, i) => ramp[Math.round((i * (ramp.length - 1)) / (n - 1))]);
 };
 
-function CurveChart({ series, theme }) {
+export function CurveChart({ series, theme }) {
   const wrapRef = useRef(null);
   const [dims, setDims] = useState({ w: 600, h: 240 });
   const [hover, setHover] = useState(null); // { xMs, px, py }
@@ -411,7 +411,8 @@ function CurveChart({ series, theme }) {
           <path
             key={s.label}
             d={s.points.map((p, j) => `${j ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join('')}
-            fill="none" stroke={s.color} strokeWidth={i === series.length - 1 ? 2.5 : 2}
+            fill="none" stroke={s.color} strokeWidth={s.width ?? (i === series.length - 1 ? 2.5 : 2)}
+            strokeDasharray={s.dash || undefined}
             strokeLinecap="round" strokeLinejoin="round"
           />
         ))}
@@ -430,7 +431,7 @@ function CurveChart({ series, theme }) {
           boxShadow: 'var(--shadow)', fontSize: '0.7rem', minWidth: 150, zIndex: 5,
         }}>
           <div style={{ color: 'var(--muted)', marginBottom: 4 }}>{new Date(hover.xMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-          {series.map(s => {
+          {series.filter(s => !s.noTooltip).map(s => {
             const v = valueAt(s, hover.xMs);
             return (
               <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
@@ -450,9 +451,11 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   const theme = useAppTheme();
   const [meta, setMeta] = useState([]);        // [{ id, curve_date, curve_type }]
   const [curveType, setCurveType] = useState('sofr_1m');
-  const [mode, setMode] = useState('daily');   // 'daily' | 'monthend'
+  const [mode, setMode] = useState('hairy');   // 'hairy' | 'daily' | 'monthend'
   const [depth, setDepth] = useState(5);
+  const [lookback, setLookback] = useState('all'); // hairy-mode spine window: '1y' | '2y' | '3y' | 'all'
   const [seriesData, setSeriesData] = useState([]); // fetched snapshots with points
+  const [spine, setSpine] = useState([]);      // actual-rate history [{ rate_date, rate }]
   const [status, setStatus] = useState('');
   const [backfill, setBackfill] = useState(null); // [{ name, date, dateDetected, sofrPoints, tenYPoints, error }]
   const [backfillSaving, setBackfillSaving] = useState(false);
@@ -466,13 +469,39 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   }, []);
   useEffect(() => { loadMeta(); }, [loadMeta]);
 
+  // The actual-rate spine for the hairy chart (accumulated by the daily rate
+  // pull; backfilled by the Backfill Rate History workflow).
+  useEffect(() => {
+    if (mode !== 'hairy') return;
+    const rateType = curveType === 'sofr_1m' ? 'sofr_1m_spot' : 'ust_10y_spot';
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = [];
+        for (let page = 0; page < 20; page++) { // paginated — PostgREST caps at 1000 rows/request
+          const res = await fetch(
+            `${SB_URL}/rest/v1/rate_history?rate_type=eq.${rateType}&select=rate_date,rate&order=rate_date.asc&limit=1000&offset=${page * 1000}`,
+            { headers: SB_HEADERS },
+          );
+          if (!res.ok) break;
+          const batch = await res.json();
+          rows.push(...batch);
+          if (batch.length < 1000) break;
+        }
+        if (!cancelled) setSpine(rows);
+      } catch { if (!cancelled) setSpine([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, curveType]);
+
   // Pick which snapshot dates to show
   const chosen = useMemo(() => {
     const ofType = meta.filter(m => m.curve_type === curveType);
-    if (mode === 'monthend') {
+    if (mode === 'monthend' || mode === 'hairy') {
       const byMonth = new Map(); // yyyy-mm → latest snapshot that month
       for (const m of ofType) byMonth.set(m.curve_date.slice(0, 7), m);
-      return [...byMonth.values()].slice(-depth);
+      const monthly = [...byMonth.values()];
+      return mode === 'hairy' ? monthly : monthly.slice(-depth); // hairy shows every month as a hair
     }
     return ofType.slice(-depth);
   }, [meta, curveType, mode, depth]);
@@ -490,17 +519,42 @@ function CurveWidget({ pinUnlocked, requirePin }) {
     return () => { cancelled = true; };
   }, [chosen]);
 
+  const toPoints = (raw) => raw
+    .map(p => ({ x: Date.parse(p.date + 'T00:00:00'), y: typeof p.rate === 'number' ? p.rate : parseFloat(p.rate) }))
+    .filter(p => isFinite(p.x) && isFinite(p.y))
+    .sort((a, b) => a.x - b.x);
+
   const series = useMemo(() => {
+    if (mode === 'hairy') {
+      // Hairy chart: solid actual-rate spine, one dotted hair per month-end
+      // forward curve, the newest curve dashed. Identity is carried by line
+      // style + color together, so no per-hair hues are needed.
+      const nowMs = Date.now();
+      const spineStart = lookback === 'all' ? -Infinity : nowMs - parseInt(lookback) * 365.25 * 24 * 3600 * 1000;
+      const forwardEnd = nowMs + 3 * 365.25 * 24 * 3600 * 1000; // clip hairs so 10y tails don't crush the history
+      const out = [];
+      const curves = seriesData
+        .map(s => ({ date: s.curve_date, points: toPoints(s.points || []).filter(p => p.x <= forwardEnd) }))
+        .filter(s => s.points.length > 1 && Date.parse(s.date + 'T00:00:00') >= spineStart);
+      curves.slice(0, -1).forEach(s => out.push({
+        label: `Fwd curve ${fmtDate(s.date)}`, color: 'var(--faint3)', width: 1.4, dash: '2,3.5', noTooltip: true, points: s.points,
+      }));
+      const current = curves[curves.length - 1];
+      if (current) out.push({ label: `Current fwd curve (${fmtDate(current.date)})`, color: 'var(--gold)', width: 2, dash: '7,4', points: current.points });
+      const spinePts = toPoints(spine.map(r => ({ date: r.rate_date, rate: r.rate }))).filter(p => p.x >= spineStart);
+      if (spinePts.length > 1) out.push({
+        label: curveType === 'sofr_1m' ? '30-Day Avg SOFR (actual)' : '10-Year Treasury (actual)',
+        color: 'var(--accent)', width: 2.5, points: spinePts,
+      });
+      return out;
+    }
     const colors = rampColors(seriesData.length, theme);
     return seriesData.map((s, i) => ({
       label: fmtDate(s.curve_date),
       color: colors[i],
-      points: (s.points || [])
-        .map(p => ({ x: Date.parse(p.date + 'T00:00:00'), y: typeof p.rate === 'number' ? p.rate : parseFloat(p.rate) }))
-        .filter(p => isFinite(p.x) && isFinite(p.y))
-        .sort((a, b) => a.x - b.x),
+      points: toPoints(s.points || []),
     })).filter(s => s.points.length > 1);
-  }, [seriesData, theme]);
+  }, [seriesData, theme, mode, lookback, spine, curveType]);
 
   // Copy the covenant tracker's active curve into a dated snapshot for today —
   // the manual fallback until the daily API pull is wired up.
@@ -595,12 +649,19 @@ function CurveWidget({ pinUnlocked, requirePin }) {
           <option value="ust_10y">10-Year Treasury forward</option>
         </select>
         <select value={mode} onChange={e => setMode(e.target.value)} style={selStyle}>
+          <option value="hairy">Actual vs. forwards (hairy)</option>
           <option value="daily">Latest snapshots</option>
           <option value="monthend">Month-end comparison</option>
         </select>
-        <select value={depth} onChange={e => setDepth(parseInt(e.target.value))} style={selStyle}>
-          {[2, 3, 5].map(n => <option key={n} value={n}>{mode === 'monthend' ? `Last ${n} month-ends` : `Last ${n} days`}</option>)}
-        </select>
+        {mode === 'hairy' ? (
+          <select value={lookback} onChange={e => setLookback(e.target.value)} style={selStyle}>
+            {[['1y', 'Past year'], ['2y', 'Past 2 years'], ['3y', 'Past 3 years'], ['all', 'Full history']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        ) : (
+          <select value={depth} onChange={e => setDepth(parseInt(e.target.value))} style={selStyle}>
+            {[2, 3, 5].map(n => <option key={n} value={n}>{mode === 'monthend' ? `Last ${n} month-ends` : `Last ${n} days`}</option>)}
+          </select>
+        )}
         <button
           onClick={() => requirePin(snapshotNow)}
           title={pinUnlocked ? "Save today's active curve as a snapshot" : 'Unlock to snapshot'}
@@ -653,13 +714,31 @@ function CurveWidget({ pinUnlocked, requirePin }) {
       )}
       {series.length >= 1 ? (
         <>
-          {series.length >= 2 && (
+          {mode === 'hairy' ? (
+            <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', fontSize: '0.68rem', color: 'var(--muted)' }}>
+              {series.some(s => s.noTooltip) && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 16, height: 0, borderTop: '2px dotted var(--faint3)', display: 'inline-block' }} />Past forward curves
+                </span>
+              )}
+              {series.filter(s => !s.noTooltip).map(s => (
+                <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 16, height: 0, borderTop: `2px ${s.dash ? 'dashed' : 'solid'} ${s.color}`, display: 'inline-block' }} />{s.label}
+                </span>
+              ))}
+            </div>
+          ) : series.length >= 2 && (
             <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', fontSize: '0.68rem', color: 'var(--muted)' }}>
               {series.map(s => (
                 <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ width: 14, height: 0, borderTop: `2px solid ${s.color}`, display: 'inline-block' }} />{s.label}
                 </span>
               ))}
+            </div>
+          )}
+          {mode === 'hairy' && spine.length < 2 && (
+            <div style={{ fontSize: '0.7rem', color: 'var(--warn)' }}>
+              No actual-rate history yet — run the "Backfill Rate History" GitHub Action once to load it; the daily rate pull keeps it current after that.
             </div>
           )}
           <CurveChart series={series} theme={theme} />
