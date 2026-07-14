@@ -11,6 +11,11 @@ import { setAccessToken } from '../supabase.js';
 // Also handles the two email-link flows Supabase sends users through:
 //   • invite links  — new user lands here with a session but no password yet
 //   • recovery links — "forgot password" lands here to choose a new password
+//
+// Microsoft sign-in uses Supabase's 'azure' OAuth provider. It only works once
+// the provider is enabled in the Supabase dashboard (Authentication → Providers
+// → Azure) with an Entra ID app registration's client ID + secret. Keep
+// "Allow new users to sign up" off in Supabase so OAuth stays invite-only.
 
 // Invite/recovery links carry the type in the URL hash. Read it before
 // supabase-js consumes and clears the hash.
@@ -52,6 +57,17 @@ export function AuthGate({ children }) {
     if (err) setError(err.message === 'Invalid login credentials' ? 'Incorrect email or password.' : err.message);
   }
 
+  async function handleMicrosoftSignIn() {
+    setError(''); setNotice(''); setBusy(true);
+    // On success the browser redirects to Microsoft, so busy stays on until
+    // the page unloads; only reset it on error.
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: { scopes: 'email', redirectTo: window.location.origin },
+    });
+    if (err) { setBusy(false); setError(err.message); }
+  }
+
   async function handleForgotPassword() {
     setError(''); setNotice('');
     if (!email.trim()) { setError('Enter your email above first, then click "Forgot password?".'); return; }
@@ -82,6 +98,9 @@ export function AuthGate({ children }) {
   const label = { fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block' };
   const input = { width: '100%', padding: '0.55rem 0.75rem', fontSize: '0.85rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', outline: 'none', marginBottom: '0.9rem' };
   const button = { width: '100%', padding: '0.6rem', borderRadius: 6, border: 'none', cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600, letterSpacing: '0.01em', background: 'var(--accent)', color: '#fff', opacity: busy ? 0.6 : 1 };
+  const divider = { display: 'flex', alignItems: 'center', gap: '0.6rem', margin: '1rem 0', color: 'var(--muted)', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase' };
+  const dividerLine = { flex: 1, height: 1, background: 'var(--border)' };
+  const msButton = { width: '100%', padding: '0.6rem', borderRadius: 6, border: '1px solid var(--border)', cursor: busy ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.82rem', fontWeight: 600, letterSpacing: '0.01em', background: 'var(--panel2)', color: 'var(--text)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.55rem', opacity: busy ? 0.6 : 1 };
   const errStyle = { fontSize: '0.75rem', color: 'var(--fail)', marginBottom: '0.9rem', lineHeight: 1.4 };
   const noticeStyle = { fontSize: '0.75rem', color: 'var(--pass)', marginBottom: '0.9rem', lineHeight: 1.4 };
 
@@ -123,6 +142,16 @@ export function AuthGate({ children }) {
           <label style={label}>Password</label>
           <input style={input} type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
           <button style={button} type="submit" disabled={busy}>Sign In</button>
+          <div style={divider}><span style={dividerLine} />or<span style={dividerLine} /></div>
+          <button style={msButton} type="button" onClick={handleMicrosoftSignIn} disabled={busy}>
+            <svg width="14" height="14" viewBox="0 0 21 21" aria-hidden="true">
+              <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+              <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+              <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+              <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+            </svg>
+            Sign in with Microsoft
+          </button>
           <button type="button" onClick={handleForgotPassword} disabled={busy}
             style={{ display: 'block', margin: '0.9rem auto 0', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', color: 'var(--muted)', textDecoration: 'underline' }}>
             Forgot password?
