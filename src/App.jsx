@@ -6,6 +6,7 @@ import { TT_NAVY, TT_ORANGE } from './theme.js';
 import { formatCurrency } from './format.js';
 import { PRIOR_TAG, isPriorBaseline, findPriorTest } from './priorTest.js';
 import { parseForecasts } from './parseForecasts.js';
+import { parseChathamWorkbook, curveDateFromFilename } from './curveParse.js';
 import { PinModal } from './components/PinModal.jsx';
 import { MatrixTab } from './components/MatrixTab.jsx';
 import { CalculatorTab } from './components/CalculatorTab.jsx';
@@ -2741,69 +2742,16 @@ export default function App() {
         }
         const buf = await file.arrayBuffer();
         const wb = window.XLSX.read(buf, { type: 'array', cellDates: true });
-
-        // Try preferred sheet names in order
-        const preferredSheets = ['SOFR', '1-month Term SOFR', '1-Month Term SOFR'];
-        let ws = null;
-        for (const name of preferredSheets) {
-          if (wb.SheetNames.includes(name)) { ws = wb.Sheets[name]; break; }
-        }
-        if (!ws) ws = wb.Sheets[wb.SheetNames[0]]; // fallback to first sheet
-
-        const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-
-        // Find the header row containing "Date", "1-month Term SOFR", and "10 Year"
-        let dateCol = -1, sofrCol = -1, tenYCol = -1, dataStartRow = -1;
-        for (let r = 0; r < rows.length; r++) {
-          const row = rows[r];
-          for (let c = 0; c < row.length; c++) {
-            const val = String(row[c] || '').toLowerCase().trim();
-            if (val === 'date') dateCol = c;
-            if (val.includes('1-month term sofr') || val === '1-month term sofr') sofrCol = c;
-            if (val === '10 year') tenYCol = c;
-          }
-          if (dateCol >= 0 && sofrCol >= 0) { dataStartRow = r + 1; break; }
-        }
-
-        if (dataStartRow < 0) {
-          alert('Could not find Date / 1-month Term SOFR columns in this file. Please check it is the standard Chatham forward curve export.');
+        let parsed;
+        try {
+          parsed = parseChathamWorkbook(window.XLSX, wb);
+        } catch (parseErr) {
+          alert(parseErr.message);
           e.target.value = '';
           return;
         }
-
-        for (let r = dataStartRow; r < rows.length; r++) {
-          const row = rows[r];
-          if (!row[dateCol] || row[sofrCol] == null) continue;
-          const sofrVal = parseFloat(row[sofrCol]);
-          if (isNaN(sofrVal)) continue;
-
-          // Date may come in as a JS Date object or a string
-          let dateStr;
-          const raw = row[dateCol];
-          if (raw instanceof Date) {
-            const y = raw.getFullYear();
-            const m = String(raw.getMonth() + 1).padStart(2, '0');
-            const d = String(raw.getDate()).padStart(2, '0');
-            dateStr = `${y}-${m}-${d}`;
-          } else {
-            const asDate = new Date(raw);
-            if (!isNaN(asDate.getTime())) {
-              const y = asDate.getFullYear();
-              const m = String(asDate.getMonth() + 1).padStart(2, '0');
-              const d = String(asDate.getDate()).padStart(2, '0');
-              dateStr = `${y}-${m}-${d}`;
-            } else {
-              dateStr = String(raw).trim();
-            }
-          }
-          if (dateStr && dateStr.match(/\d{4}-\d{2}-\d{2}/)) {
-            points.push({ date: dateStr, sofr: sofrVal });
-            if (tenYCol >= 0 && row[tenYCol] != null) {
-              const tenY = parseFloat(row[tenYCol]);
-              if (!isNaN(tenY)) tenYPoints.push({ date: dateStr, rate: tenY });
-            }
-          }
-        }
+        points = parsed.sofrPoints.map(p => ({ date: p.date, sofr: p.rate }));
+        tenYPoints = parsed.tenYPoints;
 
       } else {
         // CSV / TXT fallback
@@ -2844,14 +2792,17 @@ export default function App() {
         if (ty.ok) setActive10YCurve(tenYPoints);
       }
 
-      // Also record today's curves as dated snapshots for the Debt Dashboard's
-      // Forward Curve Tracker. Best-effort: skipped silently if the
+      // Also record the curves as dated snapshots for the Debt Dashboard's
+      // Forward Curve Tracker. Chatham files carry their as-of date only in the
+      // filename, so prefer that over the upload date (a Friday curve uploaded
+      // Monday should be dated Friday). Best-effort: skipped silently if the
       // curve_snapshots table hasn't been created yet.
       try {
         const d = new Date();
         const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const snaps = [{ curve_date: today, curve_type: 'sofr_1m', points: points.map(p => ({ date: p.date, rate: p.sofr })), source: 'chatham_upload' }];
-        if (tenYPoints.length >= 2) snaps.push({ curve_date: today, curve_type: 'ust_10y', points: tenYPoints, source: 'chatham_upload' });
+        const snapDate = curveDateFromFilename(file.name) || today;
+        const snaps = [{ curve_date: snapDate, curve_type: 'sofr_1m', points: points.map(p => ({ date: p.date, rate: p.sofr })), source: 'chatham_upload' }];
+        if (tenYPoints.length >= 2) snaps.push({ curve_date: snapDate, curve_type: 'ust_10y', points: tenYPoints, source: 'chatham_upload' });
         await fetch(`${SB_URL}/rest/v1/curve_snapshots?on_conflict=curve_date,curve_type`, {
           method: 'POST',
           headers: { ...SB_HEADERS, Prefer: 'return=representation,resolution=merge-duplicates' },

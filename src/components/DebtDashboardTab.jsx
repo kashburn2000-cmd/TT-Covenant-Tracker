@@ -7,6 +7,7 @@ import { TT_ORANGE } from '../theme.js';
 import { LockIcon, CameraIcon } from '../icons.jsx';
 import { formatCurrency } from '../format.js';
 import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
+import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict target)
 const SB_UPSERT = { ...SB_HEADERS, Prefer: 'return=representation,resolution=merge-duplicates' };
@@ -453,6 +454,9 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   const [depth, setDepth] = useState(5);
   const [seriesData, setSeriesData] = useState([]); // fetched snapshots with points
   const [status, setStatus] = useState('');
+  const [backfill, setBackfill] = useState(null); // [{ name, date, dateDetected, sofrPoints, tenYPoints, error }]
+  const [backfillSaving, setBackfillSaving] = useState(false);
+  const backfillInput = useRef(null);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -524,6 +528,64 @@ function CurveWidget({ pinUnlocked, requirePin }) {
     }
   }
 
+  // Historical backfill: parse a batch of Chatham xlsx files into a preview,
+  // then save each as a snapshot dated by its filename (editable in the
+  // preview). Writes only to curve_snapshots — the active curve used by the
+  // covenant tracker is untouched, so old files can't regress live rates.
+  async function handleBackfillFiles(e) {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length) return;
+    if (!window.XLSX) { setStatus('SheetJS not yet loaded — please try again in a moment.'); return; }
+    const parsed = [];
+    for (const file of files) {
+      const entry = { name: file.name, date: curveDateFromFilename(file.name), sofrPoints: [], tenYPoints: [], error: null };
+      entry.dateDetected = !!entry.date;
+      try {
+        const wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+        const { sofrPoints, tenYPoints } = parseChathamWorkbook(window.XLSX, wb);
+        if (sofrPoints.length < 2) throw new Error('No usable curve points found');
+        entry.sofrPoints = sofrPoints;
+        entry.tenYPoints = tenYPoints;
+      } catch (err) {
+        entry.error = err.message;
+      }
+      parsed.push(entry);
+    }
+    parsed.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    setBackfill(parsed);
+    setStatus('');
+  }
+
+  async function saveBackfill() {
+    const ready = backfill.filter(f => !f.error && f.date);
+    if (!ready.length) { setStatus('Nothing to save — set a date on at least one parsed file.'); return; }
+    setBackfillSaving(true);
+    let saved = 0;
+    const failed = [];
+    // One request per file so a bad row reports its filename (and two files
+    // given the same date resolve last-in wins instead of erroring).
+    for (const f of ready) {
+      try {
+        const rows = [{ curve_date: f.date, curve_type: 'sofr_1m', points: f.sofrPoints, source: 'chatham_backfill' }];
+        if (f.tenYPoints.length >= 2) rows.push({ curve_date: f.date, curve_type: 'ust_10y', points: f.tenYPoints, source: 'chatham_backfill' });
+        const res = await fetch(`${SB_URL}/rest/v1/curve_snapshots?on_conflict=curve_date,curve_type`, {
+          method: 'POST', headers: SB_UPSERT, body: JSON.stringify(rows),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        saved++;
+      } catch (err) {
+        failed.push(`${f.name}: ${err.message}`);
+      }
+    }
+    setBackfillSaving(false);
+    setBackfill(null);
+    setStatus(failed.length
+      ? `Saved ${saved} of ${ready.length} — failed: ${failed.join(' · ')}`
+      : `✓ Backfilled ${saved} snapshot date${saved === 1 ? '' : 's'}`);
+    loadMeta();
+  }
+
   const count = meta.filter(m => m.curve_type === curveType).length;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', height: '100%' }}>
@@ -544,8 +606,51 @@ function CurveWidget({ pinUnlocked, requirePin }) {
           title={pinUnlocked ? "Save today's active curve as a snapshot" : 'Unlock to snapshot'}
           className={`btn btn-sm ${pinUnlocked ? '' : 'btn-locked'}`}
         >{pinUnlocked ? <><CameraIcon size={12} /> Snapshot today</> : <><LockIcon size={11} /> Snapshot today</>}</button>
+        <button
+          onClick={() => requirePin(() => backfillInput.current?.click())}
+          title={pinUnlocked ? 'Upload past Chatham curve files as historical snapshots (dated from each filename)' : 'Unlock to backfill'}
+          className={`btn btn-sm ${pinUnlocked ? '' : 'btn-locked'}`}
+        >{pinUnlocked ? 'Backfill files…' : <><LockIcon size={11} /> Backfill files…</>}</button>
+        <input ref={backfillInput} type="file" accept=".xlsx,.xls" multiple onChange={handleBackfillFiles} style={{ display: 'none' }} />
       </div>
       {status && <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{status}</div>}
+      {backfill && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem' }}>
+          <div style={{ marginBottom: 6, color: 'var(--text2)' }}>
+            Review before saving — each file becomes a snapshot on its curve date. Dates come from the filename; edit any that were guessed wrong or not found.
+          </div>
+          <table style={{ borderCollapse: 'collapse' }}>
+            <tbody>
+              {backfill.map((f, i) => (
+                <tr key={f.name + i}>
+                  <td style={{ padding: '2px 10px 2px 0', color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</td>
+                  <td style={{ padding: '2px 10px 2px 0' }}>
+                    {f.error
+                      ? <span style={{ color: 'var(--fail)' }}>{f.error}</span>
+                      : <>
+                          <input
+                            type="date" value={f.date || ''}
+                            onChange={e => setBackfill(b => b.map((x, j) => (j === i ? { ...x, date: e.target.value || null } : x)))}
+                            style={{ ...selStyle, padding: '1px 4px' }}
+                          />
+                          {!f.dateDetected && <span style={{ color: 'var(--warn)', marginLeft: 6 }}>no date in filename</span>}
+                        </>}
+                  </td>
+                  <td style={{ padding: '2px 0', color: 'var(--faint2)', whiteSpace: 'nowrap' }}>
+                    {f.error ? '' : `${f.sofrPoints.length} SOFR pts${f.tenYPoints.length >= 2 ? ` + ${f.tenYPoints.length} 10Y pts` : ''}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: 8 }}>
+            <button className="btn btn-sm" disabled={backfillSaving} onClick={saveBackfill}>
+              {backfillSaving ? 'Saving…' : `Save ${backfill.filter(f => !f.error && f.date).length} snapshot(s)`}
+            </button>
+            <button className="btn btn-sm" disabled={backfillSaving} onClick={() => setBackfill(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {series.length >= 1 ? (
         <>
           {series.length >= 2 && (
@@ -563,7 +668,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'var(--faint)', fontSize: '0.78rem', lineHeight: 1.7, padding: '1rem' }}>
           <div>
             {count === 0
-              ? <>No {curveType === 'sofr_1m' ? 'SOFR' : '10-Year'} snapshots yet.<br />Snapshots accumulate one per day — from the daily rate pull, from Chatham curve uploads, or via "Snapshot today" above.</>
+              ? <>No {curveType === 'sofr_1m' ? 'SOFR' : '10-Year'} snapshots yet.<br />Snapshots accumulate one per day — from the daily rate pull, from Chatham curve uploads, or via "Snapshot today" above. Use "Backfill files…" to load a batch of past Chatham exports.</>
               : <>Only {count} snapshot{count === 1 ? '' : 's'} so far — comparisons appear as more days accumulate.</>}
           </div>
         </div>
