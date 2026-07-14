@@ -46,7 +46,6 @@ export function PipelineTab({ pinUnlocked = true }) {
   const [msg,         setMsg]         = useState('');
   const [filterType,  setFilterType]  = useState('All');
   const [confirmDel,  setConfirmDel]  = useState(null);  // id to confirm delete
-  const [covenantPs,  setCovenantPs]  = useState([]);
   const [parsing,     setParsing]     = useState(false); // bank package upload in flight
   const [parseInfo,   setParseInfo]   = useState(null);  // summary banner for the edit modal
   const packageInputRef = useRef(null);
@@ -55,17 +54,10 @@ export function PipelineTab({ pinUnlocked = true }) {
   React.useEffect(() => {
     async function load() {
       try {
-        const [dRes, cRes] = await Promise.all([
-          fetch(`${SB_URL}/rest/v1/pipeline_deals?order=sort_order,name`, { headers: SB_HEADERS }),
-          fetch(`${SB_URL}/rest/v1/properties?order=id`, { headers: SB_HEADERS }),
-        ]);
+        const dRes = await fetch(`${SB_URL}/rest/v1/pipeline_deals?order=sort_order,name`, { headers: SB_HEADERS });
         if (dRes.ok) {
           const rows = await dRes.json();
           setDeals(Array.isArray(rows) ? rows : []);
-        }
-        if (cRes.ok) {
-          const rows = await cRes.json();
-          setCovenantPs(Array.isArray(rows) ? rows : []);
         }
       } catch (err) { console.error('Pipeline load error:', err); }
       setLoading(false);
@@ -308,17 +300,6 @@ export function PipelineTab({ pinUnlocked = true }) {
     setF('unit_mix', (editForm.unit_mix || []).filter((_, idx) => idx !== i));
   }
 
-  // ── Covenant match ─────────────────────────────────────────────────────────
-  function findCovenantMatch(deal) {
-    if (!covenantPs.length || !deal.name) return null;
-    const tokens = deal.name.toLowerCase().split(/[\s,]+/).filter(t => t.length > 3);
-    for (const cp of covenantPs) {
-      const cpName = (cp.property || '').toLowerCase();
-      if (tokens.some(t => cpName.includes(t))) return cp;
-    }
-    return null;
-  }
-
   // ── Formatting helpers ─────────────────────────────────────────────────────
   const fmt$ = (n) => n == null ? '—' : '$' + (n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? Math.round(n/1e3)+'K' : Number(n).toLocaleString());
   const fmtN = (n) => n == null ? '—' : Number(n).toLocaleString();
@@ -336,9 +317,10 @@ export function PipelineTab({ pinUnlocked = true }) {
     <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: 4,
       background: bg, color, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{label}</span>
   );
+  // Commitment / book stage is conveyed by the section grouping, so the card
+  // badge only reflects the deal's process status.
   const statusBadge = (d) => {
-    if (d.committed)      return pill('COMMITTED',   'var(--pass)', 'color-mix(in srgb, var(--pass) 12%, transparent)');
-    if (d.book_published) return pill('BOOK OUT',    'var(--gold)', 'color-mix(in srgb, var(--gold) 12%, transparent)');
+    if (d.status==='closed') return pill('CLOSED', 'var(--faint2)', 'color-mix(in srgb, var(--faint) 12%, transparent)');
     if (d.status==='active') return pill('IN PROCESS', TT_ORANGE, 'color-mix(in srgb, var(--accent) 12%, transparent)');
     return pill('PIPELINE', 'var(--faint2)', 'color-mix(in srgb, var(--faint) 12%, transparent)');
   };
@@ -355,9 +337,20 @@ export function PipelineTab({ pinUnlocked = true }) {
   const labelSt = { fontSize: '0.6rem', color: 'var(--faint3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
   const fieldSt = { marginBottom: '0.65rem' };
 
+  // ── Financing stages ───────────────────────────────────────────────────────
+  // Every deal falls into exactly one bucket: committed wins over book-published,
+  // and anything without either flag is still in pre-marketing.
+  const STAGES = [
+    { key: 'committed', label: 'Fully Committed', color: 'var(--pass)', desc: 'lender commitment in hand' },
+    { key: 'book',      label: 'Book Published',  color: 'var(--gold)', desc: 'book out — awaiting commitment' },
+    { key: 'premarket', label: 'Pre-Marketing',   color: TT_ORANGE,     desc: 'no book published, no commitment' },
+  ];
+  const stageOf = d => d.committed ? 'committed' : d.book_published ? 'book' : 'premarket';
+
   // ── Summary stats ──────────────────────────────────────────────────────────
-  const activeDealsList    = deals.filter(d => d.status === 'active');
-  const committedCount     = deals.filter(d => d.committed).length;
+  const committedCount     = deals.filter(d => stageOf(d) === 'committed').length;
+  const bookOnlyCount      = deals.filter(d => stageOf(d) === 'book').length;
+  const premarketCount     = deals.filter(d => stageOf(d) === 'premarket').length;
   const needsLender        = deals.filter(d => !d.primary_lender).length;
   const totalBudget        = deals.reduce((s, d) => s + (d.total_budget || 0), 0);
   const totalUnits         = deals.reduce((s, d) => s + (d.units || 0), 0);
@@ -611,7 +604,7 @@ export function PipelineTab({ pinUnlocked = true }) {
           {[
             { label: 'Total Pipeline Budget', value: fmt$(totalBudget),  sub: `${deals.length} deals` },
             { label: 'Total Pipeline Units',  value: fmtN(totalUnits),   sub: 'across all projects' },
-            { label: 'Active / Committed',    value: `${activeDealsList.length} / ${committedCount}`, sub: 'in process / locked' },
+            { label: 'Financing Stage',       value: `${committedCount} / ${bookOnlyCount} / ${premarketCount}`, sub: 'committed / book out / pre-mkt' },
             { label: 'Needs Lender',          value: needsLender,        sub: 'no lender assigned', warn: needsLender > 0 },
             { label: 'Next Close',            value: nextClose ? nextClose.name.split(',')[0] : '—', sub: nextClose ? fmtDate(nextClose.closing_date) : 'no upcoming dates' },
           ].map(c => (
@@ -674,12 +667,28 @@ export function PipelineTab({ pinUnlocked = true }) {
           <button onClick={startNew} className="btn btn-sm btn-primary">+ Add Deal</button>
         </div>
 
-        {/* ── Deal Cards ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {filtered.map(d => {
+        {/* ── Deal Cards, grouped by financing stage ── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+          {STAGES.map(stage => {
+          const stageDeals = filtered.filter(d => stageOf(d) === stage.key);
+          if (!stageDeals.length) return null;
+          const stageBudget = stageDeals.reduce((s, d) => s + (d.total_budget || 0), 0);
+          return (
+          <div key={stage.key}>
+            {/* Stage header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: '0.6rem', paddingBottom: '0.45rem', borderBottom: `1px solid color-mix(in srgb, ${stage.color} 30%, var(--border))` }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: stage.color }}>{stage.label}</span>
+              <span style={{ fontSize: '0.66rem', color: 'var(--faint2)' }}>
+                {stageDeals.length} deal{stageDeals.length === 1 ? '' : 's'} · {fmt$(stageBudget)}
+              </span>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: '0.62rem', color: 'var(--faint)' }}>{stage.desc}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {stageDeals.map(d => {
             const isOpen = expandedId === d.id;
             const days = daysUntil(d.closing_date);
-            const covenantMatch = findCovenantMatch(d);
             return (
               <div key={d.id} style={{ background: 'var(--panel)', border: `1px solid ${isOpen ? 'color-mix(in srgb, var(--accent) 38%, transparent)' : 'var(--border)'}`, borderRadius: 6, overflow: 'hidden' }}>
                 {/* Card header row */}
@@ -688,12 +697,6 @@ export function PipelineTab({ pinUnlocked = true }) {
                   <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                     <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '0.9rem' }}>{d.name}</span>
                     {statusBadge(d)}{typeBadge(d)}
-                    {covenantMatch && (
-                      <span title={`Linked: ${covenantMatch.property} in Covenant Tracker`}
-                        style={{ fontSize: '0.62rem', padding: '2px 6px', borderRadius: 4, background: covenantMatch.satisfied ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: covenantMatch.satisfied ? 'var(--pass)' : 'var(--fail)', fontWeight: 700 }}>
-                        ⚡ {covenantMatch.satisfied ? 'Passing' : 'Failing'}
-                      </span>
-                    )}
                   </div>
                   {/* Lender */}
                   <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ cursor: 'pointer' }}>
@@ -784,6 +787,10 @@ export function PipelineTab({ pinUnlocked = true }) {
                 )}
               </div>
             );
+          })}
+            </div>
+          </div>
+          );
           })}
         </div>
       </>)}
