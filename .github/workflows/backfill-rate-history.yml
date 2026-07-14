@@ -1,0 +1,29 @@
+name: Backfill Rate History
+
+# One-click historical load of the actual-rate series (30-day Average SOFR and
+# 10-Year Treasury) into rate_history, for the Debt Dashboard's hairy chart
+# spine. Safe to re-run — rows upsert on (rate_date, rate_type). The daily rate
+# pull keeps the series current after the backfill.
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Backfill from (YYYY-MM-DD)'
+        required: false
+        default: '2021-01-01'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Backfill rate history into Supabase
+        env:
+          SB_URL: https://ngflppgqohmkkfiljqma.supabase.co
+          SB_KEY: ${{ secrets.SUPABASE_KEY }}
+          START_DATE: ${{ inputs.start_date }}
+        run: node scripts/backfill-rate-history.mjs

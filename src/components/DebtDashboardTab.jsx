@@ -7,6 +7,7 @@ import { TT_ORANGE } from '../theme.js';
 import { LockIcon, CameraIcon } from '../icons.jsx';
 import { formatCurrency } from '../format.js';
 import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
+import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict target)
 const SB_UPSERT = { ...SB_HEADERS, Prefer: 'return=representation,resolution=merge-duplicates' };
@@ -317,7 +318,7 @@ const rampColors = (n, theme) => {
   return Array.from({ length: n }, (_, i) => ramp[Math.round((i * (ramp.length - 1)) / (n - 1))]);
 };
 
-function CurveChart({ series, theme }) {
+export function CurveChart({ series, theme }) {
   const wrapRef = useRef(null);
   const [dims, setDims] = useState({ w: 600, h: 240 });
   const [hover, setHover] = useState(null); // { xMs, px, py }
@@ -410,7 +411,8 @@ function CurveChart({ series, theme }) {
           <path
             key={s.label}
             d={s.points.map((p, j) => `${j ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join('')}
-            fill="none" stroke={s.color} strokeWidth={i === series.length - 1 ? 2.5 : 2}
+            fill="none" stroke={s.color} strokeWidth={s.width ?? (i === series.length - 1 ? 2.5 : 2)}
+            strokeDasharray={s.dash || undefined}
             strokeLinecap="round" strokeLinejoin="round"
           />
         ))}
@@ -429,7 +431,7 @@ function CurveChart({ series, theme }) {
           boxShadow: 'var(--shadow)', fontSize: '0.7rem', minWidth: 150, zIndex: 5,
         }}>
           <div style={{ color: 'var(--muted)', marginBottom: 4 }}>{new Date(hover.xMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-          {series.map(s => {
+          {series.filter(s => !s.noTooltip).map(s => {
             const v = valueAt(s, hover.xMs);
             return (
               <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
@@ -449,10 +451,15 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   const theme = useAppTheme();
   const [meta, setMeta] = useState([]);        // [{ id, curve_date, curve_type }]
   const [curveType, setCurveType] = useState('sofr_1m');
-  const [mode, setMode] = useState('daily');   // 'daily' | 'monthend'
+  const [mode, setMode] = useState('hairy');   // 'hairy' | 'daily' | 'monthend'
   const [depth, setDepth] = useState(5);
+  const [lookback, setLookback] = useState('all'); // hairy-mode spine window: '1y' | '2y' | '3y' | 'all'
   const [seriesData, setSeriesData] = useState([]); // fetched snapshots with points
+  const [spine, setSpine] = useState([]);      // actual-rate history [{ rate_date, rate }]
   const [status, setStatus] = useState('');
+  const [backfill, setBackfill] = useState(null); // [{ name, date, dateDetected, sofrPoints, tenYPoints, error }]
+  const [backfillSaving, setBackfillSaving] = useState(false);
+  const backfillInput = useRef(null);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -462,13 +469,39 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   }, []);
   useEffect(() => { loadMeta(); }, [loadMeta]);
 
+  // The actual-rate spine for the hairy chart (accumulated by the daily rate
+  // pull; backfilled by the Backfill Rate History workflow).
+  useEffect(() => {
+    if (mode !== 'hairy') return;
+    const rateType = curveType === 'sofr_1m' ? 'sofr_1m_spot' : 'ust_10y_spot';
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = [];
+        for (let page = 0; page < 20; page++) { // paginated — PostgREST caps at 1000 rows/request
+          const res = await fetch(
+            `${SB_URL}/rest/v1/rate_history?rate_type=eq.${rateType}&select=rate_date,rate&order=rate_date.asc&limit=1000&offset=${page * 1000}`,
+            { headers: SB_HEADERS },
+          );
+          if (!res.ok) break;
+          const batch = await res.json();
+          rows.push(...batch);
+          if (batch.length < 1000) break;
+        }
+        if (!cancelled) setSpine(rows);
+      } catch { if (!cancelled) setSpine([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, curveType]);
+
   // Pick which snapshot dates to show
   const chosen = useMemo(() => {
     const ofType = meta.filter(m => m.curve_type === curveType);
-    if (mode === 'monthend') {
+    if (mode === 'monthend' || mode === 'hairy') {
       const byMonth = new Map(); // yyyy-mm → latest snapshot that month
       for (const m of ofType) byMonth.set(m.curve_date.slice(0, 7), m);
-      return [...byMonth.values()].slice(-depth);
+      const monthly = [...byMonth.values()];
+      return mode === 'hairy' ? monthly : monthly.slice(-depth); // hairy shows every month as a hair
     }
     return ofType.slice(-depth);
   }, [meta, curveType, mode, depth]);
@@ -486,17 +519,42 @@ function CurveWidget({ pinUnlocked, requirePin }) {
     return () => { cancelled = true; };
   }, [chosen]);
 
+  const toPoints = (raw) => raw
+    .map(p => ({ x: Date.parse(p.date + 'T00:00:00'), y: typeof p.rate === 'number' ? p.rate : parseFloat(p.rate) }))
+    .filter(p => isFinite(p.x) && isFinite(p.y))
+    .sort((a, b) => a.x - b.x);
+
   const series = useMemo(() => {
+    if (mode === 'hairy') {
+      // Hairy chart: solid actual-rate spine, one dotted hair per month-end
+      // forward curve, the newest curve dashed. Identity is carried by line
+      // style + color together, so no per-hair hues are needed.
+      const nowMs = Date.now();
+      const spineStart = lookback === 'all' ? -Infinity : nowMs - parseInt(lookback) * 365.25 * 24 * 3600 * 1000;
+      const forwardEnd = nowMs + 3 * 365.25 * 24 * 3600 * 1000; // clip hairs so 10y tails don't crush the history
+      const out = [];
+      const curves = seriesData
+        .map(s => ({ date: s.curve_date, points: toPoints(s.points || []).filter(p => p.x <= forwardEnd) }))
+        .filter(s => s.points.length > 1 && Date.parse(s.date + 'T00:00:00') >= spineStart);
+      curves.slice(0, -1).forEach(s => out.push({
+        label: `Fwd curve ${fmtDate(s.date)}`, color: 'var(--faint3)', width: 1.4, dash: '2,3.5', noTooltip: true, points: s.points,
+      }));
+      const current = curves[curves.length - 1];
+      if (current) out.push({ label: `Current fwd curve (${fmtDate(current.date)})`, color: 'var(--gold)', width: 2, dash: '7,4', points: current.points });
+      const spinePts = toPoints(spine.map(r => ({ date: r.rate_date, rate: r.rate }))).filter(p => p.x >= spineStart);
+      if (spinePts.length > 1) out.push({
+        label: curveType === 'sofr_1m' ? '30-Day Avg SOFR (actual)' : '10-Year Treasury (actual)',
+        color: 'var(--accent)', width: 2.5, points: spinePts,
+      });
+      return out;
+    }
     const colors = rampColors(seriesData.length, theme);
     return seriesData.map((s, i) => ({
       label: fmtDate(s.curve_date),
       color: colors[i],
-      points: (s.points || [])
-        .map(p => ({ x: Date.parse(p.date + 'T00:00:00'), y: typeof p.rate === 'number' ? p.rate : parseFloat(p.rate) }))
-        .filter(p => isFinite(p.x) && isFinite(p.y))
-        .sort((a, b) => a.x - b.x),
+      points: toPoints(s.points || []),
     })).filter(s => s.points.length > 1);
-  }, [seriesData, theme]);
+  }, [seriesData, theme, mode, lookback, spine, curveType]);
 
   // Copy the covenant tracker's active curve into a dated snapshot for today —
   // the manual fallback until the daily API pull is wired up.
@@ -524,6 +582,64 @@ function CurveWidget({ pinUnlocked, requirePin }) {
     }
   }
 
+  // Historical backfill: parse a batch of Chatham xlsx files into a preview,
+  // then save each as a snapshot dated by its filename (editable in the
+  // preview). Writes only to curve_snapshots — the active curve used by the
+  // covenant tracker is untouched, so old files can't regress live rates.
+  async function handleBackfillFiles(e) {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length) return;
+    if (!window.XLSX) { setStatus('SheetJS not yet loaded — please try again in a moment.'); return; }
+    const parsed = [];
+    for (const file of files) {
+      const entry = { name: file.name, date: curveDateFromFilename(file.name), sofrPoints: [], tenYPoints: [], error: null };
+      entry.dateDetected = !!entry.date;
+      try {
+        const wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+        const { sofrPoints, tenYPoints } = parseChathamWorkbook(window.XLSX, wb);
+        if (sofrPoints.length < 2) throw new Error('No usable curve points found');
+        entry.sofrPoints = sofrPoints;
+        entry.tenYPoints = tenYPoints;
+      } catch (err) {
+        entry.error = err.message;
+      }
+      parsed.push(entry);
+    }
+    parsed.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    setBackfill(parsed);
+    setStatus('');
+  }
+
+  async function saveBackfill() {
+    const ready = backfill.filter(f => !f.error && f.date);
+    if (!ready.length) { setStatus('Nothing to save — set a date on at least one parsed file.'); return; }
+    setBackfillSaving(true);
+    let saved = 0;
+    const failed = [];
+    // One request per file so a bad row reports its filename (and two files
+    // given the same date resolve last-in wins instead of erroring).
+    for (const f of ready) {
+      try {
+        const rows = [{ curve_date: f.date, curve_type: 'sofr_1m', points: f.sofrPoints, source: 'chatham_backfill' }];
+        if (f.tenYPoints.length >= 2) rows.push({ curve_date: f.date, curve_type: 'ust_10y', points: f.tenYPoints, source: 'chatham_backfill' });
+        const res = await fetch(`${SB_URL}/rest/v1/curve_snapshots?on_conflict=curve_date,curve_type`, {
+          method: 'POST', headers: SB_UPSERT, body: JSON.stringify(rows),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        saved++;
+      } catch (err) {
+        failed.push(`${f.name}: ${err.message}`);
+      }
+    }
+    setBackfillSaving(false);
+    setBackfill(null);
+    setStatus(failed.length
+      ? `Saved ${saved} of ${ready.length} — failed: ${failed.join(' · ')}`
+      : `✓ Backfilled ${saved} snapshot date${saved === 1 ? '' : 's'}`);
+    loadMeta();
+  }
+
   const count = meta.filter(m => m.curve_type === curveType).length;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', height: '100%' }}>
@@ -533,22 +649,85 @@ function CurveWidget({ pinUnlocked, requirePin }) {
           <option value="ust_10y">10-Year Treasury forward</option>
         </select>
         <select value={mode} onChange={e => setMode(e.target.value)} style={selStyle}>
+          <option value="hairy">Actual vs. forwards (hairy)</option>
           <option value="daily">Latest snapshots</option>
           <option value="monthend">Month-end comparison</option>
         </select>
-        <select value={depth} onChange={e => setDepth(parseInt(e.target.value))} style={selStyle}>
-          {[2, 3, 5].map(n => <option key={n} value={n}>{mode === 'monthend' ? `Last ${n} month-ends` : `Last ${n} days`}</option>)}
-        </select>
+        {mode === 'hairy' ? (
+          <select value={lookback} onChange={e => setLookback(e.target.value)} style={selStyle}>
+            {[['1y', 'Past year'], ['2y', 'Past 2 years'], ['3y', 'Past 3 years'], ['all', 'Full history']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        ) : (
+          <select value={depth} onChange={e => setDepth(parseInt(e.target.value))} style={selStyle}>
+            {[2, 3, 5].map(n => <option key={n} value={n}>{mode === 'monthend' ? `Last ${n} month-ends` : `Last ${n} days`}</option>)}
+          </select>
+        )}
         <button
           onClick={() => requirePin(snapshotNow)}
           title={pinUnlocked ? "Save today's active curve as a snapshot" : 'Unlock to snapshot'}
           className={`btn btn-sm ${pinUnlocked ? '' : 'btn-locked'}`}
         >{pinUnlocked ? <><CameraIcon size={12} /> Snapshot today</> : <><LockIcon size={11} /> Snapshot today</>}</button>
+        <button
+          onClick={() => requirePin(() => backfillInput.current?.click())}
+          title={pinUnlocked ? 'Upload past Chatham curve files as historical snapshots (dated from each filename)' : 'Unlock to backfill'}
+          className={`btn btn-sm ${pinUnlocked ? '' : 'btn-locked'}`}
+        >{pinUnlocked ? 'Backfill files…' : <><LockIcon size={11} /> Backfill files…</>}</button>
+        <input ref={backfillInput} type="file" accept=".xlsx,.xls" multiple onChange={handleBackfillFiles} style={{ display: 'none' }} />
       </div>
       {status && <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{status}</div>}
+      {backfill && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem' }}>
+          <div style={{ marginBottom: 6, color: 'var(--text2)' }}>
+            Review before saving — each file becomes a snapshot on its curve date. Dates come from the filename; edit any that were guessed wrong or not found.
+          </div>
+          <table style={{ borderCollapse: 'collapse' }}>
+            <tbody>
+              {backfill.map((f, i) => (
+                <tr key={f.name + i}>
+                  <td style={{ padding: '2px 10px 2px 0', color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</td>
+                  <td style={{ padding: '2px 10px 2px 0' }}>
+                    {f.error
+                      ? <span style={{ color: 'var(--fail)' }}>{f.error}</span>
+                      : <>
+                          <input
+                            type="date" value={f.date || ''}
+                            onChange={e => setBackfill(b => b.map((x, j) => (j === i ? { ...x, date: e.target.value || null } : x)))}
+                            style={{ ...selStyle, padding: '1px 4px' }}
+                          />
+                          {!f.dateDetected && <span style={{ color: 'var(--warn)', marginLeft: 6 }}>no date in filename</span>}
+                        </>}
+                  </td>
+                  <td style={{ padding: '2px 0', color: 'var(--faint2)', whiteSpace: 'nowrap' }}>
+                    {f.error ? '' : `${f.sofrPoints.length} SOFR pts${f.tenYPoints.length >= 2 ? ` + ${f.tenYPoints.length} 10Y pts` : ''}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: 8 }}>
+            <button className="btn btn-sm" disabled={backfillSaving} onClick={saveBackfill}>
+              {backfillSaving ? 'Saving…' : `Save ${backfill.filter(f => !f.error && f.date).length} snapshot(s)`}
+            </button>
+            <button className="btn btn-sm" disabled={backfillSaving} onClick={() => setBackfill(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       {series.length >= 1 ? (
         <>
-          {series.length >= 2 && (
+          {mode === 'hairy' ? (
+            <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', fontSize: '0.68rem', color: 'var(--muted)' }}>
+              {series.some(s => s.noTooltip) && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 16, height: 0, borderTop: '2px dotted var(--faint3)', display: 'inline-block' }} />Past forward curves
+                </span>
+              )}
+              {series.filter(s => !s.noTooltip).map(s => (
+                <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ width: 16, height: 0, borderTop: `2px ${s.dash ? 'dashed' : 'solid'} ${s.color}`, display: 'inline-block' }} />{s.label}
+                </span>
+              ))}
+            </div>
+          ) : series.length >= 2 && (
             <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', fontSize: '0.68rem', color: 'var(--muted)' }}>
               {series.map(s => (
                 <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -557,13 +736,18 @@ function CurveWidget({ pinUnlocked, requirePin }) {
               ))}
             </div>
           )}
+          {mode === 'hairy' && spine.length < 2 && (
+            <div style={{ fontSize: '0.7rem', color: 'var(--warn)' }}>
+              No actual-rate history yet — run the "Backfill Rate History" GitHub Action once to load it; the daily rate pull keeps it current after that.
+            </div>
+          )}
           <CurveChart series={series} theme={theme} />
         </>
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'var(--faint)', fontSize: '0.78rem', lineHeight: 1.7, padding: '1rem' }}>
           <div>
             {count === 0
-              ? <>No {curveType === 'sofr_1m' ? 'SOFR' : '10-Year'} snapshots yet.<br />Snapshots accumulate one per day — from the daily rate pull, from Chatham curve uploads, or via "Snapshot today" above.</>
+              ? <>No {curveType === 'sofr_1m' ? 'SOFR' : '10-Year'} snapshots yet.<br />Snapshots accumulate one per day — from the daily rate pull, from Chatham curve uploads, or via "Snapshot today" above. Use "Backfill files…" to load a batch of past Chatham exports.</>
               : <>Only {count} snapshot{count === 1 ? '' : 's'} so far — comparisons appear as more days accumulate.</>}
           </div>
         </div>
