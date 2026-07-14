@@ -457,6 +457,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   const [mode, setMode] = useState('hairy');   // 'hairy' | 'daily' | 'monthend'
   const [depth, setDepth] = useState(5);
   const [lookback, setLookback] = useState('all'); // hairy-mode spine window: '1y' | '2y' | '3y' | 'all'
+  const [hairFreq, setHairFreq] = useState('weekly'); // hairy-mode hair density: 'weekly' | 'monthly'
   const [seriesData, setSeriesData] = useState([]); // fetched snapshots with points
   const [spine, setSpine] = useState([]);      // actual-rate history [{ rate_date, rate }]
   const [status, setStatus] = useState('');
@@ -500,14 +501,26 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   // Pick which snapshot dates to show
   const chosen = useMemo(() => {
     const ofType = meta.filter(m => m.curve_type === curveType);
-    if (mode === 'monthend' || mode === 'hairy') {
+    if (mode === 'hairy') {
+      // One hair per week or per month (latest snapshot in each bucket wins) —
+      // weekly matches the Chatham upload cadence, monthly declutters once
+      // years of history accumulate.
+      const weekKey = (d) => {
+        const dt = new Date(d + 'T00:00:00');
+        dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)); // Monday of that week
+        return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      };
+      const grouped = new Map();
+      for (const m of ofType) grouped.set(hairFreq === 'monthly' ? m.curve_date.slice(0, 7) : weekKey(m.curve_date), m);
+      return [...grouped.values()];
+    }
+    if (mode === 'monthend') {
       const byMonth = new Map(); // yyyy-mm → latest snapshot that month
       for (const m of ofType) byMonth.set(m.curve_date.slice(0, 7), m);
-      const monthly = [...byMonth.values()];
-      return mode === 'hairy' ? monthly : monthly.slice(-depth); // hairy shows every month as a hair
+      return [...byMonth.values()].slice(-depth);
     }
     return ofType.slice(-depth);
-  }, [meta, curveType, mode, depth]);
+  }, [meta, curveType, mode, depth, hairFreq]);
 
   useEffect(() => {
     if (!chosen.length) { setSeriesData([]); return; }
@@ -657,9 +670,15 @@ function CurveWidget({ pinUnlocked, requirePin }) {
           <option value="monthend">Month-end comparison</option>
         </select>
         {mode === 'hairy' ? (
-          <select value={lookback} onChange={e => setLookback(e.target.value)} style={selStyle}>
-            {[['1y', 'Past year'], ['2y', 'Past 2 years'], ['3y', 'Past 3 years'], ['all', 'Full history']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
+          <>
+            <select value={lookback} onChange={e => setLookback(e.target.value)} style={selStyle}>
+              {[['1y', 'Past year'], ['2y', 'Past 2 years'], ['3y', 'Past 3 years'], ['all', 'Full history']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            <select value={hairFreq} onChange={e => setHairFreq(e.target.value)} style={selStyle}>
+              <option value="weekly">Weekly hairs</option>
+              <option value="monthly">Monthly hairs</option>
+            </select>
+          </>
         ) : (
           <select value={depth} onChange={e => setDepth(parseInt(e.target.value))} style={selStyle}>
             {[2, 3, 5].map(n => <option key={n} value={n}>{mode === 'monthend' ? `Last ${n} month-ends` : `Last ${n} days`}</option>)}
