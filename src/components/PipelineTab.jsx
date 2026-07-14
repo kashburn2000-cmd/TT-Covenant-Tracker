@@ -1,10 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
 import { slugify } from '../format.js';
+import { parseBankPackage } from '../parseBankPackage.js';
 
 // Supabase-persisted, fully editable pipeline deal tracker
 // Table: pipeline_deals (see schema.sql)
+
+// pdf.js is dynamically imported so Vite splits it into a lazy chunk — the
+// tab loads instantly and the ~400 KB PDF engine only downloads on first
+// upload. The worker ships as a bundled asset (?url), no CDN involved.
+async function loadPdfJs() {
+  const [mod, worker] = await Promise.all([
+    import('pdfjs-dist/legacy/build/pdf'),
+    import('pdfjs-dist/legacy/build/pdf.worker.min.js?url'),
+  ]);
+  const pdfjs = mod.getDocument ? mod : mod.default;
+  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  return pdfjs;
+}
+
+// All deal data lives in the front section (Executive Summary through Lender
+// Summary, ~page 25) — no need to read 100+ pages of comps and renderings.
+const MAX_PACKAGE_PAGES = 45;
 
 const EMPTY_DEAL = {
   id: '', name: '', division: 'Residential', state: '', type: 'Construction',
@@ -29,6 +47,9 @@ export function PipelineTab() {
   const [filterType,  setFilterType]  = useState('All');
   const [confirmDel,  setConfirmDel]  = useState(null);  // id to confirm delete
   const [covenantPs,  setCovenantPs]  = useState([]);
+  const [parsing,     setParsing]     = useState(false); // bank package upload in flight
+  const [parseInfo,   setParseInfo]   = useState(null);  // summary banner for the edit modal
+  const packageInputRef = useRef(null);
 
   // ── Load ───────────────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -160,7 +181,7 @@ export function PipelineTab() {
           : prev.map(d => d.id === upserted.id ? upserted : d)
         );
         flash(isNew ? '✓ Deal added' : '✓ Saved');
-        setEditId(null); setEditForm(null);
+        setEditId(null); setEditForm(null); setParseInfo(null);
       } else {
         const err = await res.json();
         flash('Save error: ' + (err.message || err.details || JSON.stringify(err)), true);
@@ -206,6 +227,71 @@ export function PipelineTab() {
     setEditForm({ ...EMPTY_DEAL });
     setEditId('new');
     setExpandedId(null);
+    setParseInfo(null);
+  }
+
+  function closeEdit() {
+    setEditId(null);
+    setEditForm(null);
+    setParseInfo(null);
+  }
+
+  // ── Bank package upload ────────────────────────────────────────────────────
+  // Parses an Investment Overview PDF and opens the edit modal with every
+  // deal-specific field pre-filled — only the lenders are typed by hand. If a
+  // deal with the same name already exists, its lenders/flags are preserved
+  // and the extracted numbers refresh it.
+  async function handlePackageFile(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    setParsing(true);
+    try {
+      const pdfjs = await loadPdfJs();
+      const data = new Uint8Array(await file.arrayBuffer());
+      const doc = await pdfjs.getDocument({ data }).promise;
+      const pages = [];
+      const maxPages = Math.min(doc.numPages, MAX_PACKAGE_PAGES);
+      for (let p = 1; p <= maxPages; p++) {
+        const page = await doc.getPage(p);
+        const tc = await page.getTextContent();
+        pages.push({ items: tc.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] })) });
+      }
+      const res = parseBankPackage(pages);
+
+      // only carry over fields the parser actually found
+      const extracted = {};
+      Object.entries(res.fields).forEach(([k, v]) => {
+        if (v != null && v !== '' && (!Array.isArray(v) || v.length)) extracted[k] = v;
+      });
+      if (!extracted.name) extracted.name = file.name.replace(/\.pdf$/i, '');
+
+      const slug = slugify(extracted.name);
+      const existing = deals.find(d => d.id === slug);
+      if (existing) {
+        // refresh deal numbers from the new book; keep lenders, status, flags
+        const { status: _s, book_published: _b, ...nums } = extracted;
+        setEditForm({ ...existing, ...nums, id: existing.id, book_published: true, closing_date: extracted.closing_date || existing.closing_date || '' });
+        setEditId(existing.id);
+      } else {
+        setEditForm({ ...EMPTY_DEAL, ...extracted, id: slug, sort_order: deals.length + 1 });
+        setEditId('new');
+      }
+      setExpandedId(null);
+      setParseInfo({
+        fileName: file.name,
+        projectName: res.projectName,
+        loanAmount: res.loanAmount,
+        ltc: res.ltc,
+        foundCount: res.foundCount,
+        warnings: res.warnings,
+        updating: existing ? existing.name : null,
+      });
+    } catch (err) {
+      console.error('Bank package parse error:', err);
+      flash('Could not read bank package: ' + err.message, true);
+    }
+    setParsing(false);
   }
 
   function setF(k, v) { setEditForm(f => ({ ...f, [k]: v })); }
@@ -300,8 +386,26 @@ export function PipelineTab() {
         <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, width: '100%', maxWidth: 820, padding: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
             <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '1rem' }}>{isNew ? 'Add Deal' : `Edit — ${editForm.name}`}</span>
-            <button onClick={() => { setEditId(null); setEditForm(null); }} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+            <button onClick={closeEdit} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
           </div>
+
+          {/* Bank package extraction summary */}
+          {parseInfo && (
+            <div style={{ background: 'color-mix(in srgb, var(--pass) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--pass) 30%, transparent)', borderRadius: 4, padding: '0.65rem 0.9rem', marginBottom: '1.1rem', fontSize: '0.73rem', color: 'var(--muted)', lineHeight: 1.5 }}>
+              <div style={{ fontWeight: 700, color: 'var(--pass)' }}>
+                ✓ {parseInfo.foundCount} fields pulled from {parseInfo.fileName}
+                {parseInfo.projectName ? ` — ${parseInfo.projectName}` : ''}
+              </div>
+              {parseInfo.updating && <div>Matched existing deal “{parseInfo.updating}” — numbers refreshed, lenders and status kept.</div>}
+              <div>
+                {parseInfo.loanAmount ? `Loan ask $${(parseInfo.loanAmount / 1e6).toFixed(1)}M${parseInfo.ltc ? ` at ${parseInfo.ltc}% LTC` : ''}. ` : ''}
+                Review the numbers, enter the lender{parseInfo.updating ? 's if changed' : 's'}, and save.
+              </div>
+              {parseInfo.warnings.map((w, i) => (
+                <div key={i} style={{ color: 'var(--gold)' }}>⚠ {w}</div>
+              ))}
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.25rem' }}>
 
@@ -437,7 +541,7 @@ export function PipelineTab() {
 
           {/* ── Footer buttons ── */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-            <button onClick={() => { setEditId(null); setEditForm(null); }}
+            <button onClick={closeEdit}
               style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>
               Cancel
             </button>
@@ -476,15 +580,19 @@ export function PipelineTab() {
     <div style={{ padding: '1.5rem 0', position: 'relative' }}>
       <EditModal />
       <ConfirmDeleteModal />
+      <input ref={packageInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={handlePackageFile} />
 
       {/* ── Empty state ── */}
       {deals.length === 0 && (
         <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
           <div style={{ fontSize: '2rem', opacity: 0.3, marginBottom: '1rem' }}>🏗</div>
           <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.5rem' }}>No deals yet</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--faint)', marginBottom: '1.5rem' }}>Start fresh or seed from the 2026 pipeline book</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--faint)', marginBottom: '1.5rem' }}>Upload a bank package, start fresh, or seed from the 2026 pipeline book</div>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-            <button onClick={startNew} className="btn btn-primary" style={{ padding: '7px 18px', fontSize: '0.78rem' }}>+ Add Deal</button>
+            <button onClick={() => packageInputRef.current && packageInputRef.current.click()} disabled={parsing} className="btn btn-primary" style={{ padding: '7px 18px', fontSize: '0.78rem', opacity: parsing ? 0.7 : 1 }}>
+              {parsing ? 'Reading package…' : '⬆ Upload Bank Package'}
+            </button>
+            <button onClick={startNew} className="btn" style={{ padding: '7px 18px', fontSize: '0.78rem' }}>+ Add Deal</button>
             <button onClick={seedFromBook} disabled={saving} style={{ padding: '8px 20px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Seeding…' : '↓ Seed from Pipeline Book'}
             </button>
@@ -556,6 +664,9 @@ export function PipelineTab() {
           ))}
           <div style={{ flex: 1 }} />
           {msg && <span style={{ fontSize: '0.68rem', color: msg.isErr ? 'var(--fail)' : 'var(--pass)' }}>{msg.text}</span>}
+          <button onClick={() => packageInputRef.current && packageInputRef.current.click()} disabled={parsing} className="btn btn-sm" style={{ opacity: parsing ? 0.7 : 1, cursor: parsing ? 'wait' : 'pointer' }} title="Pull deal info from an Investment Overview PDF — you only enter the lenders">
+            {parsing ? 'Reading package…' : '⬆ Upload Bank Package'}
+          </button>
           <button onClick={startNew} className="btn btn-sm btn-primary">+ Add Deal</button>
         </div>
 
