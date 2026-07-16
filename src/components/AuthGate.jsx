@@ -116,7 +116,7 @@ export function AuthGate({ children }) {
     return (
       <div style={wrap}>
         <form style={card} onSubmit={handleSetPassword}>
-          <div style={title}>Thompson Thrift · Covenant Dashboard</div>
+          <div style={title}>Thompson Thrift · Debt &amp; Capital Markets</div>
           <div style={sub}>Welcome — choose a password to finish setting up your account.</div>
           {error && <div style={errStyle}>{error}</div>}
           <label style={label}>New Password</label>
@@ -133,7 +133,7 @@ export function AuthGate({ children }) {
     return (
       <div style={wrap}>
         <form style={card} onSubmit={handleSignIn}>
-          <div style={title}>Thompson Thrift · Covenant Dashboard</div>
+          <div style={title}>Thompson Thrift · Debt &amp; Capital Markets</div>
           <div style={sub}>Sign in to continue. Access is by invitation only.</div>
           {error && <div style={errStyle}>{error}</div>}
           {notice && <div style={noticeStyle}>{notice}</div>}

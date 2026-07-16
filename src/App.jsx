@@ -2913,10 +2913,10 @@ export default function App() {
           <div style={{ width: 1, height: 30, background: "var(--border)", flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text)", letterSpacing: "0.01em", lineHeight: 1.3 }}>
-              Covenant Dashboard
+              Debt &amp; Capital Markets
             </div>
             <div style={{ fontSize: "0.68rem", color: "var(--muted)", lineHeight: 1.4 }}>
-              Debt &amp; Capital Markets Analytics
+              Portfolio Analytics &amp; Reporting
             </div>
           </div>
         </div>
