@@ -508,7 +508,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   // and extension maturities come straight off the loan; covenant test dates are derived
   // from the DSCR test frequency, stepping forward from the closing date to maturity.
   const CAL_EVENT_META = {
-    closing:   { label: 'Closing',        fg: 'var(--cat-blue)', bg: 'color-mix(in srgb, var(--cat-blue) 16%, transparent)' },
+    closing:   { label: 'Closing',        fg: 'var(--cat-teal)', bg: 'color-mix(in srgb, var(--cat-teal) 16%, transparent)' },
     maturity:  { label: 'Maturity',       fg: 'var(--accent)', bg: 'color-mix(in srgb, var(--accent) 20%, transparent)' },
     extension: { label: 'Ext. Maturity',  fg: 'var(--cat-violet)', bg: 'color-mix(in srgb, var(--cat-violet) 18%, transparent)' },
     covenant:  { label: 'Covenant Test',  fg: 'var(--pass)', bg: 'color-mix(in srgb, var(--pass) 16%, transparent)' },
@@ -689,8 +689,8 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const groupHdr = { fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.6rem' };
   const typeBadge = l => (
     <span style={{ fontSize: '0.6rem', fontWeight: 700, padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap',
-      background: l.loan_type === 'construction' ? 'color-mix(in srgb, var(--cat-blue) 12%, transparent)' : 'color-mix(in srgb, var(--cat-violet) 14%, transparent)',
-      color: l.loan_type === 'construction' ? 'var(--cat-blue)' : 'var(--cat-violet)' }}>
+      background: l.loan_type === 'construction' ? 'color-mix(in srgb, var(--cat-teal) 12%, transparent)' : 'color-mix(in srgb, var(--cat-violet) 14%, transparent)',
+      color: l.loan_type === 'construction' ? 'var(--cat-teal)' : 'var(--cat-violet)' }}>
       {(LOAN_TYPE_LABEL[l.loan_type] || l.loan_type || '').toUpperCase()}
     </span>
   );

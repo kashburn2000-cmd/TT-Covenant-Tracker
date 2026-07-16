@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- TT monogram — Thompson Thrift navy surface + gold brand accent -->
-  <rect width="64" height="64" rx="14" fill="#0D141E"/>
-  <rect x="10" y="15" width="21" height="7" rx="1.5" fill="#D6A84F"/>
-  <rect x="17" y="15" width="7" height="34" rx="1.5" fill="#D6A84F"/>
-  <rect x="33" y="15" width="21" height="7" rx="1.5" fill="#D6A84F"/>
-  <rect x="40" y="15" width="7" height="34" rx="1.5" fill="#D6A84F"/>
+  <!-- TT monogram — graphite surface + iris accent -->
+  <rect width="64" height="64" rx="14" fill="#131418"/>
+  <rect x="10" y="15" width="21" height="7" rx="1.5" fill="#8478F0"/>
+  <rect x="17" y="15" width="7" height="34" rx="1.5" fill="#8478F0"/>
+  <rect x="33" y="15" width="21" height="7" rx="1.5" fill="#8478F0"/>
+  <rect x="40" y="15" width="7" height="34" rx="1.5" fill="#8478F0"/>
 </svg>

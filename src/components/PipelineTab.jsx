@@ -326,7 +326,7 @@ export function PipelineTab({ pinUnlocked = true }) {
   };
   const typeBadge = (d) => d.type === 'Perm/Bridge'
     ? pill('PERM/BRIDGE', 'var(--cat-violet)', 'color-mix(in srgb, var(--cat-violet) 12%, transparent)')
-    : pill('CONST', 'var(--cat-blue)', 'color-mix(in srgb, var(--cat-blue) 12%, transparent)');
+    : pill('CONST', 'var(--cat-teal)', 'color-mix(in srgb, var(--cat-teal) 12%, transparent)');
 
   // ── Input style helpers ────────────────────────────────────────────────────
   const inputSt = (extra = {}) => ({
@@ -342,7 +342,7 @@ export function PipelineTab({ pinUnlocked = true }) {
   // and anything without either flag is still in pre-marketing.
   const STAGES = [
     { key: 'committed', label: 'Fully Committed', color: 'var(--pass)', desc: 'lender commitment in hand' },
-    { key: 'book',      label: 'Book Published',  color: 'var(--gold)', desc: 'book out — awaiting commitment' },
+    { key: 'book',      label: 'Book Published',  color: 'var(--highlight)', desc: 'book out — awaiting commitment' },
     { key: 'premarket', label: 'Pre-Marketing',   color: TT_ORANGE,     desc: 'no book published, no commitment' },
   ];
   const stageOf = d => d.committed ? 'committed' : d.book_published ? 'book' : 'premarket';
@@ -395,7 +395,7 @@ export function PipelineTab({ pinUnlocked = true }) {
                 Review the numbers, enter the lender{parseInfo.updating ? 's if changed' : 's'}, and save.
               </div>
               {parseInfo.warnings.map((w, i) => (
-                <div key={i} style={{ color: 'var(--gold)' }}>⚠ {w}</div>
+                <div key={i} style={{ color: 'var(--highlight)' }}>⚠ {w}</div>
               ))}
             </div>
           )}
@@ -632,7 +632,7 @@ export function PipelineTab({ pinUnlocked = true }) {
                 ))}
                 {upcoming.map(d => {
                   const pct = Math.max(0, Math.min(98, (new Date(d.closing_date) - rangeStart) / span * 100));
-                  const color = d.committed ? 'var(--pass)' : d.book_published ? 'var(--gold)' : TT_ORANGE;
+                  const color = d.committed ? 'var(--pass)' : d.book_published ? 'var(--highlight)' : TT_ORANGE;
                   return <div key={d.id} title={`${d.name} — ${fmtDate(d.closing_date)}`}
                     style={{ position: 'absolute', top: 4, left: `${pct}%`, transform: 'translateX(-50%)', width: 10, height: 10, borderRadius: '50%', background: color, boxShadow: `0 0 0 2px ${color}40`, cursor: 'default' }} />;
                 })}
@@ -642,7 +642,7 @@ export function PipelineTab({ pinUnlocked = true }) {
                   const days = daysUntil(d.closing_date);
                   return (
                     <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.63rem' }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: d.committed ? 'var(--pass)' : d.book_published ? 'var(--gold)' : TT_ORANGE }} />
+                      <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: d.committed ? 'var(--pass)' : d.book_published ? 'var(--highlight)' : TT_ORANGE }} />
                       <span style={{ color: 'var(--muted)' }}>{d.name.split(',')[0]}</span>
                       <span style={{ color: 'var(--faint)' }}>{fmtDate(d.closing_date)}</span>
                       {days != null && days >= 0 && days <= 60 && <span style={{ color: days <= 30 ? 'var(--fail)' : TT_ORANGE }}>{days}d</span>}
