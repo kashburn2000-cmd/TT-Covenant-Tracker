@@ -769,8 +769,8 @@ function GuarantyWidget({ projects }) {
 // ── Forward Curve Tracker ─────────────────────────────────────────────────────
 // Snapshot series are ordinal in time, so they wear a validated one-hue ramp:
 // older curves lighter, the newest darkest/strongest.
-const RAMP_LIGHT = ['#A9C0E8', '#7FA0D6', '#5B82C4', '#3B62A8', '#1F4178'];
-const RAMP_DARK  = ['#33507F', '#40639E', '#537ABD', '#7398D8', '#9DBAEF'];
+const RAMP_LIGHT = ['#C9C2F2', '#AC9FE8', '#8C7BD8', '#6B58C2', '#4A3A9C'];
+const RAMP_DARK  = ['#4A3F8F', '#5F53AE', '#7768CB', '#9184E2', '#ACA0F4'];
 const rampColors = (n, theme) => {
   const ramp = theme === 'light' ? RAMP_LIGHT : RAMP_DARK;
   if (n <= 0) return [];
@@ -1014,7 +1014,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
         label: `Fwd curve ${fmtDate(s.date)}`, color: 'var(--faint3)', width: 1.4, dash: '2,3.5', noTooltip: true, points: s.points,
       }));
       const current = curves[curves.length - 1];
-      if (current) out.push({ label: `Current fwd curve (${fmtDate(current.date)})`, color: 'var(--gold)', width: 2, dash: '7,4', points: current.points });
+      if (current) out.push({ label: `Current fwd curve (${fmtDate(current.date)})`, color: 'var(--highlight)', width: 2, dash: '7,4', points: current.points });
       const spinePts = toPoints(spine.map(r => ({ date: r.rate_date, rate: r.rate }))).filter(p => p.x >= spineStart);
       if (spinePts.length > 1) out.push({
         label: curveType === 'sofr_1m' ? '30-Day Avg SOFR (actual)' : '10-Year Treasury (actual)',

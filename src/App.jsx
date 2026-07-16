@@ -1898,9 +1898,9 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                         <span style={{
                           display: 'inline-block', padding: '2px 10px', borderRadius: 4,
                           fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
-                          background: r.testType === 'Maturity' ? 'color-mix(in srgb, var(--gold) 13%, transparent)' : 'color-mix(in srgb, var(--accent) 12%, transparent)',
-                          color: r.testType === 'Maturity' ? 'var(--gold)' : 'var(--accent-strong)',
-                          border: r.testType === 'Maturity' ? '1px solid color-mix(in srgb, var(--gold) 25%, transparent)' : '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
+                          background: r.testType === 'Maturity' ? 'color-mix(in srgb, var(--highlight) 13%, transparent)' : 'color-mix(in srgb, var(--accent) 12%, transparent)',
+                          color: r.testType === 'Maturity' ? 'var(--highlight)' : 'var(--accent-strong)',
+                          border: r.testType === 'Maturity' ? '1px solid color-mix(in srgb, var(--highlight) 25%, transparent)' : '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
                         }}>{r.testType || 'Covenant'}</span>
                       </td>
                     )}
@@ -2913,10 +2913,10 @@ export default function App() {
           <div style={{ width: 1, height: 30, background: "var(--border)", flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text)", letterSpacing: "0.01em", lineHeight: 1.3 }}>
-              Covenant Dashboard
+              Debt &amp; Capital Markets
             </div>
             <div style={{ fontSize: "0.68rem", color: "var(--muted)", lineHeight: 1.4 }}>
-              Debt &amp; Capital Markets Analytics
+              Portfolio Analytics &amp; Reporting
             </div>
           </div>
         </div>
@@ -3032,7 +3032,7 @@ export default function App() {
               {userEmail ? `${userEmail} · Sign out` : 'Sign out'}
             </button>
             <span style={{ fontSize: "0.8rem", color: "var(--text2)", fontWeight: 600, letterSpacing: "0.01em" }}>
-              Kevin Ashburn · <span style={{ color: "var(--gold)" }}>Thompson Thrift</span>
+              Kevin Ashburn · <span style={{ color: "var(--highlight)" }}>Thompson Thrift</span>
             </span>
           </div>
         </div>

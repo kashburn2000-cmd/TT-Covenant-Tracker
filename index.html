@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TT Covenant Tracker</title>
+    <title>TT Debt &amp; Capital Markets</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -12,60 +15,60 @@
          Dark is the baseline; [data-theme="light"] overrides it.
          Toggled at runtime by setting data-theme on <html>. */
       :root, :root[data-theme="dark"] {
-        /* Layered dark-navy surfaces: bg < header < panel < panel3 (elevated).
+        /* Layered graphite surfaces: bg < header < panel < panel3 (elevated).
            panel2 is the inset/recessed surface (inputs, table headers, zebra rows). */
-        --bg: #0B1018;
-        --header: #0D141E;
-        --panel: #121A26;
-        --panel2: #0E1520;
-        --panel3: #17202E;
-        --border: #263244;
-        --border2: #344258;          /* strong border / hover border */
-        --row-hover: #1B2533;
-        --text: #F3F7FB;
-        --text2: #C6D1E0;
-        --muted: #8B99AF;
-        --faint: #5C6B82;
-        --faint2: #7A8AA1;
-        --faint3: #6B7B93;
-        --accent: #5B8AF5;           /* muted institutional blue */
-        --accent-strong: #8EAAFF;
-        --gold: #D6A84F;             /* Thompson Thrift brand accent — use sparingly */
-        --cat-blue: #7EA2C8;         /* categorical: construction / closing */
-        --cat-violet: #9DA4CE;       /* categorical: perm-bridge / extension */
+        --bg: #0E0F13;
+        --header: #131418;
+        --panel: #17181D;
+        --panel2: #111216;
+        --panel3: #1C1E24;
+        --border: #2A2C34;
+        --border2: #3B3E49;          /* strong border / hover border */
+        --row-hover: #1F2128;
+        --text: #F5F5F7;
+        --text2: #CDCED6;
+        --muted: #93959F;
+        --faint: #63656F;
+        --faint2: #81838E;
+        --faint3: #71737E;
+        --accent: #8478F0;           /* iris violet — primary action/emphasis */
+        --accent-strong: #A79DFF;
+        --highlight: #D24FA6;        /* orchid — secondary highlight, use sparingly */
+        --cat-teal: #2AA898;         /* categorical: construction / closing */
+        --cat-violet: #8A7FE6;       /* categorical: perm-bridge / extension */
         --pass: #4FBF8F;
         --fail: #E06A6A;
         --warn: #D6A84F;
-        --disabled: #1A2230;
-        --shadow: 0 1px 2px rgba(2,6,12,0.4);
+        --disabled: #1B1D23;
+        --shadow: 0 1px 2px rgba(0,0,0,0.4);
         --ring: color-mix(in srgb, var(--accent) 40%, transparent);
         color-scheme: dark;
       }
       :root[data-theme="light"] {
-        --bg: #F2F4F8;
+        --bg: #F4F4F6;
         --header: #FFFFFF;
         --panel: #FFFFFF;
-        --panel2: #F5F7FA;
-        --panel3: #FAFBFD;
-        --border: #DCE3EC;
-        --border2: #C2CCDA;
-        --row-hover: #EEF2F8;
-        --text: #17202C;
-        --text2: #33415A;
-        --muted: #64748B;
-        --faint: #94A1B5;
-        --faint2: #66748B;
-        --faint3: #7E8CA3;
-        --accent: #2F5EC4;
-        --accent-strong: #234FA8;
-        --gold: #9C7420;
-        --cat-blue: #3D7099;
-        --cat-violet: #6470A8;
+        --panel2: #F6F6F8;
+        --panel3: #FBFBFC;
+        --border: #E2E2E8;
+        --border2: #C8C8D2;
+        --row-hover: #F0F0F4;
+        --text: #1A1B20;
+        --text2: #3D3F4C;
+        --muted: #6E7080;
+        --faint: #9B9DAA;
+        --faint2: #6F7280;
+        --faint3: #85879A;
+        --accent: #6552E0;
+        --accent-strong: #5040C0;
+        --highlight: #B0399B;
+        --cat-teal: #00937D;
+        --cat-violet: #6E60CC;
         --pass: #1E7A4E;
         --fail: #C03B3B;
         --warn: #9C7420;
-        --disabled: #E9EDF3;
-        --shadow: 0 1px 2px rgba(16,24,40,0.06), 0 1px 3px rgba(16,24,40,0.05);
+        --disabled: #EBEBEF;
+        --shadow: 0 1px 2px rgba(20,20,28,0.06), 0 1px 3px rgba(20,20,28,0.05);
         --ring: color-mix(in srgb, var(--accent) 30%, transparent);
         color-scheme: light;
       }

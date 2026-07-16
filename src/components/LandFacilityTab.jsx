@@ -436,9 +436,9 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
   // ── Formatters ──────────────────────────────────────────────────────────────
   const fmtM  = v => v == null ? '—' : '$' + (v / 1e6).toFixed(2) + 'M';
   const fmtD  = s => { if (!s) return '—'; try { return new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return s; } };
-  const statusColor = s => s === 'paid_off' ? 'var(--pass)' : s === 'proposed' ? 'var(--cat-blue)' : 'var(--accent)';
+  const statusColor = s => s === 'paid_off' ? 'var(--pass)' : s === 'proposed' ? 'var(--cat-teal)' : 'var(--accent)';
   const statusLabel = s => s === 'paid_off' ? 'Paid Off' : s === 'proposed' ? 'Proposed' : 'Outstanding';
-  const statusBg    = s => s === 'paid_off' ? 'color-mix(in srgb, var(--pass) 10%, transparent)' : s === 'proposed' ? 'color-mix(in srgb, var(--cat-blue) 12%, transparent)' : 'color-mix(in srgb, var(--accent) 12%, transparent)';
+  const statusBg    = s => s === 'paid_off' ? 'color-mix(in srgb, var(--pass) 10%, transparent)' : s === 'proposed' ? 'color-mix(in srgb, var(--cat-teal) 12%, transparent)' : 'color-mix(in srgb, var(--accent) 12%, transparent)';
 
   const inputSt = { background: 'var(--panel3)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '6px 10px', fontFamily: 'inherit', fontSize: '0.8rem', width: '100%', boxSizing: 'border-box' };
   const labelSt = { fontSize: '0.6rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 3 };
@@ -455,7 +455,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
         {/* 12-Month Peak — wider and more prominent */}
         <div style={{ background: 'var(--panel2)', border: `1px solid ${(() => { const peak = Math.max(...timelineData.map(t => t.balance), 0); return threshold && peak > threshold ? 'var(--fail)' : 'var(--border)'; })()}`, borderRadius: 6, padding: '1rem 1.5rem' }}>
-          <div style={{ fontSize: '0.62rem', color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 }}>12-Month Peak Exposure</div>
+          <div style={{ fontSize: '0.62rem', color: 'var(--highlight)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, fontWeight: 600 }}>12-Month Peak Exposure</div>
           {(() => {
             const peak = Math.max(...timelineData.map(t => t.balance), 0);
             const peakMonth = timelineData.find(t => t.balance === peak);
@@ -634,7 +634,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <div style={{ fontSize: '0.65rem', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>12-Month Exposure Forecast</div>
           <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.6rem', color: 'var(--cat-blue)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 2, background: 'var(--cat-blue)', borderRadius: 1 }} />Projected exposure</span>
+            <span style={{ fontSize: '0.6rem', color: 'var(--cat-teal)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 2, background: 'var(--cat-teal)', borderRadius: 1 }} />Projected exposure</span>
             {threshold && <span style={{ fontSize: '0.6rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '2px dashed var(--accent)' }} />TT Internal Threshold {fmtM(threshold)}</span>}
             <span style={{ fontSize: '0.6rem', color: 'var(--border)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', width: 18, height: 0, borderTop: '1px dashed var(--border)' }} />$45M cap</span>
           </div>
@@ -669,7 +669,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
           )}
 
           {/* Filled area under line */}
-          <path d={areaPath} fill="color-mix(in srgb, var(--cat-blue) 10%, transparent)" />
+          <path d={areaPath} fill="color-mix(in srgb, var(--cat-teal) 10%, transparent)" />
 
           {/* Line segments — red where over threshold */}
           {pts.slice(0, -1).map((p, i) => {
@@ -679,7 +679,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
               <line key={i}
                 x1={p.x.toFixed(1)} y1={p.y.toFixed(1)}
                 x2={next.x.toFixed(1)} y2={next.y.toFixed(1)}
-                stroke={over ? 'var(--fail)' : 'var(--cat-blue)'}
+                stroke={over ? 'var(--fail)' : 'var(--cat-teal)'}
                 strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
             );
           })}
@@ -691,7 +691,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
               <g key={i}>
                 <title>{p.label}: {fmtM(p.balance)}</title>
                 <circle cx={p.x.toFixed(1)} cy={p.y.toFixed(1)} r={3.5}
-                  fill={over ? 'var(--fail)' : 'var(--cat-blue)'} stroke="var(--panel2)" strokeWidth={1.5} />
+                  fill={over ? 'var(--fail)' : 'var(--cat-teal)'} stroke="var(--panel2)" strokeWidth={1.5} />
               </g>
             );
           })}

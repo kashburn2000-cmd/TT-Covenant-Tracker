@@ -18,7 +18,7 @@ import { LockIcon } from '../icons.jsx';
 
 const STAGES = [
   { key: 'pipeline',     label: 'Pipeline',           color: 'var(--cat-violet)', desc: 'Lender Pipeline deals not yet closed' },
-  { key: 'committed',    label: 'Committed',          color: 'var(--gold)',       desc: 'Committed deals not yet closed' },
+  { key: 'committed',    label: 'Committed',          color: 'var(--highlight)',       desc: 'Committed deals not yet closed' },
   { key: 'construction', label: 'Under Construction', color: 'var(--accent)',     desc: 'At Risk construction schedule' },
   { key: 'stabilized',   label: 'Stabilized',         color: 'var(--pass)',       desc: 'Stabilized portfolio schedule' },
 ];
