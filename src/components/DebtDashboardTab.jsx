@@ -93,6 +93,9 @@ const CATEGORY_LABEL = { residential: 'Residential', commercial: 'Commercial' };
 // pieces have left the facility and stay on the Land Facility tab only)
 const DRAW_PILL  = { outstanding: 'yellow', proposed: 'blue' };
 const DRAW_LABEL = { outstanding: 'Outstanding', proposed: 'Proposed' };
+const EMPTY_PIECE = { name: '', draw_amount: '', takedown_date: '', payoff_date: '', status: 'outstanding', note: '' };
+// takedown-date sort with undated pieces last, matching the fetch order
+const pieceSort = (a, b) => String(a.takedown_date || '9999').localeCompare(String(b.takedown_date || '9999'));
 
 function SourceFilter({ value, onChange }) {
   return (
@@ -229,6 +232,8 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
   const [openFacility, setOpenFacility] = useState(null); // facility row id whose land-piece breakdown is open
   const [landDraws, setLandDraws] = useState(null); // null = not fetched yet (lazy, on first expand)
   const [drawsError, setDrawsError] = useState('');
+  const [pieceEdit, setPieceEdit] = useState(null); // null | { id: 'new' | rowId, ...field drafts }
+  const [pieceBusy, setPieceBusy] = useState(false);
   const sort = useSort('name');
 
   // Break a facility open: the pieces are the Land Facility tab's land_draws
@@ -237,6 +242,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
   async function toggleFacility(p) {
     const next = openFacility === p.id ? null : p.id;
     setOpenFacility(next);
+    setPieceEdit(null);
     if (next == null || landDraws != null) return;
     setDrawsError('');
     try {
@@ -246,6 +252,52 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
     } catch (err) {
       setDrawsError('Could not load land pieces: ' + err.message);
     }
+  }
+
+  // The sheet only carries the facility's total, so pieces are typed in here
+  // (or on the Land Facility tab — both edit the same land_draws table).
+  async function savePiece() {
+    const name = pieceEdit.name.trim();
+    if (!name) { setDrawsError('Piece name is required'); return; }
+    const amt = Number(String(pieceEdit.draw_amount).replace(/[$,\s]/g, ''));
+    if (!isFinite(amt) || amt <= 0) { setDrawsError(`Could not read amount "${pieceEdit.draw_amount}"`); return; }
+    const body = {
+      name,
+      draw_amount: amt,
+      takedown_date: pieceEdit.takedown_date || null,
+      payoff_date: pieceEdit.payoff_date || null,
+      status: pieceEdit.status || 'outstanding',
+      note: pieceEdit.note.trim() || null,
+    };
+    setPieceBusy(true);
+    setDrawsError('');
+    try {
+      const res = pieceEdit.id === 'new'
+        ? await fetch(`${SB_URL}/rest/v1/land_draws`, { method: 'POST', headers: { ...SB_HEADERS, Prefer: 'return=representation' }, body: JSON.stringify(body) })
+        : await fetch(`${SB_URL}/rest/v1/land_draws?id=eq.${pieceEdit.id}`, { method: 'PATCH', headers: { ...SB_HEADERS, Prefer: 'return=representation' }, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(await res.text());
+      const [saved] = await res.json();
+      setLandDraws(prev => [...(prev || []).filter(d => d.id !== saved.id), saved].sort(pieceSort));
+      setPieceEdit(null);
+    } catch (err) {
+      setDrawsError('Could not save piece: ' + err.message);
+    }
+    setPieceBusy(false);
+  }
+
+  async function deletePiece(d) {
+    if (!window.confirm(`Delete land piece "${d.name}"?\n\nThis also removes it from the Land Facility tab. This cannot be undone.`)) return;
+    setPieceBusy(true);
+    setDrawsError('');
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/land_draws?id=eq.${d.id}`, { method: 'DELETE', headers: SB_HEADERS });
+      if (!res.ok) throw new Error(await res.text());
+      setLandDraws(prev => (prev || []).filter(x => x.id !== d.id));
+      setPieceEdit(prev => (prev?.id === d.id ? null : prev));
+    } catch (err) {
+      setDrawsError('Could not delete piece: ' + err.message);
+    }
+    setPieceBusy(false);
   }
 
   const funds = useMemo(() => [...new Set(projects.map(p => p.fund).filter(Boolean))].sort(), [projects]);
@@ -439,7 +491,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
         <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem', flexShrink: 0 }}>
           <div style={{ color: 'var(--muted)', marginBottom: 6 }}>
             Credit facilities — tracked separately from projects and excluded from the portfolio totals above.
-            Draw-level detail lives on the Land Facility tab.
+            Break one open (▸) to view or type in the land pieces it holds; pieces sync with the Land Facility tab.
           </div>
           {facilities.map(p => (
             <React.Fragment key={p.id}>
@@ -485,34 +537,81 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                     // >$1 tolerance: both figures are dollars, so anything past
                     // rounding means the sheet and the draw log disagree.
                     const drift = p.loan_amount != null && Math.abs(held - p.loan_amount) > 1;
-                    if (pieces.length === 0) {
-                      return <div style={{ color: 'var(--faint)' }}>No outstanding or proposed land pieces recorded — add them on the Land Facility tab.</div>;
-                    }
+                    const pieceKeys = (e) => { if (e.key === 'Enter') savePiece(); if (e.key === 'Escape') setPieceEdit(null); };
                     return (
                       <>
-                        <table style={{ borderCollapse: 'collapse' }}>
-                          <thead><tr>
-                            <th>Land piece</th><th>Status</th>
-                            <th style={{ textAlign: 'right' }}>Draw</th>
-                            <th>Takedown</th><th>Expected payoff</th>
-                          </tr></thead>
-                          <tbody>
-                            {pieces.map(d => (
-                              <tr key={d.id}>
-                                <td title={d.note || undefined}>{d.name}</td>
-                                <td><span className={`pill ${DRAW_PILL[d.status] || 'blue'}`}>{DRAW_LABEL[d.status] || d.status}</span></td>
-                                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(d.draw_amount)}</td>
-                                <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(d.takedown_date)}</td>
-                                <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(d.payoff_date)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <div style={{ marginTop: 4, color: 'var(--faint)' }}>
-                          Outstanding pieces total {fmtM(held)}
-                          {drift && <span style={{ color: 'var(--warn)' }}> · sheet shows {fmtM(p.loan_amount)} — reconcile on the Land Facility tab</span>}
-                          {paidOff > 0 && <> · {paidOff} paid-off piece{paidOff === 1 ? '' : 's'} not shown (full history on the Land Facility tab)</>}
-                        </div>
+                        {pieces.length === 0 ? (
+                          <div style={{ color: 'var(--faint)' }}>
+                            No outstanding or proposed land pieces recorded{pinUnlocked ? ' — type them in below' : ' — unlock editing to type them in, or use the Land Facility tab'}.
+                          </div>
+                        ) : (
+                          <>
+                            <table style={{ borderCollapse: 'collapse' }}>
+                              <thead><tr>
+                                <th>Land piece</th><th>Status</th>
+                                <th style={{ textAlign: 'right' }}>Draw</th>
+                                <th>Takedown</th><th>Expected payoff</th>
+                                {pinUnlocked && <th />}
+                              </tr></thead>
+                              <tbody>
+                                {pieces.map(d => (
+                                  <tr key={d.id}>
+                                    <td title={d.note || undefined}>{d.name}</td>
+                                    <td><span className={`pill ${DRAW_PILL[d.status] || 'blue'}`}>{DRAW_LABEL[d.status] || d.status}</span></td>
+                                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(d.draw_amount)}</td>
+                                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(d.takedown_date)}</td>
+                                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(d.payoff_date)}</td>
+                                    {pinUnlocked && (
+                                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                        <button
+                                          onClick={() => setPieceEdit({ id: d.id, name: d.name, draw_amount: String(d.draw_amount ?? ''), takedown_date: d.takedown_date || '', payoff_date: d.payoff_date || '', status: d.status || 'outstanding', note: d.note || '' })}
+                                          disabled={pieceBusy}
+                                          title="Edit this land piece"
+                                          style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
+                                        ><PencilIcon size={12} /></button>
+                                        <button
+                                          onClick={() => deletePiece(d)}
+                                          disabled={pieceBusy}
+                                          title="Delete this land piece (also removes it from the Land Facility tab)"
+                                          style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1, marginLeft: 4 }}
+                                        >✕</button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            <div style={{ marginTop: 4, color: 'var(--faint)' }}>
+                              Outstanding pieces total {fmtM(held)}
+                              {drift && <span style={{ color: 'var(--warn)' }}> · sheet shows {fmtM(p.loan_amount)} — reconcile the draw log</span>}
+                              {paidOff > 0 && <> · {paidOff} paid-off piece{paidOff === 1 ? '' : 's'} not shown (full history on the Land Facility tab)</>}
+                            </div>
+                          </>
+                        )}
+                        {pinUnlocked && (pieceEdit ? (
+                          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
+                            <input autoFocus type="text" placeholder="Piece / property name" value={pieceEdit.name} onChange={e => setPieceEdit(f => ({ ...f, name: e.target.value }))} onKeyDown={pieceKeys} style={{ ...selStyle, width: 160 }} />
+                            <input type="text" placeholder="Amount ($)" value={pieceEdit.draw_amount} onChange={e => setPieceEdit(f => ({ ...f, draw_amount: e.target.value }))} onKeyDown={pieceKeys} style={{ ...selStyle, width: 100 }} />
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--muted)' }}>
+                              Takedown <input type="date" value={pieceEdit.takedown_date} onChange={e => setPieceEdit(f => ({ ...f, takedown_date: e.target.value }))} style={{ ...selStyle, width: 130 }} />
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--muted)' }}>
+                              Payoff <input type="date" value={pieceEdit.payoff_date} onChange={e => setPieceEdit(f => ({ ...f, payoff_date: e.target.value }))} style={{ ...selStyle, width: 130 }} />
+                            </label>
+                            <select value={pieceEdit.status} onChange={e => setPieceEdit(f => ({ ...f, status: e.target.value }))} style={selStyle}>
+                              <option value="outstanding">Outstanding</option>
+                              <option value="proposed">Proposed</option>
+                              <option value="paid_off">Paid Off</option>
+                            </select>
+                            <input type="text" placeholder="Note (optional)" value={pieceEdit.note} onChange={e => setPieceEdit(f => ({ ...f, note: e.target.value }))} onKeyDown={pieceKeys} style={{ ...selStyle, width: 140 }} />
+                            <button onClick={savePiece} disabled={pieceBusy} className="btn btn-sm">{pieceBusy ? 'Saving…' : pieceEdit.id === 'new' ? 'Add' : 'Save'}</button>
+                            <button onClick={() => setPieceEdit(null)} disabled={pieceBusy} className="btn btn-ghost btn-sm">Cancel</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setPieceEdit({ id: 'new', ...EMPTY_PIECE })} className="btn btn-ghost btn-sm" style={{ marginTop: 4 }}>
+                            + Add piece
+                          </button>
+                        ))}
                       </>
                     );
                   })()}
