@@ -11,6 +11,11 @@
 //
 // Status: NULL on the registry means "derive from where the deal appears";
 // a set status is a manual override that always wins over uploaded data.
+//
+// Classification (orthogonal to status): NULL means an ordinary project;
+// 'land_facility' marks a credit facility (the Simmons land guidance line)
+// that rides in on the At Risk schedule but isn't a project — it stays off
+// the Project Map and is broken out separately on the Debt Dashboard.
 
 import { nameKey } from './parseDebtSchedules.js';
 import { SB_URL, SB_HEADERS } from './supabase.js';
@@ -24,6 +29,16 @@ export const STATUS_LABEL = {
   stabilized:   'Stabilized',
   sold:         'Sold / paid off',
 };
+
+export const DEAL_CLASSIFICATIONS = ['land_facility'];
+
+export const CLASSIFICATION_LABEL = {
+  land_facility: 'Land facility',
+};
+
+export function isLandFacility(entry) {
+  return entry?.classification === 'land_facility';
+}
 
 // Ordinal used when one deal appears in several places (e.g. both schedules
 // during a transition) — the furthest stage wins, matching the Project Map.

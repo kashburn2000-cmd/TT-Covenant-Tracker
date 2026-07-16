@@ -146,7 +146,10 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
           fetch(`${SB_URL}/rest/v1/debt_projects`, { headers: SB_HEADERS }),
           fetch(`${SB_URL}/rest/v1/pipeline_deals?order=sort_order,name`, { headers: SB_HEADERS }),
           fetch(`${SB_URL}/rest/v1/project_locations`, { headers: SB_HEADERS }),
-          fetch(`${SB_URL}/rest/v1/deal_registry?select=uid,name,status`, { headers: SB_HEADERS }),
+          // No column list here either: classification is newer than the
+          // table itself, and naming it would 400 until the setup script
+          // is re-run. Selecting * works on every schema vintage.
+          fetch(`${SB_URL}/rest/v1/deal_registry`, { headers: SB_HEADERS }),
         ]);
         if (dRes.ok) setDebtRows(await dRes.json());
         if (pRes.ok) setDeals(await pRes.json());

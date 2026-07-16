@@ -113,6 +113,22 @@ describe('mergeProjects', () => {
     expect(out[0].stage).toBe('committed');
   });
 
+  it('deals classified as a land facility stay off the map and stay deduped', () => {
+    const reg = new Map([['TT-011', { uid: 'TT-011', classification: 'land_facility' }]]);
+    const out = mergeProjects(
+      [debtRow({ name: 'Simmons Bank Land Facillity', name_key: 'simmonsbanklandfacillity', deal_uid: 'TT-011' })],
+      [{ name: 'Simmons Bank Land Facillity', state: 'AR', status: 'active', deal_uid: 'TT-011' }],
+      reg,
+    );
+    expect(out).toHaveLength(0);
+  });
+
+  it('a land facility classification also drops a pipeline-only appearance', () => {
+    const reg = new Map([['TT-012', { uid: 'TT-012', classification: 'land_facility' }]]);
+    const out = mergeProjects([], [{ name: 'Guidance Line', state: 'AR', status: 'active', deal_uid: 'TT-012' }], reg);
+    expect(out).toHaveLength(0);
+  });
+
   it('a registry override can pull a closed pipeline deal back onto the map', () => {
     const reg = new Map([['TT-009', { uid: 'TT-009', status: 'construction' }]]);
     const out = mergeProjects([], [{ name: 'Done Deal', state: 'TX', status: 'closed', deal_uid: 'TT-009' }], reg);

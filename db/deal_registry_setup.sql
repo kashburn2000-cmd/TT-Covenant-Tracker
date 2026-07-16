@@ -14,17 +14,28 @@
 -- + is_committed flag, exactly like before this table existed). A set
 -- status is a manual override made on the hidden Deal Registry tab and
 -- always wins over uploaded data until cleared.
+--
+-- Classification (orthogonal to status): NULL = ordinary project.
+-- 'land_facility' marks a credit facility — the Simmons land guidance line —
+-- that rides in on the At Risk schedule but isn't a project: it stays off
+-- the Project Map and is broken out separately from projects on the Debt
+-- Dashboard. Set manually on the hidden Deal Registry tab.
 -- ════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS deal_registry (
   uid text PRIMARY KEY,            -- 'TT-001' — assigned sequentially on first appearance
   name text NOT NULL,              -- canonical display name
   status text CHECK (status IN ('pipeline', 'committed', 'construction', 'stabilized', 'sold')),
+  classification text CHECK (classification IN ('land_facility')), -- NULL = ordinary project
   notes text,
   reviewed boolean NOT NULL DEFAULT false, -- false = auto-created and not yet looked at ("NEW" flag on the registry tab)
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
+
+-- Installs that created deal_registry before classification existed.
+ALTER TABLE deal_registry ADD COLUMN IF NOT EXISTS classification text
+  CHECK (classification IN ('land_facility'));
 
 -- Link columns on the tables that hold deal rows. Nullable: rows are linked
 -- lazily (on upload / when the registry tab syncs), never required up front.

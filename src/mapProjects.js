@@ -3,7 +3,7 @@
 
 import { nameKey } from './parseDebtSchedules.js';
 import { applyOverrides } from './projectOverrides.js';
-import { deriveDebtRowStatus, derivePipelineDealStatus, effectiveStatus } from './dealRegistry.js';
+import { deriveDebtRowStatus, derivePipelineDealStatus, effectiveStatus, isLandFacility } from './dealRegistry.js';
 
 // Accepts "39.4667, -87.4139", "39.4667 -87.4139", or a pasted Google Maps
 // "@39.46,-87.41,15z" fragment — anything carrying two decimal numbers.
@@ -24,7 +24,8 @@ export function parseLatLng(str) {
 //
 // registryByUid (Map of uid → deal_registry row) is optional; when present,
 // linked projects key by their stable deal uid (so pins survive renames) and
-// a manual registry status wins over the derived stage. Deals marked sold
+// a manual registry status wins over the derived stage. Deals marked sold —
+// and deals classified as a land facility (a credit line, not a property) —
 // drop off the map entirely.
 export function mergeProjects(debtRows, deals, registryByUid) {
   const entryFor = (uid) => (uid && registryByUid ? registryByUid.get(uid) || null : null);
@@ -41,7 +42,9 @@ export function mergeProjects(debtRows, deals, registryByUid) {
       const keys = [r.deal_uid, r.name_key].filter(Boolean);
       if (!keys.length || taken(keys)) continue;
       claim(keys);
-      const stage = effectiveStatus(entryFor(r.deal_uid), deriveDebtRowStatus(r));
+      const entry = entryFor(r.deal_uid);
+      if (isLandFacility(entry)) continue;
+      const stage = effectiveStatus(entry, deriveDebtRowStatus(r));
       if (stage === 'sold') continue;
       out.push({
         key: r.deal_uid || r.name_key,
@@ -59,7 +62,9 @@ export function mergeProjects(debtRows, deals, registryByUid) {
     const keys = [d.deal_uid, nk].filter(Boolean);
     if (!keys.length || taken(keys)) continue;
     claim(keys);
-    const override = entryFor(d.deal_uid)?.status || null;
+    const entry = entryFor(d.deal_uid);
+    if (isLandFacility(entry)) continue;
+    const override = entry?.status || null;
     if (override === 'sold') continue;
     if (!override && d.status === 'closed') continue;
     const stage = override || derivePipelineDealStatus(d);
