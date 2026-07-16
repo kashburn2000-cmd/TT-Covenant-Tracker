@@ -696,6 +696,7 @@ export function PipelineTab({ pinUnlocked = true }) {
                   {/* Name */}
                   <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                     <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '0.9rem' }}>{d.name}</span>
+                    {d.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ fontSize: '0.6rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{d.deal_uid}</span>}
                     {statusBadge(d)}{typeBadge(d)}
                   </div>
                   {/* Lender */}

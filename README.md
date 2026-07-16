@@ -153,6 +153,42 @@ schedule re-uploads exactly like fund tags and manual edits.
 **Setup:** run [`db/map_setup.sql`](db/map_setup.sql) once in the Supabase
 SQL editor (creates the `project_locations` table with row-level security).
 
+### Deal Registry (hidden admin tab)
+A **Deal Registry** tab appears in the nav only while editing is unlocked
+(and disappears again when the PIN locks). It is the identity and status
+control panel for every deal across the app:
+
+- **Stable ids** — every deal gets a sequential id (`TT-001`, `TT-002`, …)
+  the first time it appears in any source: an At Risk / Stabilized schedule
+  upload, or a Lender Pipeline deal. Schedule rows, pipeline deals, and map
+  pins all carry the id, so a deal's identity survives re-uploads, renames,
+  and tab boundaries with no name matching after the initial link. A deal
+  that spans sources (a pipeline deal that's also on the At Risk sheet)
+  shares one id.
+- **Review new deals** — name matching happens exactly once, when a row
+  first appears. A name that matches nothing mints a fresh id flagged
+  **NEW**; if that was really a rename of an existing deal, use **Merge…**
+  to fold the duplicate into the original — its schedule rows, pipeline
+  link, and map pin follow, and the duplicate id is retired.
+- **Editable status** — each deal's lifecycle status (`Pipeline` →
+  `Committed (not closed)` → `Under construction` → `Stabilized` →
+  `Sold / paid off`) defaults to **Auto** (derived from which schedule the
+  deal appears on plus the sheet's committed flag). Setting a status here is
+  a manual override that **always wins over uploads** until cleared — e.g.
+  an At Risk row that is really a committed deal not yet closed. Overridden
+  deals show a "sheet says …" note whenever the sheets disagree.
+- **Status flows everywhere** — a deal marked `Committed (not closed)` gets
+  the COMMITTED pill and "Not closed" maturity in the Leverage Tracker and
+  drops off the Maturity Schedule; `Sold / paid off` removes the deal from
+  every widget and the map (like Removed); statuses also drive the Project
+  Map's stage colors, which now include a **Committed** stage.
+
+**Setup:** run [`db/deal_registry_setup.sql`](db/deal_registry_setup.sql)
+once in the Supabase SQL editor (creates `deal_registry` and adds a
+`deal_uid` column to `debt_projects`, `pipeline_deals`, and
+`project_locations`, with row-level security). Until it runs, the app
+simply derives every status from the sheets like before.
+
 ### Daily Rate Pull
 [`.github/workflows/daily-curves.yml`](.github/workflows/daily-curves.yml)
 runs [`scripts/pull-curves.mjs`](scripts/pull-curves.mjs) every weekday
@@ -233,7 +269,8 @@ against a scratch Postgres (instructions in the script header) whenever
 | `curve_snapshots` | Dated forward-curve snapshots (one per day per curve) |
 | `rate_history` | Daily spot prints (10Y Treasury, 30-day Avg SOFR) from the rate-pull Action |
 | `dashboard_layouts` | Saved Debt Dashboard widget layouts |
-| `project_locations` | Manually-placed Project Map pins, keyed by normalized project name — see `db/map_setup.sql` |
+| `project_locations` | Manually-placed Project Map pins, keyed by deal id (legacy pins by normalized name) — see `db/map_setup.sql` |
+| `deal_registry` | Stable deal ids (`TT-001`, …) + manual lifecycle status overrides for the hidden Deal Registry tab — see `db/deal_registry_setup.sql` |
 
 ### Key `properties` Columns
 

@@ -19,6 +19,7 @@ import { LockIcon, UnlockIcon, SunIcon, MoonIcon, EyeIcon, EyeOffIcon, PencilIco
 import { LoansTab } from './components/LoansTab.jsx';
 import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
 import { MapTab } from './components/MapTab.jsx';
+import { RegistryTab } from './components/RegistryTab.jsx';
 
 
 // 12 blank rows for a new variable-loan balance schedule. Never mutated in place
@@ -2652,12 +2653,15 @@ export default function App() {
 
   // If the active tab ends up hidden (e.g. the saved visibleTabs setting loads
   // after mount and excludes the default), fall back to the first visible tab.
+  // The Deal Registry tab lives outside visibleTabs — it exists only while
+  // editing is unlocked, and locking while on it falls back the same way.
   useEffect(() => {
-    if (!visibleTabs[activeTab]) {
+    const hidden = activeTab === 'registry' ? !pinUnlocked : !visibleTabs[activeTab];
+    if (hidden) {
       const first = ['debt','covenant','loans','map','calculator','matrix','land','leasing','pipeline'].find(t => visibleTabs[t]);
       if (first) setActiveTab(first);
     }
-  }, [visibleTabs, activeTab]);
+  }, [visibleTabs, activeTab, pinUnlocked]);
 
   // ── Light / dark theme (system default, remembered once toggled) ──
   const [theme, setTheme] = useState(() => {
@@ -2965,6 +2969,14 @@ export default function App() {
           {visibleTabs.loans      && <button className={`tab-btn ${activeTab === "loans"      ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("loans")}>Loans</button>}
           {visibleTabs.debt       && <button className={`tab-btn ${activeTab === "debt"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("debt")}>Debt Dashboard</button>}
           {visibleTabs.map        && <button className={`tab-btn ${activeTab === "map"        ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("map")}>Project Map</button>}
+          {/* Hidden admin tab — appears only while editing is unlocked */}
+          {pinUnlocked && (
+            <button
+              className={`tab-btn ${activeTab === "registry" ? "tab-active" : "tab-inactive"}`}
+              onClick={() => setActiveTab("registry")}
+              title="Deal Registry — review every deal, assign stable ids, edit statuses (visible only while editing is unlocked)"
+            ><UnlockIcon size={10} style={{ marginRight: 5, verticalAlign: 'baseline' }} />Deal Registry</button>
+          )}
           {/* Gear button */}
           <button
             onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
@@ -2995,6 +3007,7 @@ export default function App() {
         {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
         {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
         {activeTab === "map"        && <MapTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+        {activeTab === "registry"   && pinUnlocked && <RegistryTab />}
 
         {/* ── Footer ── */}
         <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid var(--border)`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
