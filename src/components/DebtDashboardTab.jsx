@@ -487,24 +487,19 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
         <datalist id="tt-fund-options">{funds.map(f => <option key={f} value={f} />)}</datalist>
         {rows.length === 0 && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>No projects — upload the At Risk / Stabilized schedules above.</div>}
       </div>
-      {facilities.length > 0 && (
-        <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem', flexShrink: 0 }}>
-          <div style={{ color: 'var(--muted)', marginBottom: 6 }}>
-            Credit facilities — tracked separately from projects and excluded from the portfolio totals above.
-            Break one open (▸) to view or type in the land pieces it holds; pieces sync with the Land Facility tab.
-          </div>
-          {facilities.map(p => (
-            <React.Fragment key={p.id}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '2px 0', opacity: p.hidden ? 0.45 : 1 }}>
+      {facilities.map(p => (
+        <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem', flexShrink: 0, opacity: p.hidden ? 0.45 : 1 }}>
+              {/* The section IS the facility — its title comes straight off the sheet row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <button
                   onClick={() => toggleFacility(p)}
                   title={openFacility === p.id ? 'Collapse the land-piece breakdown' : 'Break the facility open — show the land pieces held inside it'}
                   style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '0 2px', lineHeight: 1, fontSize: '0.7rem' }}
                 >{openFacility === p.id ? '▾' : '▸'}</button>
-                <span style={{ whiteSpace: 'nowrap' }}>
+                <span style={{ whiteSpace: 'nowrap', fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
                   {p.name}
-                  {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
                 </span>
+                {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
                 <span className="pill blue">{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>
                 <span style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>
                   {p.lender || '—'} · {fmtM(p.loan_amount)}{p.maturity_date ? ` · matures ${fmtDate(p.maturity_date)}` : ''}
@@ -525,6 +520,9 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                     >{p.hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}</button>
                   </span>
                 )}
+              </div>
+              <div style={{ color: 'var(--faint2)', fontSize: '0.66rem', margin: '2px 0 0 1.05rem' }}>
+                Tracked separately from projects — excluded from the portfolio totals above. Break open (▸) to view or type in the land pieces; they sync with the Land Facility tab.
               </div>
               {openFacility === p.id && (
                 <div style={{ margin: '2px 0 8px 1.05rem', borderLeft: '2px solid var(--border)', padding: '0.35rem 0 0.35rem 0.75rem' }}>
@@ -617,10 +615,8 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                   })()}
                 </div>
               )}
-            </React.Fragment>
-          ))}
         </div>
-      )}
+      ))}
       {editing && (
         <ProjectEditModal
           project={editing}

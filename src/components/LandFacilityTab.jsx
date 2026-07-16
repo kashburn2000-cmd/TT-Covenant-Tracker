@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
 import { LockIcon } from '../icons.jsx';
+import { applyOverrides } from '../projectOverrides.js';
 
 // ── Land Facility Tab ─────────────────────────────────────────────────────────
 // Tracks the Simmons Bank $45M guidance line — individual draws, payoff status,
@@ -13,6 +14,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
   const EMPTY_DRAW = { name: '', draw_amount: '', takedown_date: '', payoff_date: '', status: 'outstanding', note: '' };
 
   const [draws, setDraws]             = useState([]);
+  const [sheetBalance, setSheetBalance] = useState(null); // facility balance per the At Risk schedule (null = unavailable)
   const [threshold, setThreshold]     = useState('');
   const [thresholdInput, setThresholdInput] = useState('');
   const [loading, setLoading]         = useState(true);
@@ -41,6 +43,25 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
         const s = await settRes.json();
         if (s.length > 0) { const v = JSON.parse(s[0].value); setThreshold(v); setThresholdInput(String(v / 1e6)); }
       }
+      // Sheet-side tie-out: the At Risk schedule carries the facility as one
+      // row, classified 'land_facility' on the Deal Registry. Degrades
+      // silently — installs that haven't run db/deal_registry_setup.sql
+      // (no classification column) 400 on the filter and just skip this.
+      try {
+        const regRes = await fetch(`${SB_URL}/rest/v1/deal_registry?classification=eq.land_facility&select=uid`, { headers: SB_HEADERS });
+        if (regRes.ok) {
+          const uids = (await regRes.json()).map(e => e.uid);
+          let total = null;
+          if (uids.length > 0) {
+            const rowRes = await fetch(`${SB_URL}/rest/v1/debt_projects?deal_uid=in.(${uids.map(encodeURIComponent).join(',')})`, { headers: SB_HEADERS });
+            if (rowRes.ok) {
+              const rows = (await rowRes.json()).filter(r => !r.removed);
+              if (rows.length > 0) total = rows.reduce((s, r) => s + (applyOverrides(r).loan_amount || 0), 0);
+            }
+          }
+          setSheetBalance(total);
+        }
+      } catch { /* tie-out is optional — the tab works without it */ }
     } catch(e) { console.error('Land load error:', e); }
     setLoading(false);
   }
@@ -454,6 +475,15 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
           <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Outstanding Balance</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: totalOutstanding > (threshold || Infinity) ? 'var(--fail)' : 'var(--text)' }}>{fmtM(totalOutstanding)}</div>
           <div style={{ fontSize: '0.67rem', color: 'var(--faint)', marginTop: 2 }}>{outstanding.length} active draw{outstanding.length !== 1 ? 's' : ''}</div>
+          {sheetBalance != null && (Math.abs(sheetBalance - totalOutstanding) > 1 ? (
+            <div style={{ fontSize: '0.67rem', color: 'var(--fail)', marginTop: 3 }}>
+              ⚠ At Risk schedule shows {fmtM(sheetBalance)} — off by {fmtM(Math.abs(sheetBalance - totalOutstanding))}
+            </div>
+          ) : (
+            <div style={{ fontSize: '0.67rem', color: 'var(--pass)', marginTop: 3 }}>
+              ✓ ties to the At Risk schedule ({fmtM(sheetBalance)})
+            </div>
+          ))}
         </div>
         <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '1rem 1.25rem' }}>
           <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Facility Capacity</div>
