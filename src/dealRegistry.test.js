@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   nextUid, deriveDebtRowStatus, derivePipelineDealStatus, deriveStatus,
-  effectiveStatus, planRegistrySync,
+  effectiveStatus, isLandFacility, planRegistrySync,
 } from './dealRegistry.js';
 
 describe('nextUid', () => {
@@ -42,6 +42,16 @@ describe('status derivation', () => {
     expect(effectiveStatus({ status: null }, 'construction')).toBe('construction');
     expect(effectiveStatus(null, 'stabilized')).toBe('stabilized');
     expect(effectiveStatus(null, null)).toBeNull();
+  });
+});
+
+describe('isLandFacility', () => {
+  it('reads the registry classification, tolerating missing entries and columns', () => {
+    expect(isLandFacility({ classification: 'land_facility' })).toBe(true);
+    expect(isLandFacility({ classification: null })).toBe(false);
+    expect(isLandFacility({ status: 'construction' })).toBe(false); // pre-migration row
+    expect(isLandFacility(null)).toBe(false);
+    expect(isLandFacility(undefined)).toBe(false);
   });
 });
 

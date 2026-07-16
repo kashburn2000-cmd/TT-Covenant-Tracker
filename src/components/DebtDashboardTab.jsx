@@ -9,7 +9,7 @@ import { formatCurrency } from '../format.js';
 import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
 import { OVERRIDE_FIELDS, applyOverrides, fieldToInput, parseFieldInput, sameValue } from '../projectOverrides.js';
 import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
-import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync } from '../dealRegistry.js';
+import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync, CLASSIFICATION_LABEL } from '../dealRegistry.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -229,11 +229,20 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
   const hiddenCount = useMemo(() => projects.filter(p => p.hidden && !p.removed).length, [projects]);
   const rows = useMemo(() => projects
     .filter(p => !p.removed && p._status !== 'sold') // sold deals live on the Deal Registry tab
+    .filter(p => !p._classification) // credit facilities get their own section below
     .filter(p => showHidden || !p.hidden)
     .filter(p => sourceFilter === 'all' || p.source === sourceFilter)
     .filter(p => fundFilter === 'all' || (fundFilter === '(unassigned)' ? !p.fund : p.fund === fundFilter))
     .filter(p => categoryFilter === 'all' || (categoryFilter === '(unset)' ? !p.category : p.category === categoryFilter))
     .sort(sort.cmp), [projects, sourceFilter, fundFilter, categoryFilter, showHidden, sort.sortKey, sort.sortDir]);
+
+  // Credit facilities (e.g. the Simmons land facility) render in their own
+  // strip, outside the project table and the portfolio total tiles. The
+  // table's source/fund/type filters don't apply — the strip is not a
+  // filtered view of projects, it's a different kind of debt.
+  const facilities = useMemo(() => projects
+    .filter(p => p._classification && !p.removed && p._status !== 'sold')
+    .filter(p => showHidden || !p.hidden), [projects, showHidden]);
 
   // Weighted portfolio ratios: only rows carrying both sides of each ratio
   // count, and hidden rows never count (even when revealed via "Show hidden").
@@ -402,6 +411,42 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
         <datalist id="tt-fund-options">{funds.map(f => <option key={f} value={f} />)}</datalist>
         {rows.length === 0 && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>No projects — upload the At Risk / Stabilized schedules above.</div>}
       </div>
+      {facilities.length > 0 && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem', flexShrink: 0 }}>
+          <div style={{ color: 'var(--muted)', marginBottom: 6 }}>
+            Credit facilities — tracked separately from projects and excluded from the portfolio totals above.
+            Draw-level detail lives on the Land Facility tab.
+          </div>
+          {facilities.map(p => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '2px 0', opacity: p.hidden ? 0.45 : 1 }}>
+              <span style={{ whiteSpace: 'nowrap' }}>
+                {p.name}
+                {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
+              </span>
+              <span className="pill blue">{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>
+              <span style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+                {p.lender || '—'} · {fmtM(p.loan_amount)}{p.maturity_date ? ` · matures ${fmtDate(p.maturity_date)}` : ''}
+              </span>
+              {pinUnlocked && (
+                <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                  <button
+                    onClick={() => setEditing(p)}
+                    title="Edit facility figures / maturity"
+                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
+                  ><PencilIcon size={12} /></button>
+                  <button
+                    onClick={() => onSetHidden(p, !p.hidden)}
+                    title={p.hidden
+                      ? 'Restore — show this facility in all widgets again'
+                      : 'Hide this facility from all widgets (restore via "Show hidden")'}
+                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1, marginLeft: 4 }}
+                  >{p.hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}</button>
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {editing && (
         <ProjectEditModal
           project={editing}
@@ -453,7 +498,7 @@ function MaturityWidget({ projects, onSetHidden, onPatch, pinUnlocked }) {
                   )}
                   <tr>
                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(p.maturity_date)}<Ov p={p} k="maturity_date" type="date" /></td>
-                    <td>{p.name}</td>
+                    <td>{p.name}{p._classification && <span className="pill blue" style={{ marginLeft: 6 }}>{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.lender || '—'}<Ov p={p} k="lender" type="text" /></td>
                     <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}<Ov p={p} k="loan_amount" type="currency" /></td>
                     <td><span className={`pill ${cls}`}>{label}</span></td>
@@ -536,7 +581,7 @@ function GuarantyWidget({ projects }) {
           <tbody>
             {rows.map(p => (
               <tr key={p.id}>
-                <td>{p.name}</td>
+                <td>{p.name}{p._classification && <span className="pill blue" style={{ marginLeft: 6 }}>{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>}</td>
                 <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{SOURCE_LABEL[p.source]}</td>
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}</td>
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.guaranty_pct, 0)}</td>
@@ -1252,10 +1297,15 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
   // render inside the Leverage Tracker (via its "Show hidden" toggle),
   // removed rows only in its "Removed" manager, and deals whose status is
   // "sold" behave like removed rows; every other widget sees the visible set.
+  // _classification comes from the registry too ('land_facility' = a credit
+  // line, not a project): the Leverage Tracker breaks those rows out into
+  // their own section and keeps them out of the portfolio totals, while the
+  // Maturity Schedule and Guaranty Hub keep them (real exposure), labeled.
   const registryByUid = useMemo(() => new Map(registry.map(e => [e.uid, e])), [registry]);
   const merged = useMemo(() => projects.map(p => {
+    const entry = registryByUid.get(p.deal_uid);
     const derived = deriveDebtRowStatus(p);
-    return { ...applyOverrides(p), _status: effectiveStatus(registryByUid.get(p.deal_uid), derived) };
+    return { ...applyOverrides(p), _status: effectiveStatus(entry, derived), _classification: entry?.classification || null };
   }), [projects, registryByUid]);
   const visibleProjects = useMemo(() => merged.filter(p => !p.hidden && !p.removed && p._status !== 'sold'), [merged]);
 

@@ -3,7 +3,8 @@ import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { formatCurrency } from '../format.js';
 import { applyOverrides } from '../projectOverrides.js';
 import {
-  DEAL_STATUSES, STATUS_LABEL, deriveStatus, effectiveStatus,
+  DEAL_STATUSES, STATUS_LABEL, DEAL_CLASSIFICATIONS, CLASSIFICATION_LABEL,
+  deriveStatus, effectiveStatus,
   fetchRegistry, planRegistrySync, executeRegistrySync,
   patchRegistryEntry, mergeRegistryEntries,
 } from '../dealRegistry.js';
@@ -178,6 +179,18 @@ export function RegistryTab() {
     }
   }
 
+  async function setClassification(row, value) {
+    const classification = value || null;
+    const prev = { classification: row.entry.classification };
+    updateEntry(row.uid, { classification });
+    try {
+      await patchRegistryEntry(row.uid, { classification });
+    } catch (err) {
+      updateEntry(row.uid, prev);
+      setError('Could not save classification: ' + err.message + (/column/i.test(err.message) ? ' — re-run db/deal_registry_setup.sql once to add the classification column.' : ''));
+    }
+  }
+
   async function markReviewed(row) {
     updateEntry(row.uid, { reviewed: true });
     try {
@@ -253,6 +266,8 @@ export function RegistryTab() {
       <div style={{ fontSize: '0.7rem', color: 'var(--faint2)', marginBottom: '1rem', lineHeight: 1.6 }}>
         Status set here <b>always wins over the sheets</b> — use it when an At Risk row is really a committed deal that
         hasn&apos;t closed, or a deal has been sold. “Auto” follows whatever the schedules/pipeline imply.
+        Class marks a deal that isn&apos;t a project — set the Simmons land facility to <b>Land facility</b> and it drops
+        off the Project Map and moves into its own section on the Debt Dashboard, outside the portfolio totals.
       </div>
 
       {error && (
@@ -292,6 +307,7 @@ export function RegistryTab() {
             <th>Deal</th>
             <th>Appears in</th>
             <th>Status</th>
+            <th>Class</th>
             <th>Lender</th>
             <th style={{ textAlign: 'right' }}>Loan</th>
             <th>Maturity</th>
@@ -341,6 +357,17 @@ export function RegistryTab() {
                       )}
                     </div>
                   )}
+                </td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <select
+                    value={r.entry.classification || ''}
+                    onChange={e => setClassification(r, e.target.value)}
+                    title="Land facility: a credit line, not a project — stays off the Project Map and is broken out separately on the Debt Dashboard"
+                    style={selStyle}
+                  >
+                    <option value="">Project</option>
+                    {DEAL_CLASSIFICATIONS.map(c => <option key={c} value={c}>{CLASSIFICATION_LABEL[c]}</option>)}
+                  </select>
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>{r.lender || '—'}</td>
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
@@ -394,7 +421,7 @@ export function RegistryTab() {
       <div style={{ marginTop: '0.75rem', fontSize: '0.64rem', color: 'var(--faint)', lineHeight: 1.6 }}>
         Ids are assigned once, in order of first appearance, and survive schedule re-uploads. If a sheet renames a
         project, the upload mints a duplicate id (flagged NEW) — merge it into the original here and its pins and
-        manual edits follow. Statuses set here flow to the Debt Dashboard, Project Map, and every future tab.
+        manual edits follow. Statuses and classes set here flow to the Debt Dashboard, Project Map, and every future tab.
       </div>
     </div>
   );
