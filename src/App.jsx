@@ -18,6 +18,7 @@ import { DocView } from './components/DocView.jsx';
 import { LockIcon, UnlockIcon, SunIcon, MoonIcon, EyeIcon, EyeOffIcon, PencilIcon, ClockIcon, CommentIcon, CameraIcon } from './icons.jsx';
 import { LoansTab } from './components/LoansTab.jsx';
 import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
+import { MapTab } from './components/MapTab.jsx';
 
 
 // 12 blank rows for a new variable-loan balance schedule. Never mutated in place
@@ -2645,15 +2646,15 @@ export default function App() {
   const [pinUnlocked, setPinUnlocked] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinPendingAction, setPinPendingAction] = useState(null);
-  const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land','loans','debt'];
-  const [visibleTabs, setVisibleTabs] = useState({ calculator:false, matrix:false, covenant:true, leasing:false, pipeline:false, land:false, loans:true, debt:true });
+  const ALL_TABS = ['calculator','matrix','covenant','leasing','pipeline','land','loans','debt','map'];
+  const [visibleTabs, setVisibleTabs] = useState({ calculator:false, matrix:false, covenant:true, leasing:false, pipeline:false, land:false, loans:true, debt:true, map:true });
   const [showTabConfig, setShowTabConfig] = useState(false);
 
   // If the active tab ends up hidden (e.g. the saved visibleTabs setting loads
   // after mount and excludes the default), fall back to the first visible tab.
   useEffect(() => {
     if (!visibleTabs[activeTab]) {
-      const first = ['debt','covenant','loans','calculator','matrix','land','leasing','pipeline'].find(t => visibleTabs[t]);
+      const first = ['debt','covenant','loans','map','calculator','matrix','land','leasing','pipeline'].find(t => visibleTabs[t]);
       if (first) setActiveTab(first);
     }
   }, [visibleTabs, activeTab]);
@@ -2963,6 +2964,7 @@ export default function App() {
           {visibleTabs.land       && <button className={`tab-btn ${activeTab === "land"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("land")}>Land Facility</button>}
           {visibleTabs.loans      && <button className={`tab-btn ${activeTab === "loans"      ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("loans")}>Loans</button>}
           {visibleTabs.debt       && <button className={`tab-btn ${activeTab === "debt"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("debt")}>Debt Dashboard</button>}
+          {visibleTabs.map        && <button className={`tab-btn ${activeTab === "map"        ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("map")}>Project Map</button>}
           {/* Gear button */}
           <button
             onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
@@ -2973,7 +2975,7 @@ export default function App() {
           {showTabConfig && (
             <div className="menu" style={{ minWidth: 210, padding: '0.35rem 0 0.6rem' }}>
               <div className="menu-heading">Visible Tabs</div>
-              {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans'],['debt','Debt Dashboard']].map(([key, label]) => (
+              {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans'],['debt','Debt Dashboard'],['map','Project Map']].map(([key, label]) => (
                 <label key={key} className="menu-item" style={{ padding: '0.3rem 0.95rem' }}>
                   <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ width: 14, height: 14 }} />
                   <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? 'var(--text)' : 'var(--faint2)' }}>{label}</span>
@@ -2992,6 +2994,7 @@ export default function App() {
         {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
         {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
         {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+        {activeTab === "map"        && <MapTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
 
         {/* ── Footer ── */}
         <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid var(--border)`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>

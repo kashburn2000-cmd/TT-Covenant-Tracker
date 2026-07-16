@@ -41,7 +41,8 @@ begin
     'pipeline_deals',
     'land_draws',
     'leasing_snapshot',
-    'loans'
+    'loans',
+    'project_locations'
   ]
   loop
     if to_regclass('public.' || t) is not null then
