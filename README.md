@@ -126,6 +126,33 @@ created before the type flag / hide / remove / manual-edit features should
 re-run it once to pick up the new `category`, `hidden`, `removed`, and
 `overrides` columns.
 
+### Project Map
+A fully interactive Leaflet map of the United States with a pin for every
+project, color-coded by lifecycle stage:
+
+- **Pipeline** — Lender Pipeline deals not yet closed
+- **Under Construction** — projects on the At Risk construction schedule
+- **Stabilized** — properties on the Stabilized portfolio schedule
+
+A project appearing in more than one source (e.g. a pipeline deal that has
+closed into construction) shows once, at its furthest stage. Hidden and
+removed Debt Dashboard rows stay off the map. Clicking a pin opens a detail
+card (lender, loan, maturity, units, % complete / occupancy, fund — or, for
+pipeline deals, financing stage, budget, and closing date), stage chips
+filter the pins, and the basemap follows the site's light/dark theme.
+
+The schedules carry no coordinates, so pins are placed manually in
+**Edit pins** mode (PIN-gated). A side panel lists every unpinned project;
+place each one by **dragging it onto the map**, clicking **Place** and then
+clicking the map, or **pasting coordinates** (right-click a spot in Google
+Maps and copy the `39.4667, -87.4139` numbers — a pasted maps URL works
+too). Placed pins can be dragged to fine-tune, zoomed to, or removed from
+the same panel. Pins are stored by normalized project name, so they survive
+schedule re-uploads exactly like fund tags and manual edits.
+
+**Setup:** run [`db/map_setup.sql`](db/map_setup.sql) once in the Supabase
+SQL editor (creates the `project_locations` table with row-level security).
+
 ### Daily Rate Pull
 [`.github/workflows/daily-curves.yml`](.github/workflows/daily-curves.yml)
 runs [`scripts/pull-curves.mjs`](scripts/pull-curves.mjs) every weekday
@@ -206,6 +233,7 @@ against a scratch Postgres (instructions in the script header) whenever
 | `curve_snapshots` | Dated forward-curve snapshots (one per day per curve) |
 | `rate_history` | Daily spot prints (10Y Treasury, 30-day Avg SOFR) from the rate-pull Action |
 | `dashboard_layouts` | Saved Debt Dashboard widget layouts |
+| `project_locations` | Manually-placed Project Map pins, keyed by normalized project name — see `db/map_setup.sql` |
 
 ### Key `properties` Columns
 
