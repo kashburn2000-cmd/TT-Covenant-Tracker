@@ -20,6 +20,8 @@ The app is a tabbed dashboard. Each tab is an independent feature; tab visibilit
 | Debt Dashboard | Drag-and-drop widget dashboard: leverage, maturities, guaranties, curves |
 | Project Map | Interactive US map with a pin for every project, color-coded by stage |
 
+A tenth tab, **Deal Registry**, sits outside the visibility setting entirely: it appears in the nav only while editing is unlocked, and is the admin panel for stable deal ids and lifecycle status overrides (see [Deal Registry](#deal-registry-hidden-admin-tab)).
+
 Access is two-layered: Supabase Auth (invite-only sign-in) gates the entire app, and within the app a **PIN** (edit mode) gates add/edit/delete actions. The site is view-only by default — edit, hide, and delete controls appear only after clicking the lock in the footer and entering the PIN. See [Access Control](#access-control).
 
 ---
@@ -132,14 +134,25 @@ A drag-and-drop dashboard of movable, resizable widgets (`src/components/DebtDas
 A fully interactive Leaflet map of the United States (`src/components/MapTab.jsx`) with a pin for every project, color-coded by lifecycle stage:
 
 - **Pipeline** — Lender Pipeline deals not yet closed
+- **Committed** — committed deals not yet closed
 - **Under Construction** — projects on the At Risk construction schedule
 - **Stabilized** — properties on the Stabilized portfolio schedule
 
-A project appearing in more than one source (e.g. a pipeline deal that has closed into construction) shows once, at its furthest stage (`src/mapProjects.js`). Hidden and removed Debt Dashboard rows stay off the map. Clicking a pin opens a detail card (lender, loan, maturity, units, % complete / occupancy, fund — or, for pipeline deals, financing stage, budget, and closing date), stage chips filter the pins, and the basemap follows the site's light/dark theme.
+A project appearing in more than one source (e.g. a pipeline deal that has closed into construction) shows once, at its furthest stage (`src/mapProjects.js`); a manual Deal Registry status override wins over the derived stage, and deals marked Sold / paid off stay off the map. Hidden and removed Debt Dashboard rows stay off the map too. Clicking a pin opens a detail card (lender, loan, maturity, units, % complete / occupancy, fund — or, for pipeline deals, financing stage, budget, and closing date), stage chips filter the pins, and the basemap follows the site's light/dark theme.
 
-The schedules carry no coordinates, so pins are placed manually in **Edit pins** mode (PIN-gated). A side panel lists every unpinned project; place each one by **dragging it onto the map**, clicking **Place** and then clicking the map, or **pasting coordinates** (right-click a spot in Google Maps and copy the `39.4667, -87.4139` numbers — a pasted maps URL works too). Placed pins can be dragged to fine-tune, zoomed to, or removed from the same panel. Pins are stored by normalized project name, so they survive schedule re-uploads exactly like fund tags and manual edits.
+The schedules carry no coordinates, so pins are placed manually in **Edit pins** mode (PIN-gated). A side panel lists every unpinned project; place each one by **dragging it onto the map**, clicking **Place** and then clicking the map, or **pasting coordinates** (right-click a spot in Google Maps and copy the `39.4667, -87.4139` numbers — a pasted maps URL works too). Placed pins can be dragged to fine-tune, zoomed to, or removed from the same panel. Pins are keyed by stable deal id (legacy pins by normalized project name), so they survive schedule re-uploads and renames exactly like fund tags and manual edits.
 
 **Setup:** run [`db/map_setup.sql`](db/map_setup.sql) once in the Supabase SQL editor (creates the `project_locations` table with row-level security).
+
+### Deal Registry (hidden admin tab)
+A **Deal Registry** tab (`src/components/RegistryTab.jsx`, logic in `src/dealRegistry.js`) appears in the nav only while editing is unlocked — it sits outside the normal tab-visibility setting and disappears again when the PIN locks. It is the identity and status control panel for every deal across the app:
+
+- **Stable ids** — every deal gets a sequential id (`TT-001`, `TT-002`, …) the first time it appears in any source: an At Risk / Stabilized schedule upload, or a Lender Pipeline deal. Schedule rows, pipeline deals, and map pins all carry the id (`deal_uid`), so a deal's identity survives re-uploads, renames, and tab boundaries with no name matching after the initial link. A deal that spans sources (a pipeline deal that's also on the At Risk sheet) shares one id.
+- **Review new deals** — name matching happens exactly once, when a row first appears. A name that matches nothing mints a fresh id flagged **NEW**; if that was really a rename of an existing deal, use **Merge…** to fold the duplicate into the original — its schedule rows, pipeline link, and map pin follow, and the duplicate id is retired.
+- **Editable status** — each deal's lifecycle status (`Pipeline` → `Committed (not closed)` → `Under construction` → `Stabilized` → `Sold / paid off`) defaults to **Auto** (derived from which schedule the deal appears on plus the sheet's committed flag). Setting a status here is a manual override that **always wins over uploads** until cleared — e.g. an At Risk row that is really a committed deal not yet closed. Overridden deals show a "sheet says …" note whenever the sheets disagree.
+- **Status flows everywhere** — a deal marked `Committed (not closed)` gets the COMMITTED pill and "Not closed" maturity in the Leverage Tracker and drops off the Maturity Schedule; `Sold / paid off` removes the deal from every widget and the map (like Removed); statuses also drive the Project Map's stage colors, which include a **Committed** stage.
+
+**Setup:** run [`db/deal_registry_setup.sql`](db/deal_registry_setup.sql) once in the Supabase SQL editor (creates `deal_registry` and adds a `deal_uid` column to `debt_projects`, `pipeline_deals`, and `project_locations`, with row-level security). Until it runs, the app simply derives every status from the sheets like before.
 
 ---
 
@@ -224,6 +237,7 @@ npm run lint      # eslint src/
 │   ├── parseBankPackage.js       # Bank-package PDF text-layer extraction (Lender Pipeline)
 │   ├── priorTest.js              # Which snapshot counts as the Prior Test baseline
 │   ├── projectOverrides.js       # Manual field overrides layered over schedule data
+│   ├── dealRegistry.js           # Stable deal ids (TT-001, …) + lifecycle status overrides
 │   ├── mapProjects.js            # Merge schedules + pipeline into one project list; lat/lng paste parsing
 │   ├── auth.js / supabase.js     # Supabase auth client / REST config + headers
 │   ├── format.js, theme.js, icons.jsx, *.test.js
@@ -233,9 +247,10 @@ npm run lint      # eslint src/
 │       ├── CalculatorTab.jsx, MatrixTab.jsx
 │       ├── LeasingTab.jsx, PipelineTab.jsx, LandFacilityTab.jsx
 │       ├── LoansTab.jsx, DebtDashboardTab.jsx, MapTab.jsx
+│       ├── RegistryTab.jsx       # Hidden Deal Registry admin tab (edit mode only)
 │       ├── DocView.jsx           # Executive Covenant Dashboard replica + styled Excel export
 │       └── MathLine.jsx
-├── db/                           # One-time Supabase SQL: loans, debt dashboard, map, security, Power BI
+├── db/                           # One-time Supabase SQL: loans, debt dashboard, map, deal registry, security, Power BI
 ├── scripts/                      # Rate pulls, backfills, Power BI validation, theme codemod
 ├── ingest/                       # Loan-abstract import guide + JSON sidecar example
 └── .github/workflows/            # daily-curves, backfill-rate-history, keep-supabase-alive
@@ -256,12 +271,13 @@ npm run lint      # eslint src/
 | `curve_snapshots` | Dated forward-curve snapshots (one per day per curve) | `db/debt_dashboard_setup.sql` |
 | `rate_history` | Daily spot prints (10Y Treasury, 30-day Avg SOFR) from the rate-pull Action | `db/debt_dashboard_setup.sql` |
 | `dashboard_layouts` | Saved Debt Dashboard widget layouts (shared) | `db/debt_dashboard_setup.sql` |
-| `project_locations` | Manually placed Project Map pins, keyed by normalized project name | `db/map_setup.sql` |
+| `project_locations` | Manually placed Project Map pins, keyed by deal id (legacy pins by normalized name) | `db/map_setup.sql` |
 | `pipeline_deals` | Lender Pipeline deals (economics, proforma, financing status) | Created manually |
 | `land_draws` | Land Facility draws | Created manually |
 | `leasing_snapshot` | Latest Leasing Dashboard upload (single-row snapshot) | Created manually |
+| `deal_registry` | Stable deal ids (`TT-001`, …) + manual lifecycle status overrides for the Deal Registry tab | `db/deal_registry_setup.sql` |
 
-> **Schema coverage note:** the `db/` scripts cover the Loans, Debt Dashboard, Map, security, and Power BI features. The core covenant tables (`properties`, `property_events`, `settings`, `sofr_curve`, `ten_year_curve`) and the Pipeline / Land Facility / Leasing tables were created directly in the live Supabase project and have no `CREATE TABLE` script in the repo — [`db/security_setup.sql`](db/security_setup.sql) lists all of them for RLS (skipping any that don't exist), and the SQL in [Setup](#setup) adds the columns the app expects on `properties`. Standing up a fresh Supabase project therefore requires recreating those tables by hand (or from a dump of the live project).
+> **Schema coverage note:** the `db/` scripts cover the Loans, Debt Dashboard, Map, Deal Registry, security, and Power BI features. The core covenant tables (`properties`, `property_events`, `settings`, `sofr_curve`, `ten_year_curve`) and the Pipeline / Land Facility / Leasing tables were created directly in the live Supabase project and have no `CREATE TABLE` script in the repo — [`db/security_setup.sql`](db/security_setup.sql) lists all of them for RLS (skipping any that don't exist), and the SQL in [Setup](#setup) adds the columns the app expects on `properties`. Standing up a fresh Supabase project therefore requires recreating those tables by hand (or from a dump of the live project).
 
 ### Key `properties` columns
 
@@ -301,7 +317,7 @@ The Supabase project URL and publishable key are hardcoded in [`src/supabase.js`
 ### Supabase SQL
 
 1. Run the feature scripts you need in the Supabase SQL editor (each is idempotent):
-   [`db/loans_setup.sql`](db/loans_setup.sql), [`db/debt_dashboard_setup.sql`](db/debt_dashboard_setup.sql), [`db/map_setup.sql`](db/map_setup.sql), and optionally [`db/powerbi_views.sql`](db/powerbi_views.sql).
+   [`db/loans_setup.sql`](db/loans_setup.sql), [`db/debt_dashboard_setup.sql`](db/debt_dashboard_setup.sql), [`db/map_setup.sql`](db/map_setup.sql), [`db/deal_registry_setup.sql`](db/deal_registry_setup.sql), and optionally [`db/powerbi_views.sql`](db/powerbi_views.sql).
 2. Ensure the covenant tables exist (see the schema coverage note above), then add the columns the app expects:
 
 ```sql

@@ -9,6 +9,7 @@ import { formatCurrency } from '../format.js';
 import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
 import { OVERRIDE_FIELDS, applyOverrides, fieldToInput, parseFieldInput, sameValue } from '../projectOverrides.js';
 import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
+import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync } from '../dealRegistry.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -227,7 +228,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
   const removed = useMemo(() => projects.filter(p => p.removed), [projects]);
   const hiddenCount = useMemo(() => projects.filter(p => p.hidden && !p.removed).length, [projects]);
   const rows = useMemo(() => projects
-    .filter(p => !p.removed)
+    .filter(p => !p.removed && p._status !== 'sold') // sold deals live on the Deal Registry tab
     .filter(p => showHidden || !p.hidden)
     .filter(p => sourceFilter === 'all' || p.source === sourceFilter)
     .filter(p => fundFilter === 'all' || (fundFilter === '(unassigned)' ? !p.fund : p.fund === fundFilter))
@@ -323,7 +324,11 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
           <tbody>
             {rows.map(p => (
               <tr key={p.id} style={p.hidden ? { opacity: 0.45 } : undefined}>
-                <td style={{ whiteSpace: 'nowrap' }}>{p.name}{p.is_committed && <span className="pill blue" style={{ marginLeft: 6 }}>COMMITTED</span>}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  {p.name}
+                  {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
+                  {p._status === 'committed' && <span className="pill blue" style={{ marginLeft: 6 }}>COMMITTED</span>}
+                </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {editingCategory === p.id ? (
                     <select
@@ -373,7 +378,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.appraised_value)}<Ov p={p} k="appraised_value" type="currency" /></td>
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltc)}<Ov p={p} k="ltc" type="percent" /></td>
                 <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltv)}<Ov p={p} k="ltv" type="percent" /></td>
-                <td style={{ whiteSpace: 'nowrap' }}>{p.maturity_date ? fmtDate(p.maturity_date) : (p.is_committed ? 'Not closed' : '—')}<Ov p={p} k="maturity_date" type="date" /></td>
+                <td style={{ whiteSpace: 'nowrap' }}>{p._status === 'committed' ? 'Not closed' : p.maturity_date ? <>{fmtDate(p.maturity_date)}<Ov p={p} k="maturity_date" type="date" /></> : '—'}</td>
                 {pinUnlocked && (
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button
@@ -414,7 +419,9 @@ function MaturityWidget({ projects, onSetHidden, onPatch, pinUnlocked }) {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [editing, setEditing] = useState(null); // project row open in the edit modal
   const rows = useMemo(() => projects
-    .filter(p => p.maturity_date && (sourceFilter === 'all' || p.source === sourceFilter))
+    // Committed deals haven't closed — any maturity on the sheet is provisional,
+    // so they stay off the schedule until their status moves on.
+    .filter(p => p.maturity_date && p._status !== 'committed' && (sourceFilter === 'all' || p.source === sourceFilter))
     .sort((a, b) => a.maturity_date.localeCompare(b.maturity_date)), [projects, sourceFilter]);
 
   const pill = (iso) => {
@@ -1026,6 +1033,7 @@ const DEFAULT_LAYOUT = DEFAULT_WIDGETS.map(k => ({ i: k, ...WIDGETS[k].defaultGr
 
 export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   const [projects, setProjects] = useState([]);
+  const [registry, setRegistry] = useState([]); // deal_registry rows — manual status overrides
   const [dbError, setDbError] = useState(null);
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadTimes, setUploadTimes] = useState({});
@@ -1048,6 +1056,12 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
           return;
         }
         setProjects(await res.json());
+        // Registry statuses are optional — installs that haven't run
+        // db/deal_registry_setup.sql just derive every status from the sheets.
+        try {
+          const rr = await fetch(`${SB_URL}/rest/v1/deal_registry?order=uid.asc`, { headers: SB_HEADERS });
+          if (rr.ok) setRegistry(await rr.json());
+        } catch { /* derive-only mode */ }
         const s = await fetch(`${SB_URL}/rest/v1/settings?key=in.(atRiskUploaded,stabilizedUploaded)`, { headers: SB_HEADERS });
         if (s.ok) {
           const rows = await s.json();
@@ -1155,6 +1169,9 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
           hidden: prev?.hidden || false,
           removed: prev?.removed || false,
           overrides: prev?.overrides || {},
+          // Stable deal id follows the row across uploads. Only included when
+          // present so installs without db/deal_registry_setup.sql still insert.
+          ...(prev?.deal_uid ? { deal_uid: prev.deal_uid } : {}),
           uploaded_at: new Date().toISOString(),
         };
       });
@@ -1163,15 +1180,44 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       if (!del.ok) throw new Error('Could not clear old rows: HTTP ' + del.status);
       const ins = await fetch(`${SB_URL}/rest/v1/debt_projects`, { method: 'POST', headers: SB_HEADERS, body: JSON.stringify(rows) });
       if (!ins.ok) throw new Error('Insert failed: ' + (await ins.text()));
-      const inserted = await ins.json();
-      setProjects(prev => [...prev.filter(p => p.source !== source), ...inserted]);
+      let inserted = await ins.json();
+
+      // Registry linking: rows that didn't inherit a deal id (new names) match
+      // an existing registry entry by name once, or mint a fresh TT-id flagged
+      // for review on the Deal Registry tab. Non-fatal — the upload already
+      // succeeded, so a linking failure just notes itself in the status line.
+      let regNote = '';
+      let uidById = new Map();
+      try {
+        const regRes = await fetch(`${SB_URL}/rest/v1/deal_registry?order=uid.asc`, { headers: SB_HEADERS });
+        if (regRes.ok) {
+          const reg = await regRes.json();
+          const plan = planRegistrySync({
+            registry: reg,
+            debtRows: [...projects.filter(p => p.source !== source), ...inserted],
+          });
+          await executeRegistrySync(plan);
+          uidById = new Map(plan.links.debt.map(l => [l.id, l.deal_uid]));
+          if (uidById.size) inserted = inserted.map(r => (uidById.has(r.id) ? { ...r, deal_uid: uidById.get(r.id) } : r));
+          setRegistry([...reg, ...plan.newEntries.map(e => ({ status: null, notes: null, ...e }))]);
+          if (plan.newEntries.length) regNote = ` · ${plan.newEntries.length} new deal id${plan.newEntries.length === 1 ? '' : 's'} assigned — review on the Deal Registry tab`;
+        }
+      } catch (err) {
+        regNote = ' · deal-id linking skipped (' + err.message + ')';
+      }
+      // uidById may also cover rows from the other schedule that had never
+      // been linked — stamp those locally too, not just the inserted set.
+      setProjects(prev => [
+        ...prev.filter(p => p.source !== source).map(p => (uidById.has(p.id) ? { ...p, deal_uid: uidById.get(p.id) } : p)),
+        ...inserted,
+      ]);
 
       const stampKey = source === 'at_risk' ? 'atRiskUploaded' : 'stabilizedUploaded';
       const now = new Date().toISOString();
       await fetch(`${SB_URL}/rest/v1/settings?key=eq.${stampKey}`, { method: 'DELETE', headers: SB_HEADERS });
       await fetch(`${SB_URL}/rest/v1/settings`, { method: 'POST', headers: SB_HEADERS, body: JSON.stringify({ key: stampKey, value: JSON.stringify(now) }) });
       setUploadTimes(t => ({ ...t, [stampKey]: now }));
-      setUploadStatus(`✓ ${label} schedule updated — ${inserted.length} projects loaded from ${file.name}`);
+      setUploadStatus(`✓ ${label} schedule updated — ${inserted.length} projects loaded from ${file.name}${regNote}`);
     } catch (err) {
       const hint = /PGRST204|column/.test(err.message)
         ? ' — if this mentions a missing column, re-run db/debt_dashboard_setup.sql once in the Supabase SQL editor.'
@@ -1199,12 +1245,19 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
     }
   }
 
-  // Every widget shows effective values (schedule data + manual overrides).
-  // Hidden rows only ever render inside the Leverage Tracker (via its "Show
-  // hidden" toggle), removed rows only in its "Removed" manager; every other
-  // widget sees the visible set.
-  const merged = useMemo(() => projects.map(applyOverrides), [projects]);
-  const visibleProjects = useMemo(() => merged.filter(p => !p.hidden && !p.removed), [merged]);
+  // Every widget shows effective values (schedule data + manual overrides),
+  // plus the deal's effective lifecycle status: a manual status set on the
+  // Deal Registry tab wins over what the sheet implies (source column +
+  // is_committed flag), and always survives re-uploads. Hidden rows only ever
+  // render inside the Leverage Tracker (via its "Show hidden" toggle),
+  // removed rows only in its "Removed" manager, and deals whose status is
+  // "sold" behave like removed rows; every other widget sees the visible set.
+  const registryByUid = useMemo(() => new Map(registry.map(e => [e.uid, e])), [registry]);
+  const merged = useMemo(() => projects.map(p => {
+    const derived = deriveDebtRowStatus(p);
+    return { ...applyOverrides(p), _status: effectiveStatus(registryByUid.get(p.deal_uid), derived) };
+  }), [projects, registryByUid]);
+  const visibleProjects = useMemo(() => merged.filter(p => !p.hidden && !p.removed && p._status !== 'sold'), [merged]);
 
   function renderWidget(key) {
     switch (key) {
