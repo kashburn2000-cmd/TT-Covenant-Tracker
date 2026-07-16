@@ -150,6 +150,14 @@ too). Placed pins can be dragged to fine-tune, zoomed to, or removed from
 the same panel. Pins are stored by normalized project name, so they survive
 schedule re-uploads exactly like fund tags and manual edits.
 
+**Export for Google My Maps:** the toolbar's **Export for My Maps** button
+downloads the pinned projects (current stage filters applied) as a KML
+file. In [mymaps.google.com](https://mymaps.google.com) → **Create a new
+map** → **Import**, choose the file: each stage arrives as its own folder,
+pins keep their stage colors, and every detail field (lender, loan,
+maturity, …) imports as a data column on the placemark. The same file opens
+in Google Earth.
+
 **Setup:** run [`db/map_setup.sql`](db/map_setup.sql) once in the Supabase
 SQL editor (creates the `project_locations` table with row-level security).
 

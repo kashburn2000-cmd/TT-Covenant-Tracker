@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
-import { parseLatLng, mergeProjects } from '../mapProjects.js';
+import { parseLatLng, mergeProjects, projectFields, buildKml } from '../mapProjects.js';
 import { LockIcon } from '../icons.jsx';
 
 // Interactive US map of every project, pinned manually and color-coded by
@@ -31,9 +31,6 @@ const currentTheme = () => (document.documentElement.getAttribute('data-theme') 
 const US_CENTER = [38.8, -96.9];
 const US_ZOOM = 4.4;
 
-const fmt$   = (v) => (v == null || isNaN(v) ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v));
-const fmtPct = (v, d = 0) => (v == null || isNaN(v) ? '—' : `${(v * 100).toFixed(d)}%`);
-const fmtDate = (iso) => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Teardrop pin, colored by stage via CSS variable (theme-aware for free).
@@ -52,35 +49,9 @@ function pinIcon(color) {
 
 function popupHtml(p, editMode) {
   const stage = stageOf(p.stage);
-  const row = (label, value) => (value == null || value === '' || value === '—')
-    ? ''
-    : `<div class="tt-pop-row"><span>${esc(label)}</span><span>${esc(value)}</span></div>`;
-  let rows = '';
-  if (p.detail) {
-    const d = p.detail;
-    rows =
-      row('Location', p.location) +
-      row('Lender', d.lender) +
-      row('Loan', fmt$(d.loan_amount)) +
-      row('Maturity', d.maturity_date ? fmtDate(d.maturity_date) : null) +
-      row('Units', d.units) +
-      (p.stage === 'construction'
-        ? row('% Complete', d.pct_complete != null ? fmtPct(d.pct_complete) : null) + row('% Leased', d.pct_leased != null ? fmtPct(d.pct_leased) : null)
-        : row('Occupancy', d.pct_leased != null ? fmtPct(d.pct_leased) : null)) +
-      row('Fund', d.fund) +
-      row('Type', d.category ? d.category[0].toUpperCase() + d.category.slice(1) : null);
-  } else if (p.deal) {
-    const d = p.deal;
-    const finStage = d.committed ? 'Committed' : d.book_published ? 'Book out' : 'Pre-market';
-    rows =
-      row('Division', d.division) +
-      row('Deal type', d.type) +
-      row('Financing', finStage + (d.status === 'active' ? ' · in process' : '')) +
-      row('Closing', d.closing_date ? fmtDate(d.closing_date) : null) +
-      row('Lender', [d.primary_lender, d.secondary_lender].filter(Boolean).join(' / ')) +
-      row('Units', d.units) +
-      row('Budget', fmt$(d.total_budget));
-  }
+  const rows = projectFields(p)
+    .map(([label, value]) => `<div class="tt-pop-row"><span>${esc(label)}</span><span>${esc(value)}</span></div>`)
+    .join('');
   return `
     <div class="tt-pop">
       <div class="tt-pop-head">
@@ -292,6 +263,20 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
 
   const armedProject = armedKey ? projects.find(p => p.key === armedKey) : null;
 
+  // Download the pinned (and currently stage-filtered) projects as a KML
+  // file — mymaps.google.com → Create a new map → Import reads it directly.
+  function exportKml() {
+    const kml = buildKml(visiblePins, locations);
+    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `TT Project Map ${new Date().toISOString().slice(0, 10)}.kml`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
   return (
     <div>
       <style>{`
@@ -374,6 +359,11 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
               Click the map to place <b>{armedProject.name}</b> — Esc to cancel
             </span>
           )}
+          <button onClick={exportKml} disabled={visiblePins.length === 0} className="btn btn-sm"
+            style={visiblePins.length === 0 ? { opacity: 0.45, cursor: 'default' } : undefined}
+            title={'Download the pinned projects (current stage filters applied) as a KML file for Google My Maps:\nmymaps.google.com → Create a new map → Import → choose the downloaded file.\nAlso opens in Google Earth.'}>
+            ⬇ Export for My Maps
+          </button>
           <button
             onClick={() => editMode ? (setEditMode(false), setArmedKey(null)) : requirePin(() => setEditMode(true))}
             className={`btn btn-sm ${editMode ? 'btn-danger' : `btn-tinted ${pinUnlocked ? '' : 'btn-locked'}`}`}>
