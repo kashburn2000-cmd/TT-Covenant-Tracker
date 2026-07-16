@@ -89,6 +89,10 @@ function Th({ label, k, sort, right }) {
 const selStyle = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '0.25rem 0.5rem', fontFamily: 'inherit', fontSize: '0.72rem', outline: 'none', width: 'auto' };
 const SOURCE_LABEL = { at_risk: 'Construction', stabilized: 'Stabilized' };
 const CATEGORY_LABEL = { residential: 'Residential', commercial: 'Commercial' };
+// land_draws statuses shown when a credit facility is broken open (paid-off
+// pieces have left the facility and stay on the Land Facility tab only)
+const DRAW_PILL  = { outstanding: 'yellow', proposed: 'blue' };
+const DRAW_LABEL = { outstanding: 'Outstanding', proposed: 'Proposed' };
 
 function SourceFilter({ value, onChange }) {
   return (
@@ -222,7 +226,27 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
   const [fundDraft, setFundDraft] = useState('');
   const [editingCategory, setEditingCategory] = useState(null); // project id being edited
   const [editing, setEditing] = useState(null); // project row open in the edit modal
+  const [openFacility, setOpenFacility] = useState(null); // facility row id whose land-piece breakdown is open
+  const [landDraws, setLandDraws] = useState(null); // null = not fetched yet (lazy, on first expand)
+  const [drawsError, setDrawsError] = useState('');
   const sort = useSort('name');
+
+  // Break a facility open: the pieces are the Land Facility tab's land_draws
+  // rows, fetched once on first expand. On failure landDraws stays null so
+  // the next expand retries.
+  async function toggleFacility(p) {
+    const next = openFacility === p.id ? null : p.id;
+    setOpenFacility(next);
+    if (next == null || landDraws != null) return;
+    setDrawsError('');
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/land_draws?order=takedown_date.asc`, { headers: SB_HEADERS });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setLandDraws(await res.json());
+    } catch (err) {
+      setDrawsError('Could not load land pieces: ' + err.message);
+    }
+  }
 
   const funds = useMemo(() => [...new Set(projects.map(p => p.fund).filter(Boolean))].sort(), [projects]);
   const removed = useMemo(() => projects.filter(p => p.removed), [projects]);
@@ -418,32 +442,83 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
             Draw-level detail lives on the Land Facility tab.
           </div>
           {facilities.map(p => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '2px 0', opacity: p.hidden ? 0.45 : 1 }}>
-              <span style={{ whiteSpace: 'nowrap' }}>
-                {p.name}
-                {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
-              </span>
-              <span className="pill blue">{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>
-              <span style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>
-                {p.lender || '—'} · {fmtM(p.loan_amount)}{p.maturity_date ? ` · matures ${fmtDate(p.maturity_date)}` : ''}
-              </span>
-              {pinUnlocked && (
-                <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-                  <button
-                    onClick={() => setEditing(p)}
-                    title="Edit facility figures / maturity"
-                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
-                  ><PencilIcon size={12} /></button>
-                  <button
-                    onClick={() => onSetHidden(p, !p.hidden)}
-                    title={p.hidden
-                      ? 'Restore — show this facility in all widgets again'
-                      : 'Hide this facility from all widgets (restore via "Show hidden")'}
-                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1, marginLeft: 4 }}
-                  >{p.hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}</button>
+            <React.Fragment key={p.id}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '2px 0', opacity: p.hidden ? 0.45 : 1 }}>
+                <button
+                  onClick={() => toggleFacility(p)}
+                  title={openFacility === p.id ? 'Collapse the land-piece breakdown' : 'Break the facility open — show the land pieces held inside it'}
+                  style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '0 2px', lineHeight: 1, fontSize: '0.7rem' }}
+                >{openFacility === p.id ? '▾' : '▸'}</button>
+                <span style={{ whiteSpace: 'nowrap' }}>
+                  {p.name}
+                  {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
                 </span>
+                <span className="pill blue">{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>
+                <span style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+                  {p.lender || '—'} · {fmtM(p.loan_amount)}{p.maturity_date ? ` · matures ${fmtDate(p.maturity_date)}` : ''}
+                </span>
+                {pinUnlocked && (
+                  <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                    <button
+                      onClick={() => setEditing(p)}
+                      title="Edit facility figures / maturity"
+                      style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1 }}
+                    ><PencilIcon size={12} /></button>
+                    <button
+                      onClick={() => onSetHidden(p, !p.hidden)}
+                      title={p.hidden
+                        ? 'Restore — show this facility in all widgets again'
+                        : 'Hide this facility from all widgets (restore via "Show hidden")'}
+                      style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2, lineHeight: 1, marginLeft: 4 }}
+                    >{p.hidden ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}</button>
+                  </span>
+                )}
+              </div>
+              {openFacility === p.id && (
+                <div style={{ margin: '2px 0 8px 1.05rem', borderLeft: '2px solid var(--border)', padding: '0.35rem 0 0.35rem 0.75rem' }}>
+                  {drawsError && <div style={{ color: 'var(--fail)' }}>{drawsError}</div>}
+                  {!drawsError && landDraws == null && <div style={{ color: 'var(--faint)' }}>Loading land pieces…</div>}
+                  {landDraws != null && (() => {
+                    const pieces = landDraws.filter(d => d.status !== 'paid_off');
+                    const paidOff = landDraws.length - pieces.length;
+                    const held = landDraws.reduce((s, d) => s + (d.status === 'outstanding' ? d.draw_amount || 0 : 0), 0);
+                    // >$1 tolerance: both figures are dollars, so anything past
+                    // rounding means the sheet and the draw log disagree.
+                    const drift = p.loan_amount != null && Math.abs(held - p.loan_amount) > 1;
+                    if (pieces.length === 0) {
+                      return <div style={{ color: 'var(--faint)' }}>No outstanding or proposed land pieces recorded — add them on the Land Facility tab.</div>;
+                    }
+                    return (
+                      <>
+                        <table style={{ borderCollapse: 'collapse' }}>
+                          <thead><tr>
+                            <th>Land piece</th><th>Status</th>
+                            <th style={{ textAlign: 'right' }}>Draw</th>
+                            <th>Takedown</th><th>Expected payoff</th>
+                          </tr></thead>
+                          <tbody>
+                            {pieces.map(d => (
+                              <tr key={d.id}>
+                                <td title={d.note || undefined}>{d.name}</td>
+                                <td><span className={`pill ${DRAW_PILL[d.status] || 'blue'}`}>{DRAW_LABEL[d.status] || d.status}</span></td>
+                                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(d.draw_amount)}</td>
+                                <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(d.takedown_date)}</td>
+                                <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(d.payoff_date)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div style={{ marginTop: 4, color: 'var(--faint)' }}>
+                          Outstanding pieces total {fmtM(held)}
+                          {drift && <span style={{ color: 'var(--warn)' }}> · sheet shows {fmtM(p.loan_amount)} — reconcile on the Land Facility tab</span>}
+                          {paidOff > 0 && <> · {paidOff} paid-off piece{paidOff === 1 ? '' : 's'} not shown (full history on the Land Facility tab)</>}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
               )}
-            </div>
+            </React.Fragment>
           ))}
         </div>
       )}
