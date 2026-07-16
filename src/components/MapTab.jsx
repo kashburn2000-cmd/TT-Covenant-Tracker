@@ -8,13 +8,17 @@ import { LockIcon } from '../icons.jsx';
 // Interactive US map of every project, pinned manually and color-coded by
 // lifecycle stage. Projects come from the same tables the other tabs use —
 // pipeline_deals (Lender Pipeline) plus debt_projects (At Risk / Stabilized
-// schedule uploads) — deduped by name_key with the furthest stage winning.
-// Coordinates aren't in any schedule, so pins live in their own
-// project_locations table (see db/map_setup.sql), keyed by name_key so they
-// survive schedule re-uploads exactly like fund tags and manual edits.
+// schedule uploads) — deduped by stable deal uid (falling back to normalized
+// name for rows not yet linked), with the furthest stage winning. A manual
+// status set on the Deal Registry tab recolors the pin. Coordinates aren't in
+// any schedule, so pins live in their own project_locations table (see
+// db/map_setup.sql), keyed by deal_uid so they survive re-uploads AND renames
+// (legacy pins keyed only by name_key keep working until the registry links
+// them).
 
 const STAGES = [
   { key: 'pipeline',     label: 'Pipeline',           color: 'var(--cat-violet)', desc: 'Lender Pipeline deals not yet closed' },
+  { key: 'committed',    label: 'Committed',          color: 'var(--gold)',       desc: 'Committed deals not yet closed' },
   { key: 'construction', label: 'Under Construction', color: 'var(--accent)',     desc: 'At Risk construction schedule' },
   { key: 'stabilized',   label: 'Stabilized',         color: 'var(--pass)',       desc: 'Stabilized portfolio schedule' },
 ];
@@ -86,6 +90,7 @@ function popupHtml(p, editMode) {
       <div class="tt-pop-head">
         <span class="tt-pop-dot" style="background:${stage.color}"></span>
         <span class="tt-pop-name">${esc(p.name)}</span>
+        ${p.uid ? `<span class="tt-pop-uid">${esc(p.uid)}</span>` : ''}
       </div>
       <div class="tt-pop-stage" style="color:${stage.color}">${esc(stage.label)}</div>
       ${rows}
@@ -96,13 +101,14 @@ function popupHtml(p, editMode) {
 export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   const [debtRows,  setDebtRows]  = useState([]);
   const [deals,     setDeals]     = useState([]);
-  const [locations, setLocations] = useState({});   // name_key → { lat, lng }
+  const [registry,  setRegistry]  = useState([]);    // deal_registry rows (status overrides)
+  const [locations, setLocations] = useState({});   // deal_uid AND name_key → { lat, lng } (same object under both keys)
   const [loading,   setLoading]   = useState(true);
   const [setupNeeded, setSetupNeeded] = useState(false);
   const [msg,       setMsg]       = useState('');
   const [editMode,  setEditMode]  = useState(false);
   const [armedKey,  setArmedKey]  = useState(null);  // project waiting for a map click
-  const [stageOn,   setStageOn]   = useState({ pipeline: true, construction: true, stabilized: true });
+  const [stageOn,   setStageOn]   = useState({ pipeline: true, committed: true, construction: true, stabilized: true });
   const [coordDrafts, setCoordDrafts] = useState({}); // per-project paste-coordinates inputs
   const [search,    setSearch]    = useState('');
 
@@ -116,9 +122,13 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   const saveRef    = useRef(() => {});
   useEffect(() => { armedRef.current = armedKey; }, [armedKey]);
 
-  const projects = useMemo(() => mergeProjects(debtRows, deals), [debtRows, deals]);
-  const pinned   = useMemo(() => projects.filter(p => locations[p.key]), [projects, locations]);
-  const unpinned = useMemo(() => projects.filter(p => !locations[p.key]), [projects, locations]);
+  const registryByUid = useMemo(() => new Map(registry.map(e => [e.uid, e])), [registry]);
+  const projects = useMemo(() => mergeProjects(debtRows, deals, registryByUid), [debtRows, deals, registryByUid]);
+  // A pin saved before the project was linked to the registry sits under the
+  // name key; once linked, new saves key by uid. Check both.
+  const locFor = (p) => locations[p.key] || (p.name_key ? locations[p.name_key] : undefined);
+  const pinned   = useMemo(() => projects.filter(p => locFor(p)), [projects, locations]);
+  const unpinned = useMemo(() => projects.filter(p => !locFor(p)), [projects, locations]);
   const visiblePins = useMemo(() => pinned.filter(p => stageOn[p.stage]), [pinned, stageOn]);
   const searchLower = search.trim().toLowerCase();
   const unpinnedShown = useMemo(
@@ -130,16 +140,26 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   useEffect(() => {
     async function load() {
       try {
-        const [dRes, pRes, lRes] = await Promise.all([
-          fetch(`${SB_URL}/rest/v1/debt_projects?select=id,source,name,name_key,location,property_type,units,lender,maturity_date,loan_amount,pct_complete,pct_leased,fund,category,hidden,removed,overrides,appraised_value,project_cost,ltc,ltv,guaranty_pct,guaranty_amt`, { headers: SB_HEADERS }),
+        const [dRes, pRes, lRes, rRes] = await Promise.all([
+          // No column list: deal_uid only exists after db/deal_registry_setup.sql
+          // runs, and naming it in a select would 400 on older installs.
+          fetch(`${SB_URL}/rest/v1/debt_projects`, { headers: SB_HEADERS }),
           fetch(`${SB_URL}/rest/v1/pipeline_deals?order=sort_order,name`, { headers: SB_HEADERS }),
-          fetch(`${SB_URL}/rest/v1/project_locations?select=name_key,lat,lng`, { headers: SB_HEADERS }),
+          fetch(`${SB_URL}/rest/v1/project_locations`, { headers: SB_HEADERS }),
+          fetch(`${SB_URL}/rest/v1/deal_registry?select=uid,name,status`, { headers: SB_HEADERS }),
         ]);
         if (dRes.ok) setDebtRows(await dRes.json());
         if (pRes.ok) setDeals(await pRes.json());
+        if (rRes.ok) setRegistry(await rRes.json()); // table may not exist yet — statuses just derive
         if (lRes.ok) {
           const rows = await lRes.json();
-          setLocations(Object.fromEntries(rows.map(r => [r.name_key, { lat: r.lat, lng: r.lng }])));
+          const byKey = {};
+          for (const r of rows) {
+            const loc = { lat: r.lat, lng: r.lng };
+            if (r.deal_uid) byKey[r.deal_uid] = loc;
+            if (r.name_key) byKey[r.name_key] = loc;
+          }
+          setLocations(byKey);
         } else if (lRes.status === 404) {
           setSetupNeeded(true);
         }
@@ -152,14 +172,31 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   }, []);
 
   // ── Persistence ──────────────────────────────────────────────────────────
+  // A pin row can be reachable by deal uid or by name key (legacy rows predate
+  // the registry), so writes clear both aliases first. uid and name_key values
+  // are alphanumeric-with-dashes, safe inside PostgREST or=() filters.
+  const pinFilter = (p) => {
+    const keys = [p.uid, p.name_key].filter(Boolean).map(encodeURIComponent);
+    return keys.length === 2
+      ? `or=(deal_uid.eq.${keys[0]},name_key.eq.${keys[1]})`
+      : `name_key=eq.${keys[0]}`;
+  };
+
   async function savePin(key, lat, lng) {
-    setLocations(prev => ({ ...prev, [key]: { lat, lng } }));
+    const p = projects.find(x => x.key === key);
+    if (!p) return;
+    setLocations(prev => {
+      const next = { ...prev, [p.key]: { lat, lng } };
+      if (p.name_key) next[p.name_key] = next[p.key];
+      return next;
+    });
     setArmedKey(null);
     try {
-      const res = await fetch(`${SB_URL}/rest/v1/project_locations?on_conflict=name_key`, {
+      await fetch(`${SB_URL}/rest/v1/project_locations?${pinFilter(p)}`, { method: 'DELETE', headers: SB_HEADERS });
+      const res = await fetch(`${SB_URL}/rest/v1/project_locations`, {
         method: 'POST',
-        headers: { ...SB_HEADERS, Prefer: 'resolution=merge-duplicates,return=representation' },
-        body: JSON.stringify({ name_key: key, lat, lng, updated_at: new Date().toISOString() }),
+        headers: SB_HEADERS,
+        body: JSON.stringify({ name_key: p.name_key, ...(p.uid ? { deal_uid: p.uid } : {}), lat, lng, updated_at: new Date().toISOString() }),
       });
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
       setMsg('');
@@ -170,9 +207,16 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   useEffect(() => { saveRef.current = savePin; });
 
   async function removePin(key) {
-    setLocations(prev => { const next = { ...prev }; delete next[key]; return next; });
+    const p = projects.find(x => x.key === key);
+    setLocations(prev => {
+      const next = { ...prev };
+      delete next[key];
+      if (p?.name_key) delete next[p.name_key];
+      return next;
+    });
     try {
-      const res = await fetch(`${SB_URL}/rest/v1/project_locations?name_key=eq.${encodeURIComponent(key)}`, {
+      const filter = p ? pinFilter(p) : `name_key=eq.${encodeURIComponent(key)}`;
+      const res = await fetch(`${SB_URL}/rest/v1/project_locations?${filter}`, {
         method: 'DELETE', headers: SB_HEADERS,
       });
       if (!res.ok) throw new Error(`${res.status}`);
@@ -242,13 +286,13 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
     // slightly so every pin stays clickable.
     const byCoord = {};
     for (const p of visiblePins) {
-      const loc = locations[p.key];
+      const loc = locFor(p);
       const ck = `${loc.lat.toFixed(5)},${loc.lng.toFixed(5)}`;
       (byCoord[ck] = byCoord[ck] || []).push(p);
     }
     for (const clusterProjects of Object.values(byCoord)) {
       clusterProjects.forEach((p, i) => {
-        const loc = locations[p.key];
+        const loc = locFor(p);
         let { lat, lng } = loc;
         if (clusterProjects.length > 1) {
           const angle = (2 * Math.PI * i) / clusterProjects.length;
@@ -277,7 +321,7 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   const stageCounts = useMemo(() => {
     const c = {};
     for (const s of STAGES) c[s.key] = { total: 0, pinned: 0 };
-    for (const p of projects) { c[p.stage].total++; if (locations[p.key]) c[p.stage].pinned++; }
+    for (const p of projects) { c[p.stage].total++; if (locFor(p)) c[p.stage].pinned++; }
     return c;
   }, [projects, locations]);
 
@@ -311,6 +355,7 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
         .tt-pop-head { display: flex; align-items: center; gap: 7px; }
         .tt-pop-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
         .tt-pop-name { font-weight: 700; font-size: 0.85rem; color: var(--text); }
+        .tt-pop-uid { font-size: 0.6rem; color: var(--faint2); font-variant-numeric: tabular-nums; margin-left: auto; padding-left: 8px; }
         .tt-pop-stage { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin: 2px 0 7px 16px; }
         .tt-pop-row { display: flex; justify-content: space-between; gap: 16px; padding: 2.5px 0; border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
         .tt-pop-row span:first-child { color: var(--muted); }
@@ -338,7 +383,7 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
       )}
 
       {/* ── Summary cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
         {[
           { label: 'Projects Mapped', value: `${pinned.length} / ${projects.length}`, sub: unpinned.length ? `${unpinned.length} still need coordinates` : 'every project pinned', color: 'var(--text2)' },
           ...STAGES.map(s => ({
@@ -444,7 +489,7 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: stageOf(p.stage).color, flexShrink: 0 }} />
                     <span style={{ color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.name}</span>
                     <button className="btn btn-ghost btn-sm" title="Zoom to pin" style={{ padding: '0 5px' }}
-                      onClick={() => { const l = locations[p.key]; mapRef.current?.flyTo([l.lat, l.lng], Math.max(mapRef.current.getZoom(), 9)); }}>⌖</button>
+                      onClick={() => { const l = locFor(p); mapRef.current?.flyTo([l.lat, l.lng], Math.max(mapRef.current.getZoom(), 9)); }}>⌖</button>
                     <button className="btn btn-ghost btn-sm" title="Remove pin" style={{ padding: '0 5px', color: 'var(--fail)' }}
                       onClick={() => removePin(p.key)}>✕</button>
                   </div>
