@@ -394,6 +394,9 @@ On the Covenant Tracker tab, unlock editing (footer lock + PIN), click **Add Pro
 ### Uploading a forecast
 Click **Upload Forecast File** and select the monthly Budget Analysis xlsx from accounting. The app matches sheets to properties by fuzzy name scoring, shows a review screen, and then updates NOI figures — or saves the upload as a Prior Test baseline only.
 
+### Weekly upload reminder
+The two recurring uploads — the Chatham forward curves and the weekly leasing summary — come due every Monday. Whenever either hasn't been refreshed since Monday 00:00, an amber banner appears under the header (`src/components/WeeklyUploadBanner.jsx`) showing what's outstanding and when it was last updated, with a one-click path to each upload: the curve item embeds the same PIN-gated file picker as the header button, and the leasing item jumps to the Leasing tab (revealing it for the session if it's hidden from the shared tab config — the permanent setting is untouched). The ✕ hides the banner for the rest of the browser session; it returns on the next visit and re-arms each new week until both uploads land. Items also clear automatically when the data arrives by other means (e.g. the [warehouse leasing sync](#weekly-leasing-sync-data-warehouse)), since the banner reads the same freshness stamps (`settings.sofrUpdated`, `leasing_snapshot.uploaded_at`).
+
 ### Updating the forward curves
 Click **Update Curve** in the header (PIN-gated) and upload the Chatham workbook. Both the SOFR and 10-Year curves are replaced, and a dated snapshot is added to the Debt Dashboard's Forward Curve Tracker.
 

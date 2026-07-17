@@ -20,6 +20,7 @@ import { LoansTab } from './components/LoansTab.jsx';
 import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
 import { MapTab } from './components/MapTab.jsx';
 import { RegistryTab } from './components/RegistryTab.jsx';
+import { WeeklyUploadBanner } from './components/WeeklyUploadBanner.jsx';
 
 
 // 12 blank rows for a new variable-loan balance schedule. Never mutated in place
@@ -2955,7 +2956,21 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Main content wrapper ── */}
+      {/* ── Weekly upload reminder (re-arms every Monday) ── */}
+      <WeeklyUploadBanner
+        sofrUpdated={sofrUpdated}
+        activeTab={activeTab}
+        pinUnlocked={pinUnlocked}
+        onCurveFile={handleSofrUpload}
+        onRequirePin={() => setShowPinModal(true)}
+        onOpenLeasing={() => {
+          // The Leasing tab may be hidden from the shared tab config — reveal
+          // it for this session only (nothing is saved) so the upload is
+          // reachable; the gear menu still controls the permanent setting.
+          setVisibleTabs(v => (v.leasing ? v : { ...v, leasing: true }));
+          setActiveTab('leasing');
+        }}
+      />
       <div style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
 
         {/* ── Tab Nav ── */}
