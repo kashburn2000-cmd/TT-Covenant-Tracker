@@ -10,6 +10,7 @@ import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
 import { OVERRIDE_FIELDS, applyOverrides, fieldToInput, parseFieldInput, sameValue } from '../projectOverrides.js';
 import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync, CLASSIFICATION_LABEL } from '../dealRegistry.js';
+import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -1253,6 +1254,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadTimes, setUploadTimes] = useState({});
   const [widgets, setWidgets] = useState(DEFAULT_WIDGETS);
+  const [exporting, setExporting] = useState(false);
   const [layout, setLayout] = useState(DEFAULT_LAYOUT);
   const [layoutLoaded, setLayoutLoaded] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
@@ -1532,7 +1534,22 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
           {uploadTimes.atRiskUploaded && <div>At Risk: {new Date(uploadTimes.atRiskUploaded).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>}
           {uploadTimes.stabilizedUploaded && <div>Stabilized: {new Date(uploadTimes.stabilizedUploaded).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>}
         </div>
-        <div style={{ marginLeft: 'auto', position: 'relative' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center', position: 'relative' }}>
+          <button
+            onClick={async () => {
+              setExporting(true);
+              try {
+                await exportDebtDashboardExcel({ projects: merged, uploadTimes });
+                setUploadStatus('');
+              } catch (err) {
+                setUploadStatus('Error exporting Excel: ' + err.message);
+              }
+              setExporting(false);
+            }}
+            disabled={exporting || merged.length === 0}
+            title={merged.length === 0 ? 'Nothing to export yet — upload the schedules first' : 'Download the dashboard as a formatted Excel workbook (one tab per widget)'}
+            className="btn btn-sm"
+          >{exporting ? 'Generating…' : '⤓ Export Excel'}</button>
           {inactive.length > 0 && (
             <button onClick={() => setShowAdd(v => !v)} className="btn btn-sm">+ Add Widget</button>
           )}
