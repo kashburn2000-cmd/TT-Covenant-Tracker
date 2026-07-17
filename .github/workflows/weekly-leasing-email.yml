@@ -1,0 +1,51 @@
+name: Weekly Leasing Email Ingest
+
+# Reads the "Weekly Leasing Summary" email from the dedicated Gmail mailbox
+# (fed by an Outlook auto-forward rule) and loads its attachment into the
+# leasing_snapshot table — the same pipeline as the Leasing tab's manual
+# upload, sharing src/parseWeeklyLeasing.js. See "Weekly leasing email ingest"
+# in the README for the one-time mailbox setup.
+#
+# Runs three times each Monday morning in case the report email lands late;
+# once a week's snapshot is stored the later runs no-op ("already at week…"),
+# and an old email can never overwrite a newer manual upload.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   LEASING_EMAIL           the dedicated Gmail address
+#   LEASING_EMAIL_PASSWORD  a Gmail app password for that account
+#   SUPABASE_KEY            already set — the Supabase service_role key
+# Until the two LEASING_* secrets exist, runs skip gracefully.
+
+on:
+  schedule:
+    # Mondays 12:17 / 15:17 / 18:17 UTC (~7:17am / 10:17am / 1:17pm ET).
+    # Off-the-hour minute avoids GitHub's cron congestion.
+    - cron: '17 12,15,18 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Parse and report only — write nothing'
+        type: boolean
+        default: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Ingest weekly leasing email
+        env:
+          LEASING_EMAIL: ${{ secrets.LEASING_EMAIL }}
+          LEASING_EMAIL_PASSWORD: ${{ secrets.LEASING_EMAIL_PASSWORD }}
+          SB_URL: https://ngflppgqohmkkfiljqma.supabase.co
+          SB_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          if [ -z "$LEASING_EMAIL" ] || [ -z "$LEASING_EMAIL_PASSWORD" ]; then
+            echo "LEASING_EMAIL / LEASING_EMAIL_PASSWORD secrets not configured yet — skipping."
+            exit 0
+          fi
+          node scripts/pull-leasing-email.mjs ${{ inputs.dry_run && '--dry-run' || '' }}

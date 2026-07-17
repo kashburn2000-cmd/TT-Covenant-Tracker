@@ -88,6 +88,7 @@ Portfolio-wide weekly leasing performance (`src/components/LeasingTab.jsx`), dri
 - State filter across both sections; far-future DOP placeholders (12/31/2999) display as "—"
 - Only the latest snapshot is kept: each upload replaces the single row in `leasing_snapshot` (stored as the `weekly_summary_v1` shape; snapshots from the retired Lender Leasing Comparison upload render as the empty state prompting a fresh upload, and uploading the old workbook by mistake is detected and rejected with a pointer to the right file)
 - The [Monday reminder banner](#weekly-upload-reminder) tracks this upload via `leasing_snapshot.uploaded_at`
+- **Fully hands-off option:** the [weekly email ingest](#weekly-leasing-email-ingest) reads the Monday email from a dedicated Gmail mailbox and loads the attachment automatically — same parser, same table; the manual upload button remains as the fallback
 
 ### Lender Pipeline
 A financing pipeline tracker for development deals (`src/components/PipelineTab.jsx`), stored in `pipeline_deals`.
@@ -167,9 +168,24 @@ A **Deal Registry** tab (`src/components/RegistryTab.jsx`, logic in `src/dealReg
 | [`daily-curves.yml`](.github/workflows/daily-curves.yml) | Weekdays 22:47 UTC | Runs [`scripts/pull-curves.mjs`](scripts/pull-curves.mjs): stores the day's **10-Year Treasury yield** (treasury.gov, free) and **30-day Average SOFR** (NY Fed, free) into `rate_history` |
 | [`backfill-rate-history.yml`](.github/workflows/backfill-rate-history.yml) | Manual dispatch | Runs [`scripts/backfill-rate-history.mjs`](scripts/backfill-rate-history.mjs): historical backfill of both spot series from a chosen start date (default 2021-01-01); upserts, so it's safe to re-run |
 | [`keep-supabase-alive.yml`](.github/workflows/keep-supabase-alive.yml) | Daily 09:17 UTC | Pings the Supabase REST API so the free-tier project never pauses for inactivity |
-| [`weekly-leasing.yml`](.github/workflows/weekly-leasing.yml) | Manual dispatch (schedule commented out) | Runs [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs): pulls the weekly leasing summary from the company data warehouse into `leasing_snapshot`, replacing the manual Excel upload — see [Weekly leasing sync](#weekly-leasing-sync-data-warehouse) |
+| [`weekly-leasing-email.yml`](.github/workflows/weekly-leasing-email.yml) | Mondays 12:17 / 15:17 / 18:17 UTC | Runs [`scripts/pull-leasing-email.mjs`](scripts/pull-leasing-email.mjs): reads the Weekly Leasing Summary email from the dedicated Gmail and loads its attachment into `leasing_snapshot` — see [Weekly leasing email ingest](#weekly-leasing-email-ingest). Skips gracefully until the mailbox secrets are configured |
+| [`weekly-leasing.yml`](.github/workflows/weekly-leasing.yml) | Manual dispatch (schedule commented out) | Runs [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs): pulls the weekly leasing summary from the company data warehouse into `leasing_snapshot`, replacing the manual Excel upload — see [Weekly leasing sync](#weekly-leasing-sync-data-warehouse). **Superseded by the email ingest** |
 
 The scheduled workflows need a `SUPABASE_KEY` repo secret set to the project's **secret (service_role) key** — once row-level security is enabled, the publishable key can no longer write.
+
+### Weekly leasing email ingest
+
+The Weekly Leasing Summary is auto-emailed every Monday morning. [`scripts/pull-leasing-email.mjs`](scripts/pull-leasing-email.mjs) makes the Leasing Dashboard fully hands-off: a scheduled Action reads that email from a **dedicated Gmail mailbox**, downloads the attachment, runs it through the same parser as the manual upload button ([`src/parseWeeklyLeasing.js`](src/parseWeeklyLeasing.js)), and replaces the `leasing_snapshot` row. The [Monday reminder banner](#weekly-upload-reminder) clears itself once the ingest lands.
+
+**One-time setup:**
+
+1. **Dedicated Gmail** — create a free Gmail account used for nothing else (the script only ever touches this mailbox, never a work account). Turn on 2-Step Verification.
+2. **Deliver the report there** — either an Outlook rule on the work inbox auto-forwarding the Monday email (*Forward*, not *Redirect*, so the attachment survives), or ask the report owner to add the Gmail as a direct recipient. Verify an email with the attachment actually arrives.
+3. **App password** — Google Account → Security → 2-Step Verification → App passwords → generate one (revocable any time from the same page).
+4. **Repo secrets** — Settings → Secrets and variables → Actions: add `LEASING_EMAIL` (the Gmail address) and `LEASING_EMAIL_PASSWORD` (the app password). Until both exist, scheduled runs skip gracefully.
+5. **Test** — Actions → *Weekly Leasing Email Ingest* → Run workflow with **dry run** checked: it connects, parses, and reports what it *would* save without writing anything. Uncheck to go live.
+
+**Safety properties:** the schedule fires three times each Monday morning in case the email lands late — once the week's snapshot is stored, later runs no-op, and an email can never overwrite a snapshot from a newer week (so a stale forward can't regress a manual upload). Any failure simply leaves the dashboard on last week's data with the reminder banner still up, and the manual upload button always works.
 
 ### Weekly leasing sync (data warehouse)
 
