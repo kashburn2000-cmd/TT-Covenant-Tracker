@@ -87,6 +87,7 @@ Compares current leasing performance to bank-book underwriting (`src/components/
 - Six summary cards: average in-place rent vs. bank book, rent-to-bank-book %, occupancy vs. bank book, weekly net rentals, and counts of properties at/above bank-book rent and occupancy
 - Paired-bar SVG chart (Rent / Occupancy toggle) with delta badges, state filter, and a sortable per-property table
 - Only the latest snapshot is kept: each upload replaces the single row in `leasing_snapshot`
+- **Data warehouse sync (alternative to the manual upload):** [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs) runs the same weekly leasing summary the workbook is built from (SQL Server `ec2-dw-prod` → `ReportsGroup` → `rspYardi_WeeklyLeasingSummary_v3`) and writes the result straight into `leasing_snapshot` — the dashboard needs no changes. Fields the warehouse doesn't return (e.g. bank-book targets, which live in the workbook's merge) are carried forward from the previous snapshot by property code, so upload the Excel once to seed them and let the sync refresh the live figures from then on. See [Weekly leasing sync](#weekly-leasing-sync-data-warehouse) for setup
 
 ### Lender Pipeline
 A financing pipeline tracker for development deals (`src/components/PipelineTab.jsx`), stored in `pipeline_deals`.
@@ -164,8 +165,28 @@ A **Deal Registry** tab (`src/components/RegistryTab.jsx`, logic in `src/dealReg
 | [`daily-curves.yml`](.github/workflows/daily-curves.yml) | Weekdays 22:47 UTC | Runs [`scripts/pull-curves.mjs`](scripts/pull-curves.mjs): stores the day's **10-Year Treasury yield** (treasury.gov, free) and **30-day Average SOFR** (NY Fed, free) into `rate_history` |
 | [`backfill-rate-history.yml`](.github/workflows/backfill-rate-history.yml) | Manual dispatch | Runs [`scripts/backfill-rate-history.mjs`](scripts/backfill-rate-history.mjs): historical backfill of both spot series from a chosen start date (default 2021-01-01); upserts, so it's safe to re-run |
 | [`keep-supabase-alive.yml`](.github/workflows/keep-supabase-alive.yml) | Daily 09:17 UTC | Pings the Supabase REST API so the free-tier project never pauses for inactivity |
+| [`weekly-leasing.yml`](.github/workflows/weekly-leasing.yml) | Manual dispatch (schedule commented out) | Runs [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs): pulls the weekly leasing summary from the company data warehouse into `leasing_snapshot`, replacing the manual Excel upload — see [Weekly leasing sync](#weekly-leasing-sync-data-warehouse) |
 
 The scheduled workflows need a `SUPABASE_KEY` repo secret set to the project's **secret (service_role) key** — once row-level security is enabled, the publishable key can no longer write.
+
+### Weekly leasing sync (data warehouse)
+
+The Leasing Dashboard's numbers ultimately come from the company data warehouse — a SQL Server (`ec2-dw-prod`, database `ReportsGroup`) whose `rspYardi_WeeklyLeasingSummary_v3` stored procedure produces the weekly leasing summary that the `Lender_Leasing_Comparison.xlsx` workbook queries. [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs) cuts out the Excel middle step: it runs that procedure directly and writes the rows into `leasing_snapshot`, exactly like the manual upload does.
+
+**How to stand it up:**
+
+1. **Get a read-only SQL login** for the warehouse from IT (a service account, not a personal login — it only needs `EXECUTE` on the procedure).
+2. **Discovery run first** — from any machine that can reach the warehouse:
+   ```bash
+   npm install     # once (pulls the mssql driver)
+   DW_SERVER=ec2-dw-prod DW_USER=... DW_PASSWORD=... node scripts/pull-leasing.mjs
+   ```
+   This prints the columns the procedure returns and how each maps to a dashboard field, and writes **nothing**. If a column arrives under an unexpected name, add it to `FIELD_CANDIDATES` at the top of the script.
+3. **Seed bank-book targets** by uploading the Excel workbook on the Leasing tab once (if the dashboard already has data, this is done). The warehouse feed carries the *live* figures (occupancy, in-place rent, net rentals); bank-book underwriting targets live only in the workbook's merge, so the sync carries them forward from the previous snapshot by property code.
+4. **Live run:** add `SB_KEY=<service_role key>` and `--save`. By default only properties already on the dashboard are updated; pass `--all` to import every row the warehouse returns.
+5. **Schedule it.** Where it runs depends on network access — GitHub's runners are on the public internet, and `ec2-dw-prod` is almost certainly only reachable inside the company network / VPN:
+   - **Inside the network (simplest):** run the `--save` command on a schedule from an always-on internal machine (Windows Task Scheduler / cron). Only outbound HTTPS to Supabase is needed.
+   - **GitHub Actions:** works only if IT provides a path — a self-hosted runner inside the network, or (discouraged) allowlisting inbound SQL. Then set the `DW_USER` / `DW_PASSWORD` repo secrets and uncomment the schedule in [`weekly-leasing.yml`](.github/workflows/weekly-leasing.yml); until the schedule is enabled the workflow is manual-dispatch only, with a discovery-mode default.
 
 The 1-Mo **Term SOFR forward curve** itself is CME-licensed data. Once CME API access is purchased, add `CME_API_ID` / `CME_API_SECRET` as repo secrets and implement `fetchCmeTermSofrCurve()` in `scripts/pull-curves.mjs` (the function is the single marked TODO; everything downstream — snapshot storage and charting — is already wired). Until then, forward-curve history builds from Chatham uploads and the in-app snapshot button.
 
@@ -372,6 +393,9 @@ On the Covenant Tracker tab, unlock editing (footer lock + PIN), click **Add Pro
 
 ### Uploading a forecast
 Click **Upload Forecast File** and select the monthly Budget Analysis xlsx from accounting. The app matches sheets to properties by fuzzy name scoring, shows a review screen, and then updates NOI figures — or saves the upload as a Prior Test baseline only.
+
+### Weekly upload reminder
+The two recurring uploads — the Chatham forward curves and the weekly leasing summary — come due every Monday. Whenever either hasn't been refreshed since Monday 00:00, an amber banner appears under the header (`src/components/WeeklyUploadBanner.jsx`) showing what's outstanding and when it was last updated, with a one-click path to each upload: the curve item embeds the same PIN-gated file picker as the header button, and the leasing item jumps to the Leasing tab (revealing it for the session if it's hidden from the shared tab config — the permanent setting is untouched). The ✕ hides the banner for the rest of the browser session; it returns on the next visit and re-arms each new week until both uploads land. Items also clear automatically when the data arrives by other means (e.g. the [warehouse leasing sync](#weekly-leasing-sync-data-warehouse)), since the banner reads the same freshness stamps (`settings.sofrUpdated`, `leasing_snapshot.uploaded_at`).
 
 ### Updating the forward curves
 Click **Update Curve** in the header (PIN-gated) and upload the Chatham workbook. Both the SOFR and 10-Year curves are replaced, and a dated snapshot is added to the Debt Dashboard's Forward Curve Tracker.

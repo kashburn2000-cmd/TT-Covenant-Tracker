@@ -1,0 +1,61 @@
+name: Weekly Leasing Pull
+
+# Pulls the weekly leasing summary from the company data warehouse
+# (SQL Server: ec2-dw-prod / ReportsGroup / rspYardi_WeeklyLeasingSummary_v3)
+# into the leasing_snapshot Supabase table — the same table the Leasing
+# Dashboard reads — replacing the manual Lender_Leasing_Comparison.xlsx upload.
+#
+# ⚠ NETWORK PREREQUISITE — read before enabling the schedule:
+# GitHub's runners live on the public internet. If ec2-dw-prod is only
+# reachable inside the company network / VPN (very likely), this workflow
+# cannot connect from here. In that case either:
+#   1. Run scripts/pull-leasing.mjs from a machine inside the network on a
+#      schedule (Windows Task Scheduler) — no GitHub involvement needed, or
+#   2. Have IT set up a self-hosted GitHub Actions runner inside the network
+#      and change `runs-on` below to that runner's label, or
+#   3. Have IT allow inbound SQL (port 1433) from specific IPs — generally
+#      discouraged for a production warehouse.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DW_USER / DW_PASSWORD  read-only SQL login for the warehouse (ask IT)
+#   SUPABASE_KEY           already set — the Supabase service_role key
+# Optional repo secret:
+#   DW_SERVER              defaults to ec2-dw-prod if unset
+
+on:
+  # Enable the schedule once a manual "save" run has succeeded end-to-end.
+  # Mondays 12:17 UTC (~7:17am ET), pulling the weekend's numbers:
+  # schedule:
+  #   - cron: '17 12 * * 1'
+  workflow_dispatch:
+    inputs:
+      save:
+        description: 'Write to the Leasing Dashboard (off = discovery only: print columns, change nothing)'
+        type: boolean
+        default: false
+      all:
+        description: 'Import every property the warehouse returns (off = only properties already on the dashboard)'
+        type: boolean
+        default: false
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Pull weekly leasing summary
+        env:
+          DW_SERVER: ${{ secrets.DW_SERVER || 'ec2-dw-prod' }}
+          DW_USER: ${{ secrets.DW_USER }}
+          DW_PASSWORD: ${{ secrets.DW_PASSWORD }}
+          SB_URL: https://ngflppgqohmkkfiljqma.supabase.co
+          SB_KEY: ${{ secrets.SUPABASE_KEY }}
+        # Scheduled runs always save; manual runs follow the checkboxes.
+        run: >
+          node scripts/pull-leasing.mjs
+          ${{ (github.event_name == 'schedule' || inputs.save) && '--save' || '' }}
+          ${{ inputs.all && '--all' || '' }}
