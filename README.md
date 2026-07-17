@@ -81,13 +81,14 @@ An interactive deal-sizing calculator (`src/components/CalculatorTab.jsx`). Pure
 A static reference table (`src/components/MatrixTab.jsx`): enter a fixed rate and see Debt Yield (14.0% down to 6.0% in 0.5% steps) converted to DSCR under I/O, 30-year, and 35-year amortization. Cells are color-banded (Strong / Adequate / Thin / Distressed) using the app-wide DSCR thresholds. No data, no persistence, no PIN.
 
 ### Leasing Dashboard
-Compares current leasing performance to bank-book underwriting (`src/components/LeasingTab.jsx`).
+Portfolio-wide weekly leasing performance (`src/components/LeasingTab.jsx`), driven by the **Weekly Leasing Summary** workbook — the report auto-emailed every Monday morning. Upload the attachment as-is; no Excel refreshing or maintenance needed.
 
-- Upload the `Lender_Leasing_Comparison.xlsx` workbook (refresh its Excel query first, then save and upload) — the `tblMerge` sheet supplies per-property rows, the `Weekly Leasing` sheet supplies the as-of / week-ending dates
-- Six summary cards: average in-place rent vs. bank book, rent-to-bank-book %, occupancy vs. bank book, weekly net rentals, and counts of properties at/above bank-book rent and occupancy
-- Paired-bar SVG chart (Rent / Occupancy toggle) with delta badges, state filter, and a sortable per-property table
-- Only the latest snapshot is kept: each upload replaces the single row in `leasing_snapshot`
-- **Data warehouse sync (alternative to the manual upload):** [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs) runs the same weekly leasing summary the workbook is built from (SQL Server `ec2-dw-prod` → `ReportsGroup` → `rspYardi_WeeklyLeasingSummary_v3`) and writes the result straight into `leasing_snapshot` — the dashboard needs no changes. Fields the warehouse doesn't return (e.g. bank-book targets, which live in the workbook's merge) are carried forward from the previous snapshot by property code, so upload the Excel once to seed them and let the sync refresh the live figures from then on. See [Weekly leasing sync](#weekly-leasing-sync-data-warehouse) for setup
+- The workbook's pivot layout (metrics as rows, properties as columns, split into **Lease-Up** and **Stabilized** blocks with precomputed TOTALS columns) is parsed by [`src/parseWeeklyLeasing.js`](src/parseWeeklyLeasing.js) — everything is located by content (TOTALS cells, label text), so merged-cell gaps and shifting column positions are tolerated
+- Two sections, each with its own summary-card strip (from the report's own totals) and sortable table: Lease-Up shows occupied/leased/8-wk-projected occupancy (with inline occupancy bars and a projection tick), weekly traffic / net rentals, closing ratio, in-place rent vs. proforma, net move-ins per month, first DOP, and top concession; Stabilized swaps the lease-up columns for YOY rent growth and stabilization date
+- State filter across both sections; far-future DOP placeholders (12/31/2999) display as "—"
+- Only the latest snapshot is kept: each upload replaces the single row in `leasing_snapshot` (stored as the `weekly_summary_v1` shape; snapshots from the retired Lender Leasing Comparison upload render as the empty state prompting a fresh upload, and uploading the old workbook by mistake is detected and rejected with a pointer to the right file)
+- The [Monday reminder banner](#weekly-upload-reminder) tracks this upload via `leasing_snapshot.uploaded_at`
+- **Fully hands-off option:** the [weekly email ingest](#weekly-leasing-email-ingest) reads the Monday email from a dedicated Gmail mailbox and loads the attachment automatically — same parser, same table; the manual upload button remains as the fallback
 
 ### Lender Pipeline
 A financing pipeline tracker for development deals (`src/components/PipelineTab.jsx`), stored in `pipeline_deals`.
@@ -167,13 +168,30 @@ A **Deal Registry** tab (`src/components/RegistryTab.jsx`, logic in `src/dealReg
 | [`daily-curves.yml`](.github/workflows/daily-curves.yml) | Weekdays 22:47 UTC | Runs [`scripts/pull-curves.mjs`](scripts/pull-curves.mjs): stores the day's **10-Year Treasury yield** (treasury.gov, free) and **30-day Average SOFR** (NY Fed, free) into `rate_history` |
 | [`backfill-rate-history.yml`](.github/workflows/backfill-rate-history.yml) | Manual dispatch | Runs [`scripts/backfill-rate-history.mjs`](scripts/backfill-rate-history.mjs): historical backfill of both spot series from a chosen start date (default 2021-01-01); upserts, so it's safe to re-run |
 | [`keep-supabase-alive.yml`](.github/workflows/keep-supabase-alive.yml) | Daily 09:17 UTC | Pings the Supabase REST API so the free-tier project never pauses for inactivity |
-| [`weekly-leasing.yml`](.github/workflows/weekly-leasing.yml) | Manual dispatch (schedule commented out) | Runs [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs): pulls the weekly leasing summary from the company data warehouse into `leasing_snapshot`, replacing the manual Excel upload — see [Weekly leasing sync](#weekly-leasing-sync-data-warehouse) |
+| [`weekly-leasing-email.yml`](.github/workflows/weekly-leasing-email.yml) | Mondays 12:17 / 15:17 / 18:17 UTC | Runs [`scripts/pull-leasing-email.mjs`](scripts/pull-leasing-email.mjs): reads the Weekly Leasing Summary email from the dedicated Gmail and loads its attachment into `leasing_snapshot` — see [Weekly leasing email ingest](#weekly-leasing-email-ingest). Skips gracefully until the mailbox secrets are configured |
+| [`weekly-leasing.yml`](.github/workflows/weekly-leasing.yml) | Manual dispatch (schedule commented out) | Runs [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs): pulls the weekly leasing summary from the company data warehouse into `leasing_snapshot`, replacing the manual Excel upload — see [Weekly leasing sync](#weekly-leasing-sync-data-warehouse). **Superseded by the email ingest** |
 
 The scheduled workflows need a `SUPABASE_KEY` repo secret set to the project's **secret (service_role) key** — once row-level security is enabled, the publishable key can no longer write.
 
+### Weekly leasing email ingest
+
+The Weekly Leasing Summary is auto-emailed every Monday morning. [`scripts/pull-leasing-email.mjs`](scripts/pull-leasing-email.mjs) makes the Leasing Dashboard fully hands-off: a scheduled Action reads that email from a **dedicated Gmail mailbox**, downloads the attachment, runs it through the same parser as the manual upload button ([`src/parseWeeklyLeasing.js`](src/parseWeeklyLeasing.js)), and replaces the `leasing_snapshot` row. The [Monday reminder banner](#weekly-upload-reminder) clears itself once the ingest lands.
+
+**One-time setup:**
+
+1. **Dedicated Gmail** — create a free Gmail account used for nothing else (the script only ever touches this mailbox, never a work account). Turn on 2-Step Verification.
+2. **Deliver the report there** — either an Outlook rule on the work inbox auto-forwarding the Monday email (*Forward*, not *Redirect*, so the attachment survives), or ask the report owner to add the Gmail as a direct recipient. Verify an email with the attachment actually arrives.
+3. **App password** — Google Account → Security → 2-Step Verification → App passwords → generate one (revocable any time from the same page).
+4. **Repo secrets** — Settings → Secrets and variables → Actions: add `LEASING_EMAIL` (the Gmail address) and `LEASING_EMAIL_PASSWORD` (the app password). Until both exist, scheduled runs skip gracefully.
+5. **Test** — Actions → *Weekly Leasing Email Ingest* → Run workflow with **dry run** checked: it connects, parses, and reports what it *would* save without writing anything. Uncheck to go live.
+
+**Safety properties:** the schedule fires three times each Monday morning in case the email lands late — once the week's snapshot is stored, later runs no-op, and an email can never overwrite a snapshot from a newer week (so a stale forward can't regress a manual upload). Any failure simply leaves the dashboard on last week's data with the reminder banner still up, and the manual upload button always works.
+
 ### Weekly leasing sync (data warehouse)
 
-The Leasing Dashboard's numbers ultimately come from the company data warehouse — a SQL Server (`ec2-dw-prod`, database `ReportsGroup`) whose `rspYardi_WeeklyLeasingSummary_v3` stored procedure produces the weekly leasing summary that the `Lender_Leasing_Comparison.xlsx` workbook queries. [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs) cuts out the Excel middle step: it runs that procedure directly and writes the rows into `leasing_snapshot`, exactly like the manual upload does.
+> **Currently superseded.** The Leasing tab now runs on the Weekly Leasing Summary email attachment (`weekly_summary_v1` snapshot shape), and this sync still writes the retired Lender-Leasing-Comparison shape. It was never activated (no warehouse credentials were configured). If the direct warehouse connection is picked back up, rework the script's field mapping against the new shape first — the connection/scheduling guidance below still applies.
+
+The Leasing Dashboard's numbers ultimately come from the company data warehouse — a SQL Server (`ec2-dw-prod`, database `ReportsGroup`) whose `rspYardi_WeeklyLeasingSummary_v3` stored procedure produces the weekly leasing summary. [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs) cuts out the email/Excel middle step: it runs that procedure directly and writes the rows into `leasing_snapshot`, exactly like the manual upload does.
 
 **How to stand it up:**
 

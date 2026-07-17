@@ -1,5 +1,13 @@
 // Weekly leasing pull for the Leasing Dashboard.
 //
+// ⚠ SUPERSEDED FOR NOW — the Leasing tab has moved to the Weekly Leasing
+// Summary email attachment (parsed by src/parseWeeklyLeasing.js into the
+// 'weekly_summary_v1' snapshot shape), and this script still writes the old
+// Lender-Leasing-Comparison shape, which the tab no longer renders. If the
+// direct warehouse connection is ever picked back up, rework the mapping
+// below against the new shape first. Never activated (no credentials were
+// ever configured), so nothing breaks by leaving it in place.
+//
 // Connects to the company data warehouse (SQL Server), runs the same weekly
 // leasing summary the Lender_Leasing_Comparison.xlsx workbook is built from:
 //
