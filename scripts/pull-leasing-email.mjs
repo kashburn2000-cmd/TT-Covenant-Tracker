@@ -32,6 +32,8 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import * as XLSX from 'xlsx';
 import { parseWeeklyLeasingRows } from '../src/parseWeeklyLeasing.js';
+import { setAccessToken } from '../src/supabase.js';
+import { linkLeasingSnapshot } from '../src/dealRegistry.js';
 
 const DRY = process.argv.includes('--dry-run');
 const EMAIL = process.env.LEASING_EMAIL;
@@ -122,6 +124,18 @@ if (prev?.week_end && String(prev.week_end) >= parsed.weekEnd) {
 if (DRY) {
   console.log(`Dry run — would replace snapshot (currently ${prev?.week_end || 'empty'}) with week ending ${parsed.weekEnd}. Nothing written.`);
   process.exit(0);
+}
+
+// ── 4b. Stamp Deal Registry ids (TT-xxx) onto the properties ─────────────────
+// Same helper the Leasing tab's upload uses; the shared client headers are
+// pointed at the service key first. Linking is optional — an install without
+// the registry table saves unlinked.
+try {
+  setAccessToken(SB_KEY);
+  const { linked, minted } = await linkLeasingSnapshot(parsed);
+  console.log(`Deal Registry: ${linked} propert${linked === 1 ? 'y' : 'ies'} linked${minted ? `, ${minted} new id(s) minted — review on the Deal Registry tab` : ''}.`);
+} catch (err) {
+  console.log(`Deal Registry linking skipped: ${err.message}`);
 }
 
 // ── 5. Replace the snapshot (same delete-then-insert the site uses) ──────────

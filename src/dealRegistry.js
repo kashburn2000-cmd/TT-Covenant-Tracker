@@ -143,6 +143,91 @@ export function planRegistrySync({ registry = [], debtRows = [], deals = [], loc
   return { newEntries, links };
 }
 
+// ── Leasing link planner ─────────────────────────────────────────────────────
+// The Weekly Leasing Summary carries marketing names ("The Depot Luxury
+// Apartments") while the registry holds schedule names ("Depot"), and the
+// leasing snapshot is replaced wholesale every week — so leasing links live
+// on the registry itself (deal_registry.leasing_key), not on the data rows.
+// Matching runs once per property name: a stored leasing_key always wins;
+// otherwise a name match (exact, marketing-suffix-stripped, or unambiguous
+// containment) links and persists the key; anything else mints a NEW entry
+// for review — merging it into the right deal on the Registry tab carries
+// the key over, so next week's upload links automatically.
+
+const LEASING_SUFFIXES = ['luxuryapartmenthomes', 'luxuryapartments', 'apartmenthomes', 'apartments', 'apartment', 'luxury'];
+
+// Marketing-name core: nameKey minus a leading "the" and trailing suffixes.
+// "The Depot Luxury Apartments" → "depot".
+export function leasingKey(name) {
+  let k = nameKey(name);
+  if (k.startsWith('the')) k = k.slice(3);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const s of LEASING_SUFFIXES) {
+      if (k.length > s.length && k.endsWith(s)) { k = k.slice(0, -s.length); changed = true; }
+    }
+  }
+  return k;
+}
+
+// Pure planner. properties: [{ name, cityState }] in report order. Returns
+// { newEntries, keyPatches, assignments } where assignments[i] is the uid for
+// properties[i] (or null). An entry can hold one leasing property: entries
+// with a stored leasing_key are only reachable via that key, and an entry
+// claimed earlier in this sync can't be claimed again (two same-city
+// properties can never share a uid).
+export function planLeasingSync({ registry = [], properties = [] }) {
+  const uids = new Set(registry.map(e => e.uid));
+  const claimed = new Set();
+  const byLeasingKey = new Map(registry.filter(e => e.leasing_key).map(e => [e.leasing_key, e.uid]));
+  const open = registry.filter(e => !e.leasing_key);
+
+  const newEntries = [];
+  const keyPatches = [];
+  const assignments = [];
+
+  for (const p of properties) {
+    const display = (p.name || p.cityState || '').trim();
+    const key = leasingKey(display);
+    if (!key) { assignments.push(null); continue; }
+
+    // 1. Persistent link
+    let uid = byLeasingKey.get(key);
+    if (uid) { claimed.add(uid); assignments.push(uid); continue; }
+
+    // 2. Name match among open, unclaimed entries — exact beats containment,
+    //    and any ambiguity falls through to minting (repair via merge).
+    const kFull = nameKey(display);
+    const exact = [], contains = [];
+    for (const e of open) {
+      if (claimed.has(e.uid)) continue;
+      const ek = nameKey(e.name), ec = leasingKey(e.name);
+      if (ek === kFull || ec === key) { exact.push(e); continue; }
+      const [short, long] = ec.length <= key.length ? [ec, key] : [key, ec];
+      if (short.length >= 5 && long.includes(short)) contains.push(e);
+    }
+    const match = exact.length === 1 ? exact[0] : (exact.length === 0 && contains.length === 1 ? contains[0] : null);
+    if (match) {
+      claimed.add(match.uid);
+      byLeasingKey.set(key, match.uid);
+      keyPatches.push({ uid: match.uid, leasing_key: key });
+      assignments.push(match.uid);
+      continue;
+    }
+
+    // 3. Mint a NEW entry for review
+    uid = nextUid(uids);
+    uids.add(uid);
+    claimed.add(uid);
+    byLeasingKey.set(key, uid);
+    newEntries.push({ uid, name: display, reviewed: false, leasing_key: key });
+    assignments.push(uid);
+  }
+
+  return { newEntries, keyPatches, assignments };
+}
+
 // ── Supabase executors ───────────────────────────────────────────────────────
 
 export async function fetchRegistry() {
@@ -206,12 +291,59 @@ export async function executeRegistrySync(plan) {
   return plan;
 }
 
+// Execute a planLeasingSync() plan: create minted entries, persist the
+// leasing_key on name-matched ones.
+export async function executeLeasingSync(plan) {
+  await insertRegistryEntries(plan.newEntries);
+  const results = await Promise.all(plan.keyPatches.map(p =>
+    fetch(`${SB_URL}/rest/v1/deal_registry?uid=eq.${encodeURIComponent(p.uid)}`, {
+      method: 'PATCH', headers: SB_HEADERS,
+      body: JSON.stringify({ leasing_key: p.leasing_key, updated_at: new Date().toISOString() }),
+    })
+  ));
+  const failed = results.filter(r => !r.ok);
+  if (failed.length) throw new Error(`${failed.length} leasing link update(s) failed — if the error mentions a missing column, re-run db/deal_registry_setup.sql once.`);
+  return plan;
+}
+
+// One-call helper shared by the Leasing tab's upload and the email ingest:
+// fetch the registry, plan + execute the sync, and stamp deal_uid onto every
+// property in the parsed snapshot (mutates in place). Returns a summary.
+// Throws if the registry isn't reachable — callers treat linking as optional.
+export async function linkLeasingSnapshot(parsed) {
+  const registry = await fetchRegistry();
+  const properties = [...(parsed.leaseUp?.properties || []), ...(parsed.stabilized?.properties || [])];
+  const plan = planLeasingSync({ registry, properties });
+  if (plan.newEntries.length || plan.keyPatches.length) await executeLeasingSync(plan);
+  properties.forEach((p, i) => { if (plan.assignments[i]) p.deal_uid = plan.assignments[i]; });
+  return { linked: plan.assignments.filter(Boolean).length - plan.newEntries.length, minted: plan.newEntries.length };
+}
+
 // Merge duplicate registry entries: everything pointing at fromUid moves to
 // intoUid (rows, pipeline deals, map pins), then fromUid is deleted. If both
 // deals carry a pin, the surviving deal keeps its own and the duplicate's
 // pin is dropped (a deal can only have one pin).
 export async function mergeRegistryEntries(fromUid, intoUid) {
   const enc = encodeURIComponent;
+
+  // Carry the leasing link: merging a leasing-minted duplicate into the real
+  // deal moves its leasing_key onto the survivor (unless the survivor already
+  // has one), so next week's upload links automatically. Best-effort — an
+  // install without the leasing_key column just skips this.
+  try {
+    const regRes = await fetch(`${SB_URL}/rest/v1/deal_registry?uid=in.(${enc(fromUid)},${enc(intoUid)})&select=uid,leasing_key`, { headers: SB_HEADERS });
+    if (regRes.ok) {
+      const entries = await regRes.json();
+      const from = entries.find(e => e.uid === fromUid);
+      const into = entries.find(e => e.uid === intoUid);
+      if (from?.leasing_key && !into?.leasing_key) {
+        await fetch(`${SB_URL}/rest/v1/deal_registry?uid=eq.${enc(intoUid)}`, {
+          method: 'PATCH', headers: SB_HEADERS, body: JSON.stringify({ leasing_key: from.leasing_key }),
+        });
+      }
+    }
+  } catch { /* pre-leasing_key install */ }
+
   const relink = async (table) => {
     const res = await fetch(`${SB_URL}/rest/v1/${table}?deal_uid=eq.${enc(fromUid)}`, {
       method: 'PATCH', headers: SB_HEADERS, body: JSON.stringify({ deal_uid: intoUid }),

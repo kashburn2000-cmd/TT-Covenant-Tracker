@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { parseWeeklyLeasingRows } from '../parseWeeklyLeasing.js';
+import { linkLeasingSnapshot } from '../dealRegistry.js';
 
 // ── Leasing Tab ───────────────────────────────────────────────────────────────
 // Driven by the "Weekly Leasing Summary" workbook — the report auto-emailed
@@ -161,7 +162,7 @@ export function LeasingTab() {
     if (!file) return;
     setUploadMsg('Parsing…');
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const XLSX = window.XLSX;
         if (!XLSX) { setUploadMsg('SheetJS not loaded — try again.'); return; }
@@ -173,12 +174,20 @@ export function LeasingTab() {
         const sheetName = wb.SheetNames.find(n => /weekly\s*leasing/i.test(n)) || wb.SheetNames[0];
         const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null });
         const parsed = { format: SNAPSHOT_FORMAT, ...parseWeeklyLeasingRows(rows) };
+        // Stamp Deal Registry ids (TT-xxx) onto the properties so leasing
+        // shares the id system the other tabs use. Optional: an install
+        // without the registry table just saves unlinked.
+        let mintNote = '';
+        try {
+          const { minted } = await linkLeasingSnapshot(parsed);
+          if (minted > 0) mintNote = ` · ${minted} new deal id${minted === 1 ? '' : 's'} assigned — review on the Deal Registry tab`;
+        } catch { /* registry not set up */ }
         setData(parsed);
         setLegacySnapshot(false);
         saveToDb(parsed);
         const n = (parsed.leaseUp?.properties.length || 0) + (parsed.stabilized?.properties.length || 0);
-        setUploadMsg(`✓ Saved ${n} properties to database`);
-        setTimeout(() => setUploadMsg(''), 4000);
+        setUploadMsg(`✓ Saved ${n} properties to database${mintNote}`);
+        setTimeout(() => setUploadMsg(''), mintNote ? 12000 : 4000);
       } catch (err) {
         setUploadMsg('Parse error: ' + err.message);
       }
@@ -231,7 +240,10 @@ export function LeasingTab() {
 
   const propertyCell = (r) => (
     <div>
-      <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.82rem' }}>{r.name || r.cityState}</div>
+      <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.82rem' }}>
+        {r.name || r.cityState}
+        {r.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', fontWeight: 400, color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{r.deal_uid}</span>}
+      </div>
       <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.1rem' }}>{r.cityState} · {r.units ?? '—'} units</div>
     </div>
   );

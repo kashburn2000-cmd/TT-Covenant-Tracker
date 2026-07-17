@@ -137,7 +137,8 @@ export function RegistryTab() {
         inAtRisk: debt.some(r => r.source === 'at_risk'),
         inStabilized: debt.some(r => r.source === 'stabilized'),
         inPipeline: pDeals.length > 0,
-        orphan: debt.length === 0 && pDeals.length === 0,
+        inLeasing: !!entry.leasing_key,
+        orphan: debt.length === 0 && pDeals.length === 0 && !entry.leasing_key,
         hiddenOrRemoved: debt.length > 0 && debt.every(r => r.hidden || r.removed),
         lender: eff?.lender || pipe?.primary_lender || null,
         loan: eff?.loan_amount ?? pipe?.total_budget ?? null,
@@ -339,6 +340,7 @@ export function RegistryTab() {
                     {sourceChip('Pipeline', r.inPipeline, 'var(--cat-violet)')}
                     {sourceChip('At Risk', r.inAtRisk, 'var(--accent)')}
                     {sourceChip('Stabilized', r.inStabilized, 'var(--pass)')}
+                    {sourceChip('Leasing', r.inLeasing, 'var(--warn)')}
                     {r.pinned && sourceChip('📍', true, 'var(--muted)')}
                   </span>
                 </td>

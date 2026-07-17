@@ -37,6 +37,14 @@ CREATE TABLE IF NOT EXISTS deal_registry (
 ALTER TABLE deal_registry ADD COLUMN IF NOT EXISTS classification text
   CHECK (classification IN ('land_facility'));
 
+-- Persistent link between a Weekly Leasing Summary property and its deal.
+-- The leasing snapshot is replaced wholesale every week, so (unlike schedule
+-- rows) links can't live on the data rows — they live here instead: set once
+-- (by auto-match on upload, or carried over by a merge on the Registry tab),
+-- matched first on every subsequent upload, so marketing-name drift can't
+-- re-mint ids.
+ALTER TABLE deal_registry ADD COLUMN IF NOT EXISTS leasing_key text;
+
 -- Link columns on the tables that hold deal rows. Nullable: rows are linked
 -- lazily (on upload / when the registry tab syncs), never required up front.
 ALTER TABLE debt_projects     ADD COLUMN IF NOT EXISTS deal_uid text;

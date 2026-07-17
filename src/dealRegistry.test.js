@@ -124,3 +124,103 @@ describe('planRegistrySync', () => {
     expect(plan.newEntries.map(e => e.uid)).toEqual(['TT-001', 'TT-002']);
   });
 });
+
+// ── Leasing linking ──────────────────────────────────────────────────────────
+import { leasingKey, planLeasingSync } from './dealRegistry.js';
+
+describe('leasingKey', () => {
+  it('strips a leading "the" and marketing suffixes down to the core name', () => {
+    expect(leasingKey('The Depot Luxury Apartments')).toBe('depot');
+    expect(leasingKey('Alta25 Luxury Apartment Homes')).toBe('alta25');
+    expect(leasingKey('Standard441 Luxury Apartments')).toBe('standard441');
+    expect(leasingKey('The Maverick')).toBe('maverick');
+  });
+
+  it('keeps location qualifiers (they distinguish same-name deals)', () => {
+    expect(leasingKey('The Hadley- North Port, FL')).toBe('hadleynorthportfl');
+  });
+
+  it('never strips a name to nothing', () => {
+    expect(leasingKey('Apartments')).toBe('apartments');
+    expect(leasingKey('')).toBe('');
+  });
+});
+
+describe('planLeasingSync', () => {
+  const entry = (uid, name, over = {}) => ({ uid, name, leasing_key: null, ...over });
+
+  it('a stored leasing_key always wins and is not re-patched', () => {
+    const plan = planLeasingSync({
+      registry: [entry('TT-001', 'Raymore', { leasing_key: 'depot' })],
+      properties: [{ name: 'The Depot Luxury Apartments' }],
+    });
+    expect(plan.assignments).toEqual(['TT-001']);
+    expect(plan.keyPatches).toEqual([]);
+    expect(plan.newEntries).toEqual([]);
+  });
+
+  it('links by exact schedule name and persists the key', () => {
+    const plan = planLeasingSync({
+      registry: [entry('TT-002', 'Alta25')],
+      properties: [{ name: 'Alta25 Luxury Apartment Homes' }],
+    });
+    expect(plan.assignments).toEqual(['TT-002']);
+    expect(plan.keyPatches).toEqual([{ uid: 'TT-002', leasing_key: 'alta25' }]);
+  });
+
+  it('links by unambiguous containment ("Watermark at Steele Crossing" ↔ "Steele Crossing")', () => {
+    const plan = planLeasingSync({
+      registry: [entry('TT-003', 'Steele Crossing'), entry('TT-004', 'Fiske Blvd')],
+      properties: [{ name: 'Watermark at Steele Crossing' }],
+    });
+    expect(plan.assignments).toEqual(['TT-003']);
+  });
+
+  it('mints a NEW entry when nothing matches, carrying the leasing_key', () => {
+    const plan = planLeasingSync({
+      registry: [entry('TT-007', 'Raymore')],
+      properties: [{ name: 'The Depot Luxury Apartments' }],
+    });
+    expect(plan.newEntries).toEqual([{ uid: 'TT-008', name: 'The Depot Luxury Apartments', reviewed: false, leasing_key: 'depot' }]);
+    expect(plan.assignments).toEqual(['TT-008']);
+  });
+
+  it('mints on ambiguity instead of guessing', () => {
+    const plan = planLeasingSync({
+      registry: [entry('TT-001', 'Monument Ridge'), entry('TT-002', 'Monument Creek')],
+      properties: [{ name: 'The Monument Apartments' }], // "monument" fits both
+    });
+    expect(plan.newEntries).toHaveLength(1);
+    expect(plan.assignments[0]).toBe('TT-003');
+  });
+
+  it('never assigns one deal to two properties in the same sync', () => {
+    const plan = planLeasingSync({
+      registry: [entry('TT-001', 'Fort Collins')],
+      properties: [
+        { name: 'The Fort Collins Flats' },  // links TT-001 (containment)
+        { name: 'Fort Collins Station' },    // TT-001 claimed → mints
+      ],
+    });
+    expect(plan.assignments[0]).toBe('TT-001');
+    expect(plan.assignments[1]).toBe('TT-002');
+    expect(plan.newEntries).toHaveLength(1);
+  });
+
+  it('entries already linked to a leasing property are unreachable by name matching', () => {
+    const plan = planLeasingSync({
+      registry: [entry('TT-001', 'Depot', { leasing_key: 'someotherproperty' })],
+      properties: [{ name: 'The Depot Luxury Apartments' }],
+    });
+    expect(plan.newEntries).toHaveLength(1);
+    expect(plan.assignments[0]).toBe('TT-002');
+  });
+
+  it('falls back to cityState when the report has no marketing name yet', () => {
+    const plan = planLeasingSync({
+      registry: [],
+      properties: [{ name: null, cityState: 'CO, Monument, Higby Rd' }],
+    });
+    expect(plan.newEntries[0].name).toBe('CO, Monument, Higby Rd');
+  });
+});
