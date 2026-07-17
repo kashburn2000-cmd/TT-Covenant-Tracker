@@ -1,51 +1,151 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
+import { parseWeeklyLeasingRows } from '../parseWeeklyLeasing.js';
 
 // ── Leasing Tab ───────────────────────────────────────────────────────────────
+// Driven by the "Weekly Leasing Summary" workbook — the report auto-emailed
+// every Monday morning. Upload the attachment as-is; the parser
+// (src/parseWeeklyLeasing.js) reads its pivot layout into two sections,
+// Lease-Up and Stabilized, each with the report's own precomputed totals.
+// Only the latest snapshot is kept (one row in leasing_snapshot). Snapshots
+// saved by the pre-2026 Lender Leasing Comparison upload are an older shape
+// and render as the empty state prompting a fresh weekly-summary upload.
+
+const SNAPSHOT_FORMAT = 'weekly_summary_v1';
+
+const fmtPct = (v, d = 1) => (v == null || isNaN(v) ? '—' : `${(v * 100).toFixed(d)}%`);
+const fmtNum = (v, d = 0) => (v == null || isNaN(v) ? '—' : Number(v).toFixed(d));
+const fmtDate = (iso) => {
+  if (!iso) return '—';
+  try { return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+  catch { return '—'; }
+};
+
+const passColor = 'var(--pass)';
+const failColor = 'var(--fail)';
+
+function Card({ label, value, sub, color }) {
+  return (
+    <div style={{ background: 'var(--panel)', borderRadius: 6, border: '1px solid var(--border)', padding: '0.75rem 0.85rem', minWidth: 130, flex: '1 1 130px' }}>
+      <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: '0.3rem' }}>{label}</div>
+      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: color || 'var(--text2)' }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.2rem' }}>{sub}</div>}
+    </div>
+  );
+}
+
+// Occupancy cell: number + a small inline bar with a tick at the 8-week projection
+function OccBar({ occ, proj }) {
+  if (occ == null) return <span style={{ color: 'var(--border)' }}>—</span>;
+  const pct = Math.max(0, Math.min(1, occ)) * 100;
+  return (
+    <div style={{ minWidth: 90 }}>
+      <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text)' }}>{fmtPct(occ)}</div>
+      <div style={{ position: 'relative', height: 4, background: 'var(--panel2)', borderRadius: 2, marginTop: 3, overflow: 'visible' }}>
+        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent)', borderRadius: 2, opacity: 0.75 }} />
+        {proj != null && (
+          <div title={`8-wk projected: ${fmtPct(proj)}`} style={{ position: 'absolute', left: `${Math.max(0, Math.min(1, proj)) * 100}%`, top: -2, width: 2, height: 8, background: 'var(--muted)' }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function useSectionSort(defaultKey, defaultDir = 1) {
+  const [key, setKey] = useState(defaultKey);
+  const [dir, setDir] = useState(defaultDir);
+  const toggle = (k) => { if (k === key) setDir(d => -d); else { setKey(k); setDir(1); } };
+  const cmp = (a, b) => {
+    const av = a[key], bv = b[key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    const r = typeof av === 'number' && typeof bv === 'number' ? av - bv : String(av).localeCompare(String(bv));
+    return dir * (r < 0 ? -1 : r > 0 ? 1 : 0);
+  };
+  return { key, dir, toggle, cmp };
+}
+
+function Section({ title, block, columns, sort, filterState }) {
+  const rows = useMemo(() => block.properties
+    .filter(r => filterState === 'All' || (r.cityState || '').startsWith(filterState))
+    .sort(sort.cmp), [block.properties, filterState, sort.key, sort.dir]);
+
+  return (
+    <div style={{ marginBottom: '2rem' }}>
+      <div style={{ fontSize: '0.72rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 600, margin: '0 0 0.6rem' }}>
+        {title} <span style={{ color: 'var(--faint)', textTransform: 'none', letterSpacing: 0 }}>· {rows.length} of {block.properties.length} properties</span>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              {columns.map(c => (
+                <th key={c.key} onClick={() => sort.toggle(c.key)} style={{
+                  padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.05em', textTransform: 'uppercase',
+                  color: sort.key === c.key ? 'var(--accent)' : 'var(--muted)', fontWeight: 400,
+                  whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', textAlign: c.right ? 'right' : 'left',
+                }}>
+                  {c.label}{sort.key === c.key ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={r.name || r.cityState} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--panel2)', borderBottom: '1px solid var(--bg)' }}>
+                {columns.map(c => (
+                  <td key={c.key} style={{ padding: '0.6rem 0.7rem', textAlign: c.right ? 'right' : 'left', whiteSpace: c.wrap ? 'normal' : 'nowrap' }}>
+                    {c.render(r)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 && <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--faint)', fontSize: '0.78rem' }}>No properties in this state.</div>}
+      </div>
+    </div>
+  );
+}
+
 export function LeasingTab() {
-
-  const [leasingData, setLeasingData]  = useState(null);   // parsed rows
-  const [asOfDate,    setAsOfDate]     = useState(null);
-  const [weekEnd,     setWeekEnd]      = useState(null);
-  const [uploadMsg,   setUploadMsg]    = useState('');
-  const [dbLoading,   setDbLoading]    = useState(true);
+  const [data, setData] = useState(null);          // parsed weekly-summary object
+  const [legacySnapshot, setLegacySnapshot] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState('');
+  const [dbLoading, setDbLoading] = useState(true);
   const [filterState, setFilterState] = useState('All');
-  const [sortKey,     setSortKey]      = useState('pCityState');
-  const [sortDir,     setSortDir]      = useState(1);
-  const [chartView,   setChartView]    = useState('rent');
+  const luSort = useSectionSort('name');
+  const stSort = useSectionSort('name');
 
-  // ── Load from Supabase on mount ────────────────────────────────────────────
-  React.useEffect(() => {
-    async function loadFromDb() {
+  // ── Load latest snapshot ───────────────────────────────────────────────────
+  useEffect(() => {
+    (async () => {
       try {
         const res = await fetch(`${SB_URL}/rest/v1/leasing_snapshot?order=id.desc&limit=1`, { headers: SB_HEADERS });
-        if (!res.ok) { setDbLoading(false); return; }
-        const rows = await res.json();
-        if (!Array.isArray(rows) || rows.length === 0) { setDbLoading(false); return; }
-        const snap = rows[0];
-        setLeasingData(snap.properties);
-        setAsOfDate(snap.as_of_date ? new Date(snap.as_of_date) : null);
-        setWeekEnd(snap.week_end || null);
+        if (res.ok) {
+          const rows = await res.json();
+          const snap = rows[0];
+          if (snap?.properties?.format === SNAPSHOT_FORMAT) setData(snap.properties);
+          else if (snap) setLegacySnapshot(true); // old Lender Leasing Comparison shape
+        }
       } catch (err) {
         console.error('Leasing load error:', err);
       }
       setDbLoading(false);
-    }
-    loadFromDb();
+    })();
   }, []);
 
-  // ── Save snapshot to Supabase ──────────────────────────────────────────────
-  async function saveToDb(parsed, asOf, wEnd) {
+  async function saveToDb(parsed) {
     try {
-      // Delete old rows first (keep only latest)
       await fetch(`${SB_URL}/rest/v1/leasing_snapshot`, { method: 'DELETE', headers: SB_HEADERS });
       await fetch(`${SB_URL}/rest/v1/leasing_snapshot`, {
         method: 'POST',
         headers: SB_HEADERS,
         body: JSON.stringify({
-          as_of_date:  asOf ? asOf.toISOString() : null,
-          week_end:    wEnd,
-          properties:  parsed,
+          as_of_date: parsed.weekEnd ? `${parsed.weekEnd}T00:00:00Z` : null,
+          week_end: parsed.weekEnd,
+          properties: parsed,
           uploaded_at: new Date().toISOString(),
         }),
       });
@@ -54,9 +154,10 @@ export function LeasingTab() {
     }
   }
 
-  // ── Parse uploaded Excel file ──────────────────────────────────────────────
+  // ── Upload the Monday email attachment ─────────────────────────────────────
   function handleFile(e) {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file) return;
     setUploadMsg('Parsing…');
     const reader = new FileReader();
@@ -65,50 +166,18 @@ export function LeasingTab() {
         const XLSX = window.XLSX;
         if (!XLSX) { setUploadMsg('SheetJS not loaded — try again.'); return; }
         const wb = XLSX.read(evt.target.result, { type: 'array', cellDates: true });
-
-        // ── tblMerge sheet ──
-        const ws = wb.Sheets['tblMerge'];
-        if (!ws) { setUploadMsg('Sheet "tblMerge" not found — please upload the Lender Leasing Comparison file.'); return; }
-        const raw = XLSX.utils.sheet_to_json(ws, { defval: null });
-
-        // ── AsOfDate / WeekEnd from Weekly Leasing ──
-        const ws2 = wb.Sheets['Weekly Leasing'];
-        let asOf = null, wEnd = null;
-        if (ws2) {
-          const rows2 = XLSX.utils.sheet_to_json(ws2, { defval: null });
-          if (rows2[0]) {
-            const d = rows2[0]['AsOfDate'];
-            const we = rows2[0]['Weekend'];
-            asOf = d ? (d instanceof Date ? d : new Date(d)) : null;
-            wEnd = we || null;
-          }
+        if (wb.Sheets['tblMerge']) {
+          setUploadMsg('This looks like the old Lender Leasing Comparison file — the dashboard now runs on the Weekly Leasing Summary (the Monday email attachment).');
+          return;
         }
-
-        const parsed = raw.map(r => ({
-          pscode:        r['pscode']       || '',
-          propType:      r['PropType']     || '',
-          totalUnits:    r['TotalUnits']   || 0,
-          property:      r['pCityState']   || '',
-          marquee:       r['Marquee']      || r['psaddr1'] || '',
-          dopDate:       r['DOPDate'] ? (r['DOPDate'] instanceof Date ? r['DOPDate'].toISOString() : r['DOPDate']) : null,
-          firstMI:       r['FirstMI']  ? (r['FirstMI'] instanceof Date ? r['FirstMI'].toISOString() : r['FirstMI']) : null,
-          netRental:     r['NetRental']    ?? 0,
-          occPercent:    r['OccPercent']   ?? 0,
-          occUnits:      r['OccUnits']     ?? 0,
-          inPlaceRent:   r['InPlaceRentAvg'] ?? 0,
-          proformaRent:  r['ProformaRentAvg'] ?? 0,
-          bankBookRent:  r['BankBookRent'] ?? 0,
-          rentDelta:     r['Rent \u0394 (%):'] ?? 0,
-          bankBookOcc:   r['BankBookOCC']  ?? 0,
-          avgNetMI:      r['AveNetMI_MO']  ?? 0,
-          avgNetLeases:  r['AveNetLeases_Mo'] ?? 0,
-        }));
-
-        setLeasingData(parsed);
-        setAsOfDate(asOf);
-        setWeekEnd(wEnd);
-        saveToDb(parsed, asOf, wEnd);
-        setUploadMsg(`✓ Saved ${parsed.length} properties to database`);
+        const sheetName = wb.SheetNames.find(n => /weekly\s*leasing/i.test(n)) || wb.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: null });
+        const parsed = { format: SNAPSHOT_FORMAT, ...parseWeeklyLeasingRows(rows) };
+        setData(parsed);
+        setLegacySnapshot(false);
+        saveToDb(parsed);
+        const n = (parsed.leaseUp?.properties.length || 0) + (parsed.stabilized?.properties.length || 0);
+        setUploadMsg(`✓ Saved ${n} properties to database`);
         setTimeout(() => setUploadMsg(''), 4000);
       } catch (err) {
         setUploadMsg('Parse error: ' + err.message);
@@ -117,307 +186,132 @@ export function LeasingTab() {
     reader.readAsArrayBuffer(file);
   }
 
-  const fmtDate = d => {
-    if (!d) return '—';
-    try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
-    catch { return '—'; }
-  };
-  const fmtCur = v => v != null ? '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
-  const fmtPct = v => v != null ? (v * 100).toFixed(2) + '%' : '—';
-  const passColor  = 'var(--pass)';
-  const failColor  = 'var(--fail)';
-  const warnColor  = 'var(--warn)';
-
-  // ── Derived data ───────────────────────────────────────────────────────────
-  const states = leasingData
-    ? ['All', ...Array.from(new Set(leasingData.map(r => r.property.split(',')[0].trim()))).sort()]
-    : ['All'];
-
-  const filtered = leasingData
-    ? leasingData.filter(r => filterState === 'All' || r.property.startsWith(filterState))
-    : [];
-
-  const sorted = [...filtered].sort((a, b) => {
-    const av = a[sortKey]; const bv = b[sortKey];
-    if (av == null) return 1; if (bv == null) return -1;
-    return av < bv ? -sortDir : av > bv ? sortDir : 0;
-  });
-
-  const toggleSort = key => {
-    if (sortKey === key) setSortDir(d => -d);
-    else { setSortKey(key); setSortDir(1); }
-  };
-
-  // ── Summary cards ──────────────────────────────────────────────────────────
-  const summary = leasingData && filtered.length > 0 ? (() => {
-    const avgInPlace   = filtered.reduce((s, r) => s + r.inPlaceRent, 0) / filtered.length;
-    const avgBankBook  = filtered.reduce((s, r) => s + r.bankBookRent, 0) / filtered.length;
-    const avgRentDelta = filtered.reduce((s, r) => s + r.rentDelta, 0) / filtered.length;
-    const avgOcc       = filtered.reduce((s, r) => s + r.occPercent, 0) / filtered.length;
-    const avgBBOcc     = filtered.filter(r => r.bankBookOcc > 0).reduce((s, r) => s + r.bankBookOcc, 0) /
-                         (filtered.filter(r => r.bankBookOcc > 0).length || 1);
-    const totalNet     = filtered.reduce((s, r) => s + r.netRental, 0);
-    const aboveRent    = filtered.filter(r => r.rentDelta >= 1).length;
-    const atOrAboveOcc = filtered.filter(r => r.bankBookOcc === 0 || r.occPercent >= r.bankBookOcc).length;
-    return { avgInPlace, avgBankBook, avgRentDelta, avgOcc, avgBBOcc, totalNet, aboveRent, atOrAboveOcc };
-  })() : null;
-
-  // ── Chart data ─────────────────────────────────────────────────────────────
-  const chartData = sorted.map(r => ({
-    name: r.property.split(',').slice(1).join(',').trim() || r.property,
-    inPlace:   parseFloat((r.inPlaceRent).toFixed(2)),
-    bankBook:  r.bankBookRent,
-    occActual: parseFloat((r.occPercent * 100).toFixed(1)),
-    occBank:   r.bankBookOcc > 0 ? parseFloat((r.bankBookOcc * 100).toFixed(1)) : null,
-  }));
-
-  const SortTh = ({ k, label, right }) => (
-    <th onClick={() => toggleSort(k)} style={{
-      padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.05em',
-      textTransform: 'uppercase', color: sortKey === k ? 'var(--accent)' : 'var(--muted)',
-      fontWeight: 400, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
-      textAlign: right ? 'right' : 'left',
+  const uploadLabel = (big) => (
+    <label style={{
+      padding: big ? '8px 22px' : '5px 14px', borderRadius: 4,
+      background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)',
+      outline: '1px solid color-mix(in srgb, var(--accent) 27%, transparent)', cursor: 'pointer',
+      fontSize: big ? '0.78rem' : '0.72rem', fontWeight: 700, fontFamily: 'inherit',
     }}>
-      {label}{sortKey === k ? (sortDir === 1 ? ' ▲' : ' ▼') : ''}
-    </th>
+      ↑ {big ? 'Upload Weekly Leasing Summary' : 'Re-upload'}
+      <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ display: 'none' }} />
+    </label>
   );
 
-  // ── Loading / empty state ───────────────────────────────────────────────────
+  // ── Loading / empty states ─────────────────────────────────────────────────
   if (dbLoading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: '0.8rem' }}>
       Loading leasing data…
     </div>
   );
 
-  if (!leasingData) return (
+  if (!data) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: '1.25rem' }}>
       <div style={{ fontSize: '1.7rem', color: 'var(--faint)' }}>▦</div>
-      <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600 }}>Leasing vs. Bank Book</div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--faint)', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
-        Upload your refreshed <strong style={{ color: 'var(--text2)' }}>Lender_Leasing_Comparison.xlsx</strong> file to populate this dashboard.
-        Refresh the Excel query first, save, then upload here.
+      <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600 }}>Weekly Leasing Summary</div>
+      <div style={{ fontSize: '0.75rem', color: 'var(--faint)', maxWidth: 420, textAlign: 'center', lineHeight: 1.6 }}>
+        Upload the <strong style={{ color: 'var(--text2)' }}>Weekly_Leasing_Summary.xlsx</strong> attachment from the Monday morning
+        email — no editing or refreshing needed, just save and upload it as-is.
+        {legacySnapshot && <><br /><br />The previously stored data used the old Lender Leasing Comparison format; a fresh weekly-summary upload replaces it.</>}
       </div>
-      <label style={{ padding: '8px 22px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)', outline: '1px solid color-mix(in srgb, var(--accent) 33%, transparent)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, fontFamily: 'inherit' }}>
-        ↑ Upload Excel File
-        <input type="file" accept=".xlsx" onChange={handleFile} style={{ display: 'none' }} />
-      </label>
-      {uploadMsg && <div style={{ fontSize: '0.72rem', color: 'var(--fail)' }}>{uploadMsg}</div>}
+      {uploadLabel(true)}
+      {uploadMsg && <div style={{ fontSize: '0.72rem', color: 'var(--fail)', maxWidth: 420, textAlign: 'center' }}>{uploadMsg}</div>}
     </div>
   );
 
+  const lu = data.leaseUp;
+  const st = data.stabilized;
+  const states = ['All', ...[...new Set(
+    [...(lu?.properties || []), ...(st?.properties || [])].map(r => (r.cityState || '').split(',')[0].trim()).filter(Boolean)
+  )].sort()];
+
+  const growthColor = v => (v == null ? undefined : v >= 0 ? passColor : failColor);
+  const netColor = v => (v > 0 ? passColor : v < 0 ? failColor : 'var(--faint)');
+  const pfColor = v => (v == null ? undefined : v >= 1 ? passColor : 'var(--text2)');
+
+  const propertyCell = (r) => (
+    <div>
+      <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.82rem' }}>{r.name || r.cityState}</div>
+      <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.1rem' }}>{r.cityState} · {r.units ?? '—'} units</div>
+    </div>
+  );
+
+  const luColumns = [
+    { key: 'name', label: 'Property', render: propertyCell },
+    { key: 'occPct', label: 'Occupied', render: r => <OccBar occ={r.occPct} proj={r.projOcc} /> },
+    { key: 'leasedPct', label: 'Leased', right: true, render: r => fmtPct(r.leasedPct) },
+    { key: 'projOcc', label: '8-Wk Proj', right: true, render: r => <span style={{ color: 'var(--muted)' }}>{fmtPct(r.projOcc)}</span> },
+    { key: 'traffic', label: 'Traffic', right: true, render: r => fmtNum(r.traffic) },
+    { key: 'netRental', label: 'Wk Net', right: true, render: r => <span style={{ fontWeight: 700, color: netColor(r.netRental) }}>{r.netRental > 0 ? '+' : ''}{fmtNum(r.netRental)}</span> },
+    { key: 'closingRatio', label: 'Closing', right: true, render: r => fmtPct(r.closingRatio, 0) },
+    { key: 'inPlaceRentPF', label: 'Rent vs PF', right: true, render: r => <span style={{ fontWeight: 700, color: pfColor(r.inPlaceRentPF) }}>{fmtPct(r.inPlaceRentPF, 1)}</span> },
+    { key: 'avgNetMI', label: 'Net MI/Mo', right: true, render: r => fmtNum(r.avgNetMI, 1) },
+    { key: 'dopDate', label: 'First DOP', render: r => <span style={{ color: 'var(--muted)' }}>{fmtDate(r.dopDate)}</span> },
+    { key: 'topConcession', label: 'Top Concession', wrap: true, render: r => <span style={{ color: 'var(--faint)', fontSize: '0.68rem' }}>{r.topConcession || '—'}</span> },
+  ];
+
+  const stColumns = [
+    { key: 'name', label: 'Property', render: propertyCell },
+    { key: 'occPct', label: 'Occupied', render: r => <OccBar occ={r.occPct} proj={r.projOcc} /> },
+    { key: 'projOcc', label: '8-Wk Proj', right: true, render: r => <span style={{ color: 'var(--muted)' }}>{fmtPct(r.projOcc)}</span> },
+    { key: 'traffic', label: 'Traffic', right: true, render: r => fmtNum(r.traffic) },
+    { key: 'netRental', label: 'Wk Net', right: true, render: r => <span style={{ fontWeight: 700, color: netColor(r.netRental) }}>{r.netRental > 0 ? '+' : ''}{fmtNum(r.netRental)}</span> },
+    { key: 'closingRatio', label: 'Closing', right: true, render: r => fmtPct(r.closingRatio, 0) },
+    { key: 'yoyRentGrowth', label: 'YOY Rent', right: true, render: r => <span style={{ fontWeight: 700, color: growthColor(r.yoyRentGrowth) }}>{r.yoyRentGrowth != null && r.yoyRentGrowth >= 0 ? '+' : ''}{fmtPct(r.yoyRentGrowth)}</span> },
+    { key: 'inPlaceRentPF', label: 'Rent vs PF', right: true, render: r => <span style={{ fontWeight: 700, color: pfColor(r.inPlaceRentPF) }}>{fmtPct(r.inPlaceRentPF, 1)}</span> },
+    { key: 'stabilizationDate', label: 'Stabilized', render: r => <span style={{ color: 'var(--muted)' }}>{fmtDate(r.stabilizationDate)}</span> },
+    { key: 'topConcession', label: 'Top Concession', wrap: true, render: r => <span style={{ color: 'var(--faint)', fontSize: '0.68rem' }}>{r.topConcession || '—'}</span> },
+  ];
+
   return (
     <div>
-
       {/* ── Toolbar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-        <div>
-          <div style={{ fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)' }}>
-            Data as of {fmtDate(asOfDate)} {weekEnd ? `· Week ending ${weekEnd}` : ''}
-          </div>
+        <div style={{ fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+          Week of {fmtDate(data.weekStart)} – {fmtDate(data.weekEnd)}
         </div>
         <div style={{ flex: 1 }} />
-
-        {/* State filter */}
         <select value={filterState} onChange={e => setFilterState(e.target.value)}
-          style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', padding: '4px 10px', fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer' }}>
+          style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', padding: '4px 10px', fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer', width: 'auto' }}>
           {states.map(s => <option key={s} value={s}>{s === 'All' ? 'All States' : s}</option>)}
         </select>
-
-        {/* Chart toggle */}
-        <div style={{ display: 'flex', background: 'var(--panel2)', borderRadius: 4, overflow: 'hidden', outline: '1px solid var(--border)' }}>
-          {[['rent','Rent'], ['occ','Occupancy']].map(([v, label]) => (
-            <button key={v} onClick={() => setChartView(v)} style={{
-              padding: '4px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: '0.7rem', fontWeight: chartView === v ? 700 : 400,
-              background: chartView === v ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'transparent',
-              color: chartView === v ? 'var(--accent)' : 'var(--faint)',
-            }}>{label}</button>
-          ))}
-        </div>
-
-        {/* Re-upload */}
-        <label style={{ padding: '5px 14px', borderRadius: 4, background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)', outline: '1px solid color-mix(in srgb, var(--accent) 27%, transparent)', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, fontFamily: 'inherit' }}>
-          ↑ Re-upload
-          <input type="file" accept=".xlsx" onChange={handleFile} style={{ display: 'none' }} />
-        </label>
-        {uploadMsg && <span style={{ fontSize: '0.7rem', color: uploadMsg.startsWith('✓') ? 'var(--pass)' : 'var(--fail)' }}>{uploadMsg}</span>}
+        {uploadLabel(false)}
+        {uploadMsg && <span style={{ fontSize: '0.7rem', color: uploadMsg.startsWith('✓') ? passColor : failColor }}>{uploadMsg}</span>}
       </div>
 
-      {/* ── Summary Cards ── */}
-      {summary && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.65rem', marginBottom: '1.5rem' }}>
-          {[
-            { label: 'Avg In-Place Rent',   value: fmtCur(summary.avgInPlace),   sub: `Bank book: ${fmtCur(summary.avgBankBook)}` },
-            { label: 'Avg Rent to Bank Book', value: fmtPct(summary.avgRentDelta), sub: summary.avgRentDelta >= 1 ? '✓ Above underwrite' : '⚠ Below underwrite',
-              color: summary.avgRentDelta >= 1 ? passColor : failColor },
-            { label: 'Avg Occupancy',        value: fmtPct(summary.avgOcc),
-              sub: `Bank book avg: ${fmtPct(summary.avgBBOcc)}`,
-              color: summary.avgOcc >= summary.avgBBOcc ? passColor : failColor },
-            { label: 'Weekly Net Rentals',   value: summary.totalNet, sub: `${filtered.length} properties` },
-            { label: 'Above Bank Book Rent', value: `${summary.aboveRent} / ${filtered.length}`,
-              sub: 'properties at or above',
-              color: summary.aboveRent === filtered.length ? passColor : summary.aboveRent > filtered.length * 0.5 ? warnColor : failColor },
-            { label: 'At/Above Bank Book Occ', value: `${summary.atOrAboveOcc} / ${filtered.length}`,
-              sub: 'properties at or above',
-              color: summary.atOrAboveOcc === filtered.length ? passColor : summary.atOrAboveOcc > filtered.length * 0.5 ? warnColor : failColor },
-          ].map((card, i) => (
-            <div key={i} style={{ background: 'var(--panel)', borderRadius: 6, border: '1px solid var(--border)', padding: '0.75rem 0.85rem' }}>
-              <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: '0.3rem' }}>{card.label}</div>
-              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: card.color || 'var(--text2)' }}>{card.value}</div>
-              {card.sub && <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.2rem' }}>{card.sub}</div>}
-            </div>
-          ))}
-        </div>
+      {/* ── Lease-Up section ── */}
+      {lu && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.65rem', marginBottom: '1rem' }}>
+            <Card label="Lease-Up Portfolio" value={`${lu.totals.propertyCount ?? lu.properties.length} properties`} sub={`${fmtNum(lu.totals.units)} units`} />
+            <Card label="Occupied" value={fmtPct(lu.totals.occPct)} sub={`Leased ${fmtPct(lu.totals.leasedPct)} · 8-wk proj ${fmtPct(lu.totals.projOcc)}`} />
+            <Card label="Weekly Net Rentals" value={`${lu.totals.netRental > 0 ? '+' : ''}${fmtNum(lu.totals.netRental)}`} color={netColor(lu.totals.netRental)} sub={`${fmtNum(lu.totals.traffic)} traffic · ${fmtNum(lu.totals.leases)} leases`} />
+            <Card label="Closing Ratio" value={fmtPct(lu.totals.closingRatio, 0)} sub="Leases ÷ traffic" />
+            <Card label="In-Place Rent vs Proforma" value={fmtPct(lu.totals.inPlaceRentPF)} color={pfColor(lu.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(lu.totals.marketRentPF)} of proforma`} />
+            <Card label="Avg Net Move-Ins / Mo" value={fmtNum(lu.totals.avgNetMI, 0)} sub={`${fmtNum(lu.totals.avgNetLeases, 0)} net leases / mo`} />
+          </div>
+          <Section title="Lease-Up Properties" block={lu} columns={luColumns} sort={luSort} filterState={filterState} />
+        </>
       )}
 
-      {/* ── Chart ── */}
-      {sorted.length > 0 && (() => {
-        const BAR_H = 22;
-        const LABEL_W = 170;
-        const CHART_W_TOTAL = 520;
-        const GAP = 3;
-        const barRows = chartView === 'rent'
-          ? sorted.map(r => ({
-              name: r.property,
-              a: r.inPlaceRent, aLabel: fmtCur(r.inPlaceRent), aColor: r.rentDelta >= 1 ? passColor : failColor,
-              b: r.bankBookRent, bLabel: fmtCur(r.bankBookRent), bColor: 'var(--border)',
-              pct: r.rentDelta, pctLabel: fmtPct(r.rentDelta),
-            }))
-          : sorted.map(r => ({
-              name: r.property,
-              a: r.occPercent * 100, aLabel: fmtPct(r.occPercent), aColor: (r.bankBookOcc === 0 || r.occPercent >= r.bankBookOcc) ? passColor : failColor,
-              b: r.bankBookOcc > 0 ? r.bankBookOcc * 100 : null, bLabel: r.bankBookOcc > 0 ? fmtPct(r.bankBookOcc) : 'N/A', bColor: 'var(--border)',
-              pct: r.bankBookOcc > 0 ? r.occPercent - r.bankBookOcc : null,
-              pctLabel: r.bankBookOcc > 0 ? (r.occPercent >= r.bankBookOcc ? '+' : '') + ((r.occPercent - r.bankBookOcc) * 100).toFixed(1) + '%' : '',
-            }));
-        const maxVal = Math.max(...barRows.map(r => Math.max(r.a || 0, r.b || 0))) * 1.05;
-        const toX = v => (v / maxVal) * CHART_W_TOTAL;
-        const totalH = barRows.length * (BAR_H * 2 + GAP * 3 + 10) + 30;
-        return (
-          <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '1rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
-            <div style={{ fontSize: '0.6rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '0.75rem', fontWeight: 600 }}>
-              {chartView === 'rent' ? 'In-Place Rent vs. Bank Book Rent' : 'Current Occupancy vs. Bank Book Occupancy'}
-            </div>
-            <div style={{ display: 'flex', gap: '1rem', fontSize: '0.62rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
-              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: passColor, borderRadius: 4, marginRight: 4 }} />At/above bank book</span>
-              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: failColor, borderRadius: 4, marginRight: 4 }} />Below bank book</span>
-              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--border)', borderRadius: 4, marginRight: 4, outline: '1px solid var(--faint)' }} />Bank book target</span>
-            </div>
-            <svg width={LABEL_W + CHART_W_TOTAL + 120} height={totalH} style={{ display: 'block', fontFamily: 'inherit' }}>
-              {barRows.map((row, i) => {
-                const y = i * (BAR_H * 2 + GAP * 3 + 10);
-                return (
-                  <g key={i}>
-                    {/* Property label */}
-                    <text x={LABEL_W - 8} y={y + BAR_H * 0.75 + GAP} textAnchor="end" fontSize={9} fill="var(--muted)" dominantBaseline="middle">{row.name}</text>
-                    {/* Actual bar */}
-                    <rect x={LABEL_W} y={y + GAP} width={toX(row.a)} height={BAR_H} fill={row.aColor} rx={2} />
-                    <text x={LABEL_W + toX(row.a) + 5} y={y + GAP + BAR_H / 2} fontSize={9} fill={row.aColor} fontWeight="700" dominantBaseline="middle">{row.aLabel}</text>
-                    {/* Bank book bar */}
-                    {row.b != null && <>
-                      <rect x={LABEL_W} y={y + BAR_H + GAP * 2} width={toX(row.b)} height={BAR_H} fill={row.bColor} rx={2} />
-                      <text x={LABEL_W + toX(row.b) + 5} y={y + BAR_H + GAP * 2 + BAR_H / 2} fontSize={9} fill="var(--muted)" dominantBaseline="middle">{row.bLabel}</text>
-                    </>}
-                    {/* Delta badge */}
-                    {row.pctLabel && (
-                      <text x={LABEL_W + CHART_W_TOTAL + 5} y={y + BAR_H + GAP} fontSize={9} fill={row.pct >= 0 ? passColor : failColor} fontWeight="700" dominantBaseline="middle">{row.pctLabel}</text>
-                    )}
-                  </g>
-                );
-              })}
-            </svg>
+      {/* ── Stabilized section ── */}
+      {st && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.65rem', marginBottom: '1rem' }}>
+            <Card label="Stabilized Portfolio" value={`${st.totals.propertyCount ?? st.properties.length} properties`} sub={`${fmtNum(st.totals.units)} units`} />
+            <Card label="Occupied" value={fmtPct(st.totals.occPct)} sub={`8-wk proj ${fmtPct(st.totals.projOcc)}`} />
+            <Card label="Weekly Net Rentals" value={`${st.totals.netRental > 0 ? '+' : ''}${fmtNum(st.totals.netRental)}`} color={netColor(st.totals.netRental)} sub={`${fmtNum(st.totals.traffic)} traffic · ${fmtNum(st.totals.leases)} leases`} />
+            <Card label="YOY Rent Growth" value={`${st.totals.yoyRentGrowth != null && st.totals.yoyRentGrowth >= 0 ? '+' : ''}${fmtPct(st.totals.yoyRentGrowth)}`} color={growthColor(st.totals.yoyRentGrowth)} sub="Portfolio-wide" />
+            <Card label="In-Place Rent vs Proforma" value={fmtPct(st.totals.inPlaceRentPF)} color={pfColor(st.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(st.totals.marketRentPF)} of proforma`} />
+            <Card label="Closing Ratio" value={fmtPct(st.totals.closingRatio, 0)} sub="Leases ÷ traffic" />
           </div>
-        );
-      })()}
-
-      {/* ── Table ── */}
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              <SortTh k="property"    label="Property" />
-              <SortTh k="inPlaceRent" label="In-Place Rent" right />
-              <SortTh k="bankBookRent" label="Bank Book Rent" right />
-              <SortTh k="rentDelta"   label="Rent Δ" right />
-              <SortTh k="occPercent"  label="Curr. Occ" right />
-              <SortTh k="bankBookOcc" label="Bank Book Occ" right />
-              <th style={{ padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, textAlign: 'right' }}>Occ Δ</th>
-              <SortTh k="firstMI"    label="First Move-In" />
-              <SortTh k="avgNetMI"   label="Avg Move-Ins/Mo" right />
-              <SortTh k="netRental"  label="Wkly Net Rentals" right />
-              <SortTh k="totalUnits" label="Units" right />
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((r, i) => {
-              const rentOk  = r.rentDelta >= 1;
-              const occOk   = r.bankBookOcc === 0 || r.occPercent >= r.bankBookOcc;
-              const occDelta = r.bankBookOcc > 0 ? r.occPercent - r.bankBookOcc : null;
-              return (
-                <tr key={r.pscode} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--panel2)', borderBottom: '1px solid var(--bg)' }}>
-                  {/* Property */}
-                  <td style={{ padding: '0.65rem 0.7rem' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.82rem' }}>{r.property}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.1rem' }}>{r.marquee}</div>
-                    <div style={{ fontSize: '0.63rem', color: 'var(--border)', marginTop: '0.1rem' }}>{r.totalUnits} units · DOP {fmtDate(r.dopDate)}</div>
-                  </td>
-                  {/* In-place rent */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.88rem', color: rentOk ? passColor : failColor }}>{fmtCur(r.inPlaceRent)}</div>
-                  </td>
-                  {/* Bank book rent */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: 'var(--muted)' }}>{fmtCur(r.bankBookRent)}</td>
-                  {/* Rent delta */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
-                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.75rem', fontWeight: 700,
-                      background: rentOk ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)',
-                      color: rentOk ? passColor : failColor }}>
-                      {fmtPct(r.rentDelta)}
-                    </span>
-                  </td>
-                  {/* Current occ */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.88rem', color: occOk ? passColor : failColor }}>{fmtPct(r.occPercent)}</div>
-                  </td>
-                  {/* Bank book occ */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: 'var(--muted)' }}>
-                    {r.bankBookOcc > 0 ? fmtPct(r.bankBookOcc) : <span style={{ color: 'var(--border)' }}>—</span>}
-                  </td>
-                  {/* Occ delta */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
-                    {occDelta !== null
-                      ? <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.75rem', fontWeight: 700,
-                          background: occDelta >= 0 ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)',
-                          color: occDelta >= 0 ? passColor : failColor }}>
-                          {occDelta >= 0 ? '+' : ''}{(occDelta * 100).toFixed(2)}%
-                        </span>
-                      : <span style={{ color: 'var(--border)' }}>—</span>}
-                  </td>
-                  {/* First move-in */}
-                  <td style={{ padding: '0.65rem 0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(r.firstMI)}</td>
-                  {/* Avg move-ins/mo */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: 'var(--text2)' }}>
-                    {r.avgNetMI ? r.avgNetMI.toFixed(1) : '—'}
-                  </td>
-                  {/* Weekly net rentals */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.88rem',
-                      color: r.netRental > 0 ? passColor : r.netRental < 0 ? failColor : 'var(--faint)' }}>
-                      {r.netRental > 0 ? '+' : ''}{r.netRental}
-                    </span>
-                  </td>
-                  {/* Units */}
-                  <td style={{ padding: '0.65rem 0.7rem', textAlign: 'right', color: 'var(--faint)', fontSize: '0.75rem' }}>{r.totalUnits}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+          <Section title="Stabilized Properties" block={st} columns={stColumns} sort={stSort} filterState={filterState} />
+        </>
+      )}
 
       {/* ── Footer note ── */}
-      <div style={{ marginTop: '1rem', fontSize: '0.63rem', color: 'var(--faint)' }}>
-        * In Place Rent and Current Occupancy are current as of {fmtDate(asOfDate)}
+      <div style={{ marginTop: '0.5rem', fontSize: '0.63rem', color: 'var(--faint)' }}>
+        * Occupancy bars show current occupancy; the tick marks the report's 8-week projection. Rent figures are the report's ratios to proforma.
       </div>
     </div>
   );
