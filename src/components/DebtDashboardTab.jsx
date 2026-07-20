@@ -793,6 +793,12 @@ const pinStyle = (i, theme) => ({
 const fmtBp = (d) => (d == null || isNaN(d) ? '' : `${d >= 0 ? '+' : '−'}${Math.abs(Math.round(d * 10000))}bp`);
 const fmtMs = (ms, opts = { month: 'short', day: 'numeric', year: 'numeric' }) => new Date(ms).toLocaleDateString('en-US', opts);
 
+// Snapshot JSON points → sorted {x: ms, y: decimal rate} pairs
+const toPoints = (raw) => raw
+  .map(p => ({ x: Date.parse(p.date + 'T00:00:00'), y: typeof p.rate === 'number' ? p.rate : parseFloat(p.rate) }))
+  .filter(p => isFinite(p.x) && isFinite(p.y))
+  .sort((a, b) => a.x - b.x);
+
 // Linear interpolation of a series at xMs (null outside its range)
 const valueAt = (s, xMs) => {
   const pts = s.points;
@@ -1181,6 +1187,158 @@ export function CurveChart({ series, theme }) {
   );
 }
 
+// ── Curve change panel ────────────────────────────────────────────────────────
+// Bars of (current curve − a past snapshot) in basis points, tenor by tenor —
+// the week/month repricing that's hard to read off the hairy chart directly.
+const CHANGE_WINDOWS = [
+  ['prev', 'Prior snapshot', 0],
+  ['1w', '1 week ago', 7],
+  ['1m', '1 month ago', 30],
+  ['3m', '3 months ago', 91],
+];
+
+export function CurveChangePanel({ meta, curveType }) {
+  const [win, setWin] = useState('1m');
+  const [pair, setPair] = useState(null); // { curDate, oldDate, rows: [{x, bp, cur, old}] }
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const wrapRef = useRef(null);
+  const [dims, setDims] = useState({ w: 600, h: 86 });
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setDims(d => ({ ...d, w: el.clientWidth })));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [win]);
+
+  const ofType = useMemo(() => meta.filter(m => m.curve_type === curveType), [meta, curveType]);
+
+  useEffect(() => {
+    if (win === 'off' || ofType.length < 2) { setPair(null); return; }
+    const cur = ofType[ofType.length - 1];
+    let base;
+    if (win === 'prev') {
+      base = ofType[ofType.length - 2];
+    } else {
+      const days = CHANGE_WINDOWS.find(w => w[0] === win)[2];
+      const target = Date.parse(cur.curve_date + 'T00:00:00') - days * 86400000;
+      const past = ofType.filter(m => Date.parse(m.curve_date + 'T00:00:00') <= target);
+      base = past.length ? past[past.length - 1] : ofType[0];
+      if (base.id === cur.id) base = ofType[ofType.length - 2];
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${SB_URL}/rest/v1/curve_snapshots?id=in.(${cur.id},${base.id})&select=id,curve_date,points`, { headers: SB_HEADERS });
+        if (!res.ok) { if (!cancelled) setPair(null); return; }
+        const rows = await res.json();
+        const curRow = rows.find(r => r.id === cur.id), baseRow = rows.find(r => r.id === base.id);
+        if (!curRow || !baseRow) { if (!cancelled) setPair(null); return; }
+        const baseSeries = { points: toPoints(baseRow.points || []) };
+        const end = Date.now() + 3 * 365.25 * 86400000; // match the hairy chart's forward clip
+        const out = [];
+        for (const p of toPoints(curRow.points || [])) {
+          if (p.x > end) continue;
+          const old = valueAt(baseSeries, p.x);
+          if (old == null) continue;
+          out.push({ x: p.x, bp: (p.y - old) * 10000, cur: p.y, old });
+        }
+        if (!cancelled) setPair({ curDate: curRow.curve_date, oldDate: baseRow.curve_date, rows: out });
+      } catch { if (!cancelled) setPair(null); }
+    })();
+    return () => { cancelled = true; };
+  }, [win, ofType]);
+
+  const rows = pair?.rows ?? [];
+  const M = { t: 6, r: 16, b: 15, l: 44 }; // left margin matches the main chart so axes align
+  const iw = Math.max(dims.w - M.l - M.r, 40);
+  const ih = Math.max(dims.h - M.t - M.b, 30);
+  const maxAbs = Math.max(1, ...rows.map(r => Math.abs(r.bp)));
+  const Y = (bp) => M.t + ih / 2 - (bp / maxAbs) * (ih / 2);
+  const bw = rows.length ? Math.max(2, iw / rows.length - 2) : 0;
+  const Xb = (i) => M.l + (i * iw) / rows.length + 1;
+
+  const avg12 = useMemo(() => {
+    const yr = rows.filter(r => r.x <= Date.now() + 365.25 * 86400000);
+    return yr.length ? yr.reduce((a, r) => a + r.bp, 0) / yr.length : null;
+  }, [rows]);
+
+  const xLabels = useMemo(() => {
+    const out = [];
+    const every = Math.max(1, Math.ceil(rows.length / 6));
+    for (let i = 0; i < rows.length; i += every) {
+      out.push({ i, label: fmtMs(rows[i].x, { month: 'short', year: '2-digit' }) });
+    }
+    return out;
+  }, [rows]);
+
+  const onMove = (e) => {
+    if (!rows.length) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    if (px < M.l || px > M.l + iw) { setHoverIdx(null); return; }
+    setHoverIdx(Math.min(rows.length - 1, Math.max(0, Math.floor(((px - M.l) / iw) * rows.length))));
+  };
+
+  const hov = hoverIdx != null ? rows[hoverIdx] : null;
+  const barColor = (bp) => (Math.abs(bp) < 0.5 ? 'var(--faint3)' : bp > 0 ? 'var(--fail)' : 'var(--pass)');
+
+  return (
+    <div style={{ flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.68rem', color: 'var(--muted)', marginBottom: 2 }}>
+        <span style={{ fontWeight: 600, color: 'var(--text2)' }}>Curve change vs</span>
+        <select value={win} onChange={e => setWin(e.target.value)} style={{ ...selStyle, padding: '1px 4px', fontSize: '0.68rem' }}>
+          {CHANGE_WINDOWS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          <option value="off">Hide</option>
+        </select>
+        {win !== 'off' && pair && (
+          <span style={{ color: 'var(--faint2)' }}>{fmtDate(pair.curDate)} − {fmtDate(pair.oldDate)}</span>
+        )}
+        {win !== 'off' && (hov
+          ? <span style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums' }}>
+              {fmtMs(hov.x, { month: 'short', year: 'numeric' })}: <b style={{ color: barColor(hov.bp) }}>{fmtBp(hov.bp / 10000)}</b>
+              <span style={{ color: 'var(--faint2)' }}> ({fmtRate(hov.old)} → {fmtRate(hov.cur)})</span>
+            </span>
+          : avg12 != null && (
+            <span style={{ marginLeft: 'auto', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>
+              Avg Δ first 12mo: <b style={{ color: barColor(avg12) }}>{fmtBp(avg12 / 10000)}</b>
+            </span>
+          ))}
+      </div>
+      {win !== 'off' && (rows.length ? (
+        <div ref={wrapRef} onPointerMove={onMove} onPointerLeave={() => setHoverIdx(null)} style={{ position: 'relative' }}>
+          <svg width={dims.w} height={dims.h} style={{ display: 'block' }}>
+            {[maxAbs, 0, -maxAbs].map((t, i) => (
+              <g key={i}>
+                <line x1={M.l} x2={M.l + iw} y1={Y(t)} y2={Y(t)} stroke={t === 0 ? 'var(--border2)' : 'var(--border)'} strokeWidth="1" />
+                <text x={M.l - 6} y={Y(t) + 3} textAnchor="end" fontSize="9" fill="var(--muted)">{`${t > 0 ? '+' : ''}${Math.round(t)}bp`}</text>
+              </g>
+            ))}
+            {rows.map((r, i) => {
+              const y0 = Y(0), y1 = Y(r.bp);
+              return (
+                <rect
+                  key={i} x={Xb(i)} width={bw}
+                  y={Math.min(y0, y1)} height={Math.max(1, Math.abs(y1 - y0))}
+                  rx="1" fill={barColor(r.bp)} opacity={hoverIdx == null || hoverIdx === i ? 0.9 : 0.35}
+                />
+              );
+            })}
+            {xLabels.map(({ i, label }) => (
+              <text key={i} x={Xb(i) + bw / 2} y={M.t + ih + 11} textAnchor="middle" fontSize="9" fill="var(--muted)">{label}</text>
+            ))}
+          </svg>
+        </div>
+      ) : (
+        <div style={{ fontSize: '0.66rem', color: 'var(--faint)', padding: '0.3rem 0' }}>
+          Needs two snapshots far enough apart — comparisons appear as history accumulates.
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CurveWidget({ pinUnlocked, requirePin }) {
   const theme = useAppTheme();
   const [meta, setMeta] = useState([]);        // [{ id, curve_date, curve_type }]
@@ -1188,7 +1346,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   const [mode, setMode] = useState('hairy');   // 'hairy' | 'daily' | 'monthend'
   const [depth, setDepth] = useState(5);
   const [lookback, setLookback] = useState('all'); // hairy-mode spine window: '1y' | '2y' | '3y' | 'all'
-  const [hairFreq, setHairFreq] = useState('weekly'); // hairy-mode hair density: 'weekly' | 'monthly'
+  const [hairFreq, setHairFreq] = useState('monthly'); // hairy-mode hair density: 'weekly' | 'monthly'
   const [seriesData, setSeriesData] = useState([]); // fetched snapshots with points
   const [spine, setSpine] = useState([]);      // actual-rate history [{ rate_date, rate }]
   const [status, setStatus] = useState('');
@@ -1265,11 +1423,6 @@ function CurveWidget({ pinUnlocked, requirePin }) {
     })();
     return () => { cancelled = true; };
   }, [chosen]);
-
-  const toPoints = (raw) => raw
-    .map(p => ({ x: Date.parse(p.date + 'T00:00:00'), y: typeof p.rate === 'number' ? p.rate : parseFloat(p.rate) }))
-    .filter(p => isFinite(p.x) && isFinite(p.y))
-    .sort((a, b) => a.x - b.x);
 
   const series = useMemo(() => {
     if (mode === 'hairy') {
@@ -1559,6 +1712,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
             </div>
           )}
           <CurveChart key={`${mode}|${curveType}`} series={visibleSeries} theme={theme} />
+          {count >= 2 && <CurveChangePanel meta={meta} curveType={curveType} />}
         </>
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'var(--faint)', fontSize: '0.78rem', lineHeight: 1.7, padding: '1rem' }}>
