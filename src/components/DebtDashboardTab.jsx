@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useId } from 'react';
 import ReactGridLayout, { useContainerWidth, verticalCompactor } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -780,10 +780,68 @@ const rampColors = (n, theme) => {
   return Array.from({ length: n }, (_, i) => ramp[Math.round((i * (ramp.length - 1)) / (n - 1))]);
 };
 
+// Pinned-hair identity: two validated hues × two dash patterns give four
+// distinguishable pin slots. Dash + the labeled chip/tooltip row carry identity
+// beyond hue, which keeps the teal↔orchid pair legible for color-blind readers.
+const PIN_COLORS = { light: ['#B26A10', '#0E8A78'], dark: ['#C98332', '#009E75'] };
+const PIN_DASHES = ['6,3', '2,3'];
+const pinStyle = (i, theme) => ({
+  color: PIN_COLORS[theme === 'light' ? 'light' : 'dark'][i % 2],
+  dash: PIN_DASHES[Math.floor(i / 2) % 2],
+});
+// Rate delta (decimal) → signed basis points, e.g. -0.0071 → "−71bp"
+const fmtBp = (d) => (d == null || isNaN(d) ? '' : `${d >= 0 ? '+' : '−'}${Math.abs(Math.round(d * 10000))}bp`);
+const fmtMs = (ms, opts = { month: 'short', day: 'numeric', year: 'numeric' }) => new Date(ms).toLocaleDateString('en-US', opts);
+
+// Linear interpolation of a series at xMs (null outside its range)
+const valueAt = (s, xMs) => {
+  const pts = s.points;
+  if (!pts.length || xMs < pts[0].x || xMs > pts[pts.length - 1].x) return null;
+  for (let i = 1; i < pts.length; i++) {
+    if (xMs <= pts[i].x) {
+      const a = pts[i - 1], b = pts[i];
+      return b.x === a.x ? b.y : a.y + ((b.y - a.y) * (xMs - a.x)) / (b.x - a.x);
+    }
+  }
+  return pts[pts.length - 1].y;
+};
+
+function LegendToggle({ hidden, onClick, swatch, label }) {
+  return (
+    <button
+      onClick={onClick} title={hidden ? 'Show series' : 'Hide series'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer',
+        background: 'none', border: 'none', padding: 0, fontFamily: 'inherit', fontSize: 'inherit',
+        color: 'var(--muted)', opacity: hidden ? 0.45 : 1, textDecoration: hidden ? 'line-through' : 'none',
+      }}
+    >{swatch}{label}</button>
+  );
+}
+
+function TipRow({ color, dash, v, delta, label, hint }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+      <span style={{ width: 12, height: 0, borderTop: `2px ${dash ? 'dashed' : 'solid'} ${color}`, flexShrink: 0, display: 'inline-block' }} />
+      <span style={{ fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{v == null ? '—' : fmtRate(v)}</span>
+      {delta != null && Math.round(Math.abs(delta) * 10000) > 0 && (
+        <span style={{ color: delta > 0 ? 'var(--fail)' : 'var(--pass)', fontSize: '0.64rem', fontVariantNumeric: 'tabular-nums' }}>{fmtBp(delta)}</span>
+      )}
+      <span style={{ color: 'var(--muted)', marginLeft: 'auto', paddingLeft: 10, whiteSpace: 'nowrap' }}>
+        {label}{hint && <span style={{ color: 'var(--faint)' }}> · {hint}</span>}
+      </span>
+    </div>
+  );
+}
+
 export function CurveChart({ series, theme }) {
   const wrapRef = useRef(null);
+  const clipId = useId();
   const [dims, setDims] = useState({ w: 600, h: 240 });
   const [hover, setHover] = useState(null); // { xMs, px, py }
+  const [zoom, setZoom] = useState(null);   // { x0, x1 } in ms
+  const [drag, setDrag] = useState(null);   // { startPx, curPx, moved }
+  const [pins, setPins] = useState([]);     // pinned hair labels, in pin order
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -793,22 +851,44 @@ export function CurveChart({ series, theme }) {
     return () => ro.disconnect();
   }, []);
 
-  const M = { t: 12, r: 16, b: 22, l: 44 };
+  // Drop pins whose hair vanished (e.g. weekly→monthly hair density change)
+  useEffect(() => {
+    setPins(p => (p.every(l => series.some(s => s.label === l)) ? p : p.filter(l => series.some(s => s.label === l))));
+  }, [series]);
+
+  const hasEndLabels = series.some(s => s.endLabel);
+  const M = { t: 14, r: hasEndLabels ? 52 : 16, b: 24, l: 44 };
   const iw = Math.max(dims.w - M.l - M.r, 40);
   const ih = Math.max(dims.h - M.t - M.b, 40);
 
-  const { xMin, xMax, yMin, yMax, xs } = useMemo(() => {
-    let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
-    const xsSet = new Set();
-    for (const s of series) for (const p of s.points) {
-      xMin = Math.min(xMin, p.x); xMax = Math.max(xMax, p.x);
-      yMin = Math.min(yMin, p.y); yMax = Math.max(yMax, p.y);
-      xsSet.add(p.x);
-    }
-    if (!isFinite(xMin)) { xMin = 0; xMax = 1; yMin = 0; yMax = 1; }
-    const pad = (yMax - yMin) * 0.1 || 0.002;
-    return { xMin, xMax: xMax === xMin ? xMin + 1 : xMax, yMin: yMin - pad, yMax: yMax + pad, xs: [...xsSet].sort((a, b) => a - b) };
+  const full = useMemo(() => {
+    let xMin = Infinity, xMax = -Infinity;
+    for (const s of series) for (const p of s.points) { xMin = Math.min(xMin, p.x); xMax = Math.max(xMax, p.x); }
+    if (!isFinite(xMin)) { xMin = 0; xMax = 1; }
+    return { xMin, xMax: xMax === xMin ? xMin + 1 : xMax };
   }, [series]);
+  const xMin = zoom ? zoom.x0 : full.xMin;
+  const xMax = zoom ? zoom.x1 : full.xMax;
+
+  // Y-domain follows the zoomed x-window; interpolated edge values keep lines
+  // that cross the window from being clipped vertically.
+  const { yMin, yMax, xs } = useMemo(() => {
+    let yMin = Infinity, yMax = -Infinity;
+    const xsSet = new Set();
+    for (const s of series) {
+      for (const p of s.points) if (p.x >= xMin && p.x <= xMax) {
+        yMin = Math.min(yMin, p.y); yMax = Math.max(yMax, p.y);
+        xsSet.add(p.x);
+      }
+      for (const edge of [xMin, xMax]) {
+        const v = valueAt(s, edge);
+        if (v != null) { yMin = Math.min(yMin, v); yMax = Math.max(yMax, v); }
+      }
+    }
+    if (!isFinite(yMin)) { yMin = 0; yMax = 1; }
+    const pad = (yMax - yMin) * 0.1 || 0.002;
+    return { yMin: yMin - pad, yMax: yMax + pad, xs: [...xsSet].sort((a, b) => a - b) };
+  }, [series, xMin, xMax]);
 
   const X = (v) => M.l + ((v - xMin) / (xMax - xMin)) * iw;
   const Y = (v) => M.t + (1 - (v - yMin) / (yMax - yMin)) * ih;
@@ -819,47 +899,153 @@ export function CurveChart({ series, theme }) {
     return out;
   }, [yMin, yMax]);
 
+  // Adaptive ticks: month/year normally, day-level once zoomed tight
   const xTicks = useMemo(() => {
     const out = [];
-    const start = new Date(xMin), end = new Date(xMax);
-    const spanMonths = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
-    const step = Math.max(1, Math.ceil(spanMonths / 6));
-    const d = new Date(start.getFullYear(), start.getMonth() + 1, 1);
-    while (d <= end) {
-      out.push({ x: d.getTime(), label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) });
-      d.setMonth(d.getMonth() + step);
+    const spanDays = (xMax - xMin) / 86400000;
+    if (spanDays <= 130) {
+      const stepDays = Math.max(1, Math.ceil(spanDays / 6));
+      const d = new Date(xMin);
+      d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1);
+      while (d.getTime() <= xMax) {
+        out.push({ x: d.getTime(), label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) });
+        d.setDate(d.getDate() + stepDays);
+      }
+    } else {
+      const start = new Date(xMin), end = new Date(xMax);
+      const spanMonths = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
+      const step = Math.max(1, Math.ceil(spanMonths / 6));
+      const d = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+      while (d <= end) {
+        out.push({ x: d.getTime(), label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) });
+        d.setMonth(d.getMonth() + step);
+      }
     }
     return out;
   }, [xMin, xMax]);
 
-  // Linear interpolation of a series at xMs (null outside its range)
-  const valueAt = (s, xMs) => {
-    const pts = s.points;
-    if (!pts.length || xMs < pts[0].x || xMs > pts[pts.length - 1].x) return null;
-    for (let i = 1; i < pts.length; i++) {
-      if (xMs <= pts[i].x) {
-        const a = pts[i - 1], b = pts[i];
-        return b.x === a.x ? b.y : a.y + ((b.y - a.y) * (xMs - a.x)) / (b.x - a.x);
+  // Resolve pinned hairs into their pin color/dash; draw order keeps grey hairs
+  // underneath, pinned hairs above them, main series on top.
+  const styled = useMemo(() => {
+    const arr = series.map(s => {
+      const pi = pins.indexOf(s.label);
+      if (s.noTooltip && pi >= 0) {
+        const ps = pinStyle(pi, theme);
+        return { ...s, color: ps.color, dash: ps.dash, width: 1.8, pinned: true, noTooltip: false };
       }
-    }
-    return pts[pts.length - 1].y;
-  };
+      return s;
+    });
+    const rank = (s) => (s.noTooltip ? 0 : s.pinned ? 1 : 2);
+    return arr.slice().sort((a, b) => rank(a) - rank(b));
+  }, [series, pins, theme]);
 
-  const onMove = (e) => {
+  const paths = useMemo(() => styled.map(s => ({
+    s,
+    d: s.points.map((p, j) => `${j ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(''),
+  })), [styled, xMin, xMax, yMin, yMax, iw, ih, M.l, M.t]);
+
+  // End-of-line value tags for flagged series, nudged apart when they collide
+  const endTags = useMemo(() => {
+    const tags = [];
+    for (const s of styled) {
+      if (!s.endLabel || !s.points.length) continue;
+      const last = s.points[s.points.length - 1];
+      const v = last.x > xMax ? valueAt(s, xMax) : (last.x >= xMin ? last.y : null);
+      if (v == null) continue;
+      tags.push({ label: s.label, color: s.color, v, x: Math.min(last.x, xMax), y: Y(v) });
+    }
+    tags.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < tags.length; i++) if (tags[i].y - tags[i - 1].y < 12) tags[i].y = tags[i - 1].y + 12;
+    return tags;
+  }, [styled, xMin, xMax, yMin, yMax, iw, ih]);
+
+  // Everything the hover layer needs at the crosshair date: tooltip rows,
+  // the nearest line under the pointer, and the spread across all hairs.
+  const hoverInfo = useMemo(() => {
+    if (!hover) return null;
+    const rows = [];
+    let nearest = null;
+    for (const s of styled) {
+      const v = valueAt(s, hover.xMs);
+      if (v != null) {
+        const dy = Math.abs(Y(v) - hover.py);
+        if (!nearest || dy < nearest.dy) nearest = { s, v, dy };
+      }
+      if (!s.noTooltip) rows.push({ s, v });
+    }
+    const near = nearest && nearest.dy <= 12 ? nearest : null;
+    const hairVals = styled.filter(s => s.noTooltip || s.pinned).map(s => valueAt(s, hover.xMs)).filter(v => v != null);
+    const hairRange = hairVals.length >= 2 ? { min: Math.min(...hairVals), max: Math.max(...hairVals), n: hairVals.length } : null;
+    const ref = styled.find(s => s.isRef);
+    const refV = ref ? valueAt(ref, hover.xMs) : null;
+    return {
+      rows,
+      hairRange,
+      refV,
+      hoverHair: near && near.s.noTooltip ? near : null,   // unpinned hair under pointer
+      clickable: near && (near.s.noTooltip || near.s.pinned) ? near : null,
+      nearLabel: near ? near.s.label : null,
+    };
+  }, [hover, styled, yMin, yMax, ih]);
+
+  const snapHover = (e) => {
     const rect = wrapRef.current.getBoundingClientRect();
     const px = e.clientX - rect.left;
-    if (px < M.l || px > M.l + iw || !xs.length) { setHover(null); return; }
+    const py = Math.min(Math.max(e.clientY - rect.top, M.t), M.t + ih);
+    if (px < M.l || px > M.l + iw || !xs.length) return null;
     const xVal = xMin + ((px - M.l) / iw) * (xMax - xMin);
-    // snap to the nearest known curve point date
     let best = xs[0];
     for (const x of xs) if (Math.abs(x - xVal) < Math.abs(best - xVal)) best = x;
-    setHover({ xMs: best, px: X(best), py: e.clientY - rect.top });
+    return { xMs: best, px: X(best), py, rawPx: px };
   };
 
-  const latest = series[series.length - 1];
+  const togglePin = (label) => setPins(p => (p.includes(label) ? p.filter(l => l !== label) : [...p, label]));
+
+  const onPointerDown = (e) => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    if (px < M.l || px > M.l + iw) return;
+    wrapRef.current.setPointerCapture(e.pointerId);
+    setDrag({ startPx: px, curPx: px, moved: false });
+  };
+  const onPointerMove = (e) => {
+    setHover(snapHover(e));
+    if (drag) {
+      const rect = wrapRef.current.getBoundingClientRect();
+      const px = Math.min(Math.max(e.clientX - rect.left, M.l), M.l + iw);
+      setDrag(d => (d ? { ...d, curPx: px, moved: d.moved || Math.abs(px - d.startPx) > 5 } : d));
+    }
+  };
+  const onPointerUp = () => {
+    if (!drag) return;
+    if (drag.moved && Math.abs(drag.curPx - drag.startPx) >= 8) {
+      const toMs = (px) => xMin + ((px - M.l) / iw) * (xMax - xMin);
+      const [a, b] = [toMs(Math.min(drag.startPx, drag.curPx)), toMs(Math.max(drag.startPx, drag.curPx))];
+      if (b - a > 86400000) setZoom({ x0: a, x1: b }); // ignore sub-day selections
+    } else if (hoverInfo?.clickable) {
+      togglePin(hoverInfo.clickable.s.label);
+    }
+    setDrag(null);
+  };
+
+  const yAtPointer = hover ? yMin + (1 - (hover.py - M.t) / ih) * (yMax - yMin) : null;
+  const hairCount = styled.filter(s => s.noTooltip).length;
+  const tipW = 235;
+  const showTip = hover && hoverInfo && !(drag && drag.moved);
+
   return (
-    <div ref={wrapRef} onPointerMove={onMove} onPointerLeave={() => setHover(null)} style={{ position: 'relative', flex: 1, minHeight: 160 }}>
+    <div
+      ref={wrapRef}
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+      onPointerLeave={() => { setHover(null); setDrag(null); }}
+      onDoubleClick={() => setZoom(null)}
+      style={{ position: 'relative', flex: 1, minHeight: 160, cursor: drag?.moved ? 'ew-resize' : 'crosshair', touchAction: 'none', userSelect: 'none' }}
+    >
       <svg width={dims.w} height={dims.h} style={{ display: 'block' }}>
+        <defs>
+          <clipPath id={clipId}><rect x={M.l} y={M.t} width={iw} height={ih} /></clipPath>
+        </defs>
         {yTicks.map((t, i) => (
           <g key={i}>
             <line x1={M.l} x2={M.l + iw} y1={Y(t)} y2={Y(t)} stroke="var(--border)" strokeWidth="1" />
@@ -867,42 +1053,128 @@ export function CurveChart({ series, theme }) {
           </g>
         ))}
         {xTicks.map((t, i) => (
-          <text key={i} x={X(t.x)} y={M.t + ih + 14} textAnchor="middle" fontSize="10" fill="var(--muted)">{t.label}</text>
+          <g key={i}>
+            <line x1={X(t.x)} x2={X(t.x)} y1={M.t} y2={M.t + ih} stroke="var(--border)" strokeWidth="1" opacity="0.45" />
+            <text x={X(t.x)} y={M.t + ih + 14} textAnchor="middle" fontSize="10" fill="var(--muted)">{t.label}</text>
+          </g>
         ))}
-        {series.map((s, i) => (
-          <path
-            key={s.label}
-            d={s.points.map((p, j) => `${j ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join('')}
-            fill="none" stroke={s.color} strokeWidth={s.width ?? (i === series.length - 1 ? 2.5 : 2)}
-            strokeDasharray={s.dash || undefined}
-            strokeLinecap="round" strokeLinejoin="round"
-          />
+        <g clipPath={`url(#${clipId})`}>
+          {paths.map(({ s, d }, i) => (
+            <path
+              key={s.label} d={d}
+              fill="none" stroke={s.color} strokeWidth={s.width ?? (i === paths.length - 1 ? 2.5 : 2)}
+              strokeDasharray={s.dash || undefined}
+              strokeLinecap="round" strokeLinejoin="round"
+              opacity={hoverInfo?.nearLabel && hoverInfo.nearLabel !== s.label && s.noTooltip ? 0.55 : 1}
+            />
+          ))}
+          {/* the hair under the pointer redrawn on top so it can be identified */}
+          {hoverInfo?.hoverHair && (
+            <path
+              d={paths.find(p => p.s.label === hoverInfo.hoverHair.s.label)?.d}
+              fill="none" stroke="var(--text2)" strokeWidth="2" strokeDasharray="2,3.5"
+              strokeLinecap="round" strokeLinejoin="round" pointerEvents="none"
+            />
+          )}
+          {drag?.moved && (
+            <rect
+              x={Math.min(drag.startPx, drag.curPx)} y={M.t}
+              width={Math.abs(drag.curPx - drag.startPx)} height={ih}
+              fill="color-mix(in srgb, var(--accent) 12%, transparent)" stroke="var(--accent)" strokeWidth="1"
+            />
+          )}
+        </g>
+        {endTags.map(t => (
+          <g key={t.label}>
+            <circle cx={X(t.x)} cy={Y(t.v)} r="3.5" fill={t.color} stroke="var(--panel)" strokeWidth="2" />
+            <text x={M.l + iw + 5} y={t.y + 3} fontSize="10" fontWeight="700" fill={t.color} style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtRate(t.v)}</text>
+          </g>
         ))}
-        {latest && latest.points.length > 0 && (
-          <circle
-            cx={X(latest.points[latest.points.length - 1].x)} cy={Y(latest.points[latest.points.length - 1].y)}
-            r="4" fill={latest.color} stroke="var(--panel)" strokeWidth="2"
-          />
+        {hover && (
+          <g pointerEvents="none">
+            <line x1={hover.px} x2={hover.px} y1={M.t} y2={M.t + ih} stroke="var(--faint)" strokeWidth="1" />
+            <line x1={M.l} x2={M.l + iw} y1={hover.py} y2={hover.py} stroke="var(--faint)" strokeWidth="1" strokeDasharray="3,3" />
+            {/* snap dots on every tooltip series at the crosshair date */}
+            {hoverInfo.rows.filter(r => r.v != null).map(({ s, v }) => (
+              <circle key={s.label} cx={hover.px} cy={Y(v)} r="3" fill={s.color} stroke="var(--panel)" strokeWidth="1.5" />
+            ))}
+            {hoverInfo.hoverHair && <circle cx={hover.px} cy={Y(hoverInfo.hoverHair.v)} r="3" fill="var(--text2)" stroke="var(--panel)" strokeWidth="1.5" />}
+            {/* axis badges: date under the crosshair, rate at the pointer height */}
+            <g>
+              <rect x={hover.px - 27} y={M.t + ih + 3} width="54" height="14" rx="3" fill="var(--panel3)" stroke="var(--border)" />
+              <text x={hover.px} y={M.t + ih + 13} textAnchor="middle" fontSize="9" fill="var(--text2)">
+                {fmtMs(hover.xMs, { month: 'short', day: 'numeric', year: '2-digit' })}
+              </text>
+            </g>
+            <g>
+              <rect x={2} y={hover.py - 7} width="40" height="14" rx="3" fill="var(--panel3)" stroke="var(--border)" />
+              <text x={22} y={hover.py + 3} textAnchor="middle" fontSize="9" fill="var(--text2)" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtRate(yAtPointer)}</text>
+            </g>
+          </g>
         )}
-        {hover && <line x1={hover.px} x2={hover.px} y1={M.t} y2={M.t + ih} stroke="var(--faint)" strokeWidth="1" />}
       </svg>
-      {hover && (
-        <div style={{
-          position: 'absolute', left: Math.min(hover.px + 10, dims.w - 170), top: 8, pointerEvents: 'none',
-          background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.5rem 0.65rem',
-          boxShadow: 'var(--shadow)', fontSize: '0.7rem', minWidth: 150, zIndex: 5,
-        }}>
-          <div style={{ color: 'var(--muted)', marginBottom: 4 }}>{new Date(hover.xMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-          {series.filter(s => !s.noTooltip).map(s => {
-            const v = valueAt(s, hover.xMs);
+      {pins.length > 0 && (
+        <div style={{ position: 'absolute', top: 2, left: M.l + 4, display: 'flex', gap: 5, flexWrap: 'wrap', zIndex: 4 }}>
+          {pins.map((label, i) => {
+            const ps = pinStyle(i, theme);
             return (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                <span style={{ width: 12, height: 0, borderTop: `2px solid ${s.color}`, display: 'inline-block' }} />
-                <span style={{ fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{v == null ? '—' : fmtRate(v)}</span>
-                <span style={{ color: 'var(--muted)', marginLeft: 'auto' }}>{s.label}</span>
-              </div>
+              <button
+                key={label} onClick={() => togglePin(label)} title="Unpin this curve"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer',
+                  background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 10,
+                  padding: '1px 7px', fontSize: '0.62rem', color: 'var(--text2)', fontFamily: 'inherit',
+                }}
+              >
+                <span style={{ width: 12, height: 0, borderTop: `2px dashed ${ps.color}`, display: 'inline-block' }} />
+                {label.replace(/^Fwd curve /, '')}
+                <span style={{ color: 'var(--faint)' }}>×</span>
+              </button>
             );
           })}
+        </div>
+      )}
+      {zoom && (
+        <button
+          onClick={() => setZoom(null)} className="btn btn-sm"
+          style={{ position: 'absolute', top: 2, right: M.r + 4, zIndex: 4, fontSize: '0.62rem', padding: '1px 8px' }}
+        >Reset zoom</button>
+      )}
+      {!hover && !zoom && !pins.length && (
+        <div style={{ position: 'absolute', bottom: M.b + 6, right: M.r + 8, fontSize: '0.62rem', color: 'var(--faint)', pointerEvents: 'none' }}>
+          hover for values · drag to zoom{hairCount > 0 ? ' · click a grey curve to pin it' : ''}
+        </div>
+      )}
+      {showTip && (
+        <div style={{
+          position: 'absolute', left: hover.px + 12 + tipW > dims.w ? Math.max(hover.px - tipW - 12, 0) : hover.px + 12,
+          top: 8, pointerEvents: 'none',
+          background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.5rem 0.65rem',
+          boxShadow: 'var(--shadow)', fontSize: '0.7rem', minWidth: tipW, zIndex: 5,
+        }}>
+          <div style={{ color: 'var(--muted)', marginBottom: 4 }}>{fmtMs(hover.xMs, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div>
+          {hoverInfo.rows.map(({ s, v }) => (
+            <TipRow
+              key={s.label} color={s.color} dash={s.dash} v={v}
+              delta={!s.isRef && v != null && hoverInfo.refV != null ? v - hoverInfo.refV : null}
+              label={s.label}
+            />
+          ))}
+          {hoverInfo.hoverHair && (
+            <TipRow
+              color="var(--text2)" dash v={hoverInfo.hoverHair.v}
+              delta={hoverInfo.refV != null ? hoverInfo.hoverHair.v - hoverInfo.refV : null}
+              label={hoverInfo.hoverHair.s.label} hint="click to pin"
+            />
+          )}
+          {hoverInfo.hairRange && (
+            <div style={{ color: 'var(--faint2)', fontSize: '0.64rem', marginTop: 5, borderTop: '1px solid var(--border)', paddingTop: 4 }}>
+              Fwd curves here: {fmtRate(hoverInfo.hairRange.min)}–{fmtRate(hoverInfo.hairRange.max)} across {hoverInfo.hairRange.n}
+            </div>
+          )}
+          {hoverInfo.rows.some(({ s, v }) => !s.isRef && v != null && hoverInfo.refV != null) && (
+            <div style={{ color: 'var(--faint)', fontSize: '0.6rem', marginTop: 3 }}>Δ vs {styled.find(s => s.isRef)?.label}</div>
+          )}
         </div>
       )}
     </div>
@@ -1015,21 +1287,62 @@ function CurveWidget({ pinUnlocked, requirePin }) {
         label: `Fwd curve ${fmtDate(s.date)}`, color: 'var(--faint3)', width: 1.4, dash: '2,3.5', noTooltip: true, points: s.points,
       }));
       const current = curves[curves.length - 1];
-      if (current) out.push({ label: `Current fwd curve (${fmtDate(current.date)})`, color: 'var(--highlight)', width: 2, dash: '7,4', points: current.points });
+      if (current) out.push({ label: `Current fwd curve (${fmtDate(current.date)})`, color: 'var(--highlight)', width: 2, dash: '7,4', isRef: true, endLabel: true, points: current.points });
       const spinePts = toPoints(spine.map(r => ({ date: r.rate_date, rate: r.rate }))).filter(p => p.x >= spineStart);
       if (spinePts.length > 1) out.push({
         label: curveType === 'sofr_1m' ? '30-Day Avg SOFR (actual)' : '10-Year Treasury (actual)',
-        color: 'var(--accent)', width: 2.5, points: spinePts,
+        color: 'var(--accent)', width: 2.5, endLabel: true, points: spinePts,
       });
       return out;
     }
     const colors = rampColors(seriesData.length, theme);
-    return seriesData.map((s, i) => ({
+    const out = seriesData.map((s, i) => ({
       label: fmtDate(s.curve_date),
       color: colors[i],
       points: toPoints(s.points || []),
     })).filter(s => s.points.length > 1);
+    if (out.length) { out[out.length - 1].isRef = true; out[out.length - 1].endLabel = true; }
+    return out;
   }, [seriesData, theme, mode, lookback, spine, curveType]);
+
+  // Legend visibility toggles — '__hairs' collectively covers the grey hairs
+  const [hidden, setHidden] = useState(() => new Set());
+  const toggleHidden = (key) => setHidden(h => {
+    const n = new Set(h);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
+  const visibleSeries = useMemo(
+    () => series.filter(s => !hidden.has(s.noTooltip ? '__hairs' : s.label)),
+    [series, hidden],
+  );
+
+  // Headline stats off the current forward curve (hairy mode only)
+  const curveStats = useMemo(() => {
+    if (mode !== 'hairy') return null;
+    const cur = series.find(s => s.isRef);
+    const spineSeries = series.find(s => s.endLabel && !s.isRef);
+    if (!cur || !cur.points.length) return null;
+    const spot = spineSeries?.points[spineSeries.points.length - 1] ?? null;
+    const fwd = (yrs) => valueAt(cur, Date.now() + yrs * 365.25 * 86400000);
+    let trough = cur.points[0];
+    for (const p of cur.points) if (p.y < trough.y) trough = p;
+    return { spot, f1: fwd(1), f2: fwd(2), trough };
+  }, [mode, series]);
+
+  // Long-format CSV of exactly what's plotted (series, date, rate %)
+  function exportCsv() {
+    const lines = [['series', 'date', 'rate_pct']];
+    for (const s of series) for (const p of s.points) {
+      lines.push([s.label, new Date(p.x).toISOString().slice(0, 10), (p.y * 100).toFixed(4)]);
+    }
+    const csv = lines.map(r => r.map(v => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v)).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `forward-curves-${curveType}-${todayISO()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
 
   // Copy the covenant tracker's active curve into a dated snapshot for today —
   // the manual fallback until the daily API pull is wired up.
@@ -1153,6 +1466,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
           title={pinUnlocked ? 'Upload past Chatham curve files as historical snapshots (dated from each filename)' : 'Unlock to backfill'}
           className={`btn btn-sm ${pinUnlocked ? '' : 'btn-locked'}`}
         >{pinUnlocked ? 'Backfill files…' : <><LockIcon size={11} /> Backfill files…</>}</button>
+        <button className="btn btn-sm" onClick={exportCsv} disabled={!series.length} title="Download the plotted series as CSV">⤓ CSV</button>
         <input ref={backfillInput} type="file" accept=".xlsx,.xls" multiple onChange={handleBackfillFiles} style={{ display: 'none' }} />
       </div>
       {status && <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{status}</div>}
@@ -1198,23 +1512,45 @@ function CurveWidget({ pinUnlocked, requirePin }) {
           {mode === 'hairy' ? (
             <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', fontSize: '0.68rem', color: 'var(--muted)' }}>
               {series.some(s => s.noTooltip) && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ width: 16, height: 0, borderTop: '2px dotted var(--faint3)', display: 'inline-block' }} />Past forward curves
-                </span>
+                <LegendToggle
+                  hidden={hidden.has('__hairs')} onClick={() => toggleHidden('__hairs')}
+                  swatch={<span style={{ width: 16, height: 0, borderTop: '2px dotted var(--faint3)', display: 'inline-block' }} />}
+                  label="Past forward curves"
+                />
               )}
               {series.filter(s => !s.noTooltip).map(s => (
-                <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ width: 16, height: 0, borderTop: `2px ${s.dash ? 'dashed' : 'solid'} ${s.color}`, display: 'inline-block' }} />{s.label}
-                </span>
+                <LegendToggle
+                  key={s.label} hidden={hidden.has(s.label)} onClick={() => toggleHidden(s.label)}
+                  swatch={<span style={{ width: 16, height: 0, borderTop: `2px ${s.dash ? 'dashed' : 'solid'} ${s.color}`, display: 'inline-block' }} />}
+                  label={s.label}
+                />
               ))}
             </div>
           ) : series.length >= 2 && (
             <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', fontSize: '0.68rem', color: 'var(--muted)' }}>
               {series.map(s => (
-                <span key={s.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ width: 14, height: 0, borderTop: `2px solid ${s.color}`, display: 'inline-block' }} />{s.label}
-                </span>
+                <LegendToggle
+                  key={s.label} hidden={hidden.has(s.label)} onClick={() => toggleHidden(s.label)}
+                  swatch={<span style={{ width: 14, height: 0, borderTop: `2px solid ${s.color}`, display: 'inline-block' }} />}
+                  label={s.label}
+                />
               ))}
+            </div>
+          )}
+          {curveStats && (
+            <div style={{ display: 'flex', gap: '1.1rem', flexWrap: 'wrap', fontSize: '0.7rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+              {curveStats.spot && (
+                <span>Spot <b style={{ color: 'var(--text)' }}>{fmtRate(curveStats.spot.y)}</b> <span style={{ color: 'var(--faint)' }}>({fmtMs(curveStats.spot.x, { month: 'short', day: 'numeric' })})</span></span>
+              )}
+              {curveStats.f1 != null && (
+                <span>1Y fwd <b style={{ color: 'var(--text)' }}>{fmtRate(curveStats.f1)}</b>{curveStats.spot && <span style={{ color: 'var(--faint)' }}> {fmtBp(curveStats.f1 - curveStats.spot.y)}</span>}</span>
+              )}
+              {curveStats.f2 != null && (
+                <span>2Y fwd <b style={{ color: 'var(--text)' }}>{fmtRate(curveStats.f2)}</b>{curveStats.spot && <span style={{ color: 'var(--faint)' }}> {fmtBp(curveStats.f2 - curveStats.spot.y)}</span>}</span>
+              )}
+              {curveStats.trough && (
+                <span>Curve trough <b style={{ color: 'var(--text)' }}>{fmtRate(curveStats.trough.y)}</b> <span style={{ color: 'var(--faint)' }}>({fmtMs(curveStats.trough.x, { month: 'short', year: 'numeric' })})</span></span>
+              )}
             </div>
           )}
           {mode === 'hairy' && spine.length < 2 && (
@@ -1222,7 +1558,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
               No actual-rate history yet — run the "Backfill Rate History" GitHub Action once to load it; the daily rate pull keeps it current after that.
             </div>
           )}
-          <CurveChart series={series} theme={theme} />
+          <CurveChart key={`${mode}|${curveType}`} series={visibleSeries} theme={theme} />
         </>
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'var(--faint)', fontSize: '0.78rem', lineHeight: 1.7, padding: '1rem' }}>
