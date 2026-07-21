@@ -1188,7 +1188,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   const [mode, setMode] = useState('hairy');   // 'hairy' | 'daily' | 'monthend'
   const [depth, setDepth] = useState(5);
   const [lookback, setLookback] = useState('1y'); // hairy-mode spine window: '1y' | '2y' | '3y' | 'all'
-  const [hairFreq, setHairFreq] = useState('weekly'); // hairy-mode hair density: 'weekly' | 'monthly'
+  const [hairFreq, setHairFreq] = useState('monthly'); // hairy-mode hair density: 'weekly' | 'monthly'
   const [seriesData, setSeriesData] = useState([]); // fetched snapshots with points
   const [spine, setSpine] = useState([]);      // actual-rate history [{ rate_date, rate }]
   const [status, setStatus] = useState('');
