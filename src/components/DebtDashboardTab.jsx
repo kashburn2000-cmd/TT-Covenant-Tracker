@@ -1187,7 +1187,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   const [curveType, setCurveType] = useState('sofr_1m');
   const [mode, setMode] = useState('hairy');   // 'hairy' | 'daily' | 'monthend'
   const [depth, setDepth] = useState(5);
-  const [lookback, setLookback] = useState('all'); // hairy-mode spine window: '1y' | '2y' | '3y' | 'all'
+  const [lookback, setLookback] = useState('1y'); // hairy-mode spine window: '1y' | '2y' | '3y' | 'all'
   const [hairFreq, setHairFreq] = useState('weekly'); // hairy-mode hair density: 'weekly' | 'monthly'
   const [seriesData, setSeriesData] = useState([]); // fetched snapshots with points
   const [spine, setSpine] = useState([]);      // actual-rate history [{ rate_date, rate }]
@@ -1278,16 +1278,27 @@ function CurveWidget({ pinUnlocked, requirePin }) {
       // style + color together, so no per-hair hues are needed.
       const nowMs = Date.now();
       const spineStart = lookback === 'all' ? -Infinity : nowMs - parseInt(lookback) * 365.25 * 24 * 3600 * 1000;
-      const forwardEnd = nowMs + 3 * 365.25 * 24 * 3600 * 1000; // clip hairs so 10y tails don't crush the history
+      const forwardEnd = nowMs + 1.5 * 365.25 * 24 * 3600 * 1000; // clip hairs 18 months out so 10y tails don't crush the history
+      // Clip a curve at forwardEnd, interpolating an edge point so every hair
+      // ends exactly at the 18-month mark and the x-axis lands there too.
+      const clipForward = (pts) => {
+        const kept = pts.filter(p => p.x <= forwardEnd);
+        if (kept.length && kept.length < pts.length) {
+          const v = valueAt({ points: pts }, forwardEnd);
+          if (v != null) kept.push({ x: forwardEnd, y: v });
+        }
+        return kept;
+      };
       const out = [];
       const curves = seriesData
-        .map(s => ({ date: s.curve_date, points: toPoints(s.points || []).filter(p => p.x <= forwardEnd) }))
+        .map(s => ({ date: s.curve_date, fullPoints: toPoints(s.points || []) }))
+        .map(s => ({ ...s, points: clipForward(s.fullPoints) }))
         .filter(s => s.points.length > 1 && Date.parse(s.date + 'T00:00:00') >= spineStart);
       curves.slice(0, -1).forEach(s => out.push({
         label: `Fwd curve ${fmtDate(s.date)}`, color: 'var(--faint3)', width: 1.4, dash: '2,3.5', noTooltip: true, points: s.points,
       }));
       const current = curves[curves.length - 1];
-      if (current) out.push({ label: `Current fwd curve (${fmtDate(current.date)})`, color: 'var(--highlight)', width: 2, dash: '7,4', isRef: true, endLabel: true, points: current.points });
+      if (current) out.push({ label: `Current fwd curve (${fmtDate(current.date)})`, color: 'var(--highlight)', width: 2, dash: '7,4', isRef: true, endLabel: true, points: current.points, fullPoints: current.fullPoints });
       const spinePts = toPoints(spine.map(r => ({ date: r.rate_date, rate: r.rate }))).filter(p => p.x >= spineStart);
       if (spinePts.length > 1) out.push({
         label: curveType === 'sofr_1m' ? '30-Day Avg SOFR (actual)' : '10-Year Treasury (actual)',
@@ -1324,9 +1335,12 @@ function CurveWidget({ pinUnlocked, requirePin }) {
     const spineSeries = series.find(s => s.endLabel && !s.isRef);
     if (!cur || !cur.points.length) return null;
     const spot = spineSeries?.points[spineSeries.points.length - 1] ?? null;
-    const fwd = (yrs) => valueAt(cur, Date.now() + yrs * 365.25 * 86400000);
-    let trough = cur.points[0];
-    for (const p of cur.points) if (p.y < trough.y) trough = p;
+    // Stats read the unclipped curve — the plotted one stops 18 months out,
+    // which would blank the 2Y forward and hide troughs beyond the window.
+    const full = { points: cur.fullPoints ?? cur.points };
+    const fwd = (yrs) => valueAt(full, Date.now() + yrs * 365.25 * 86400000);
+    let trough = full.points[0];
+    for (const p of full.points) if (p.y < trough.y) trough = p;
     return { spot, f1: fwd(1), f2: fwd(2), trough };
   }, [mode, series]);
 
