@@ -17,12 +17,15 @@ import { LockIcon } from '../icons.jsx';
 // them).
 
 const STAGES = [
-  { key: 'pipeline',     label: 'Pipeline',           color: 'var(--cat-violet)', desc: 'Lender Pipeline deals not yet closed' },
-  { key: 'committed',    label: 'Committed',          color: 'var(--highlight)',       desc: 'Committed deals not yet closed' },
-  { key: 'construction', label: 'Under Construction', color: 'var(--accent)',     desc: 'At Risk construction schedule' },
-  { key: 'stabilized',   label: 'Stabilized',         color: 'var(--pass)',       desc: 'Stabilized portfolio schedule' },
+  { key: 'pipeline',     label: 'Pipeline',           color: 'var(--warn)',      text: 'var(--warn-text)', desc: 'Lender Pipeline deals not yet closed' },
+  { key: 'committed',    label: 'Committed',          color: 'var(--accent)',    text: 'var(--accent)',    desc: 'Committed deals not yet closed' },
+  { key: 'construction', label: 'Under Construction', color: 'var(--highlight)', text: 'var(--highlight)', desc: 'At Risk construction schedule' },
+  { key: 'stabilized',   label: 'Stabilized',         color: 'var(--pass)',      text: 'var(--pass)',      desc: 'Stabilized portfolio schedule' },
 ];
 const stageOf = (key) => STAGES.find(s => s.key === key);
+
+const MONO = 'var(--font-mono)';
+const SANS = 'var(--font-sans)';
 
 // CARTO basemaps (free with attribution), matched to the app theme.
 const TILE_URL = {
@@ -40,14 +43,50 @@ const fmtPct = (v, d = 0) => (v == null || isNaN(v) ? '—' : `${(v * 100).toFix
 const fmtDate = (iso) => (iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// Label/value rows for a project — shared by the Leaflet popup (edit mode)
+// and the floating detail card. Same fields as always.
+function projectRows(p) {
+  const rows = [];
+  const add = (l, v) => { if (v != null && v !== '' && v !== '—') rows.push({ l, v }); };
+  if (p.detail) {
+    const d = p.detail;
+    add('Location', p.location);
+    add('Lender', d.lender);
+    add('Loan', fmt$(d.loan_amount));
+    add('Maturity', d.maturity_date ? fmtDate(d.maturity_date) : null);
+    add('Units', d.units);
+    if (p.stage === 'construction') {
+      add('% Complete', d.pct_complete != null ? fmtPct(d.pct_complete) : null);
+      add('% Leased', d.pct_leased != null ? fmtPct(d.pct_leased) : null);
+    } else {
+      add('Occupancy', d.pct_leased != null ? fmtPct(d.pct_leased) : null);
+    }
+    add('Fund', d.fund);
+    add('Type', d.category ? d.category[0].toUpperCase() + d.category.slice(1) : null);
+  } else if (p.deal) {
+    const d = p.deal;
+    const finStage = d.committed ? 'Committed' : d.book_published ? 'Book out' : 'Pre-market';
+    add('Division', d.division);
+    add('Deal type', d.type);
+    add('Financing', finStage + (d.status === 'active' ? ' · in process' : ''));
+    add('Closing', d.closing_date ? fmtDate(d.closing_date) : null);
+    add('Lender', [d.primary_lender, d.secondary_lender].filter(Boolean).join(' / '));
+    add('Units', d.units);
+    add('Budget', fmt$(d.total_budget));
+  }
+  return rows;
+}
+
 // Teardrop pin, colored by stage via CSS variable (theme-aware for free).
-function pinIcon(color) {
+// The selected pin scales up 1.4x around its tip.
+function pinIcon(color, selected) {
   return L.divIcon({
     className: 'tt-pin',
-    html: `<svg width="28" height="40" viewBox="0 0 28 40">
-      <path d="M14 39C14 39 26.5 23.4 26.5 13.8 26.5 6.7 20.9 1 14 1 7.1 1 1.5 6.7 1.5 13.8 1.5 23.4 14 39 14 39Z" fill="${color}" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
-      <circle cx="14" cy="13.8" r="4.4" fill="rgba(255,255,255,0.92)"/>
-    </svg>`,
+    html: `<div style="width:28px;height:40px;transform:scale(${selected ? 1.4 : 1});transform-origin:14px 39px">
+      <svg width="28" height="40" viewBox="0 0 28 40">
+        <path d="M14 39C14 39 26.5 23.4 26.5 13.8 26.5 6.7 20.9 1 14 1 7.1 1 1.5 6.7 1.5 13.8 1.5 23.4 14 39 14 39Z" fill="${color}" stroke="rgba(0,0,0,0.35)" stroke-width="1"/>
+        <circle cx="14" cy="13.8" r="4.4" fill="rgba(255,255,255,0.92)"/>
+      </svg></div>`,
     iconSize: [28, 40],
     iconAnchor: [14, 39],
     popupAnchor: [0, -34],
@@ -56,35 +95,9 @@ function pinIcon(color) {
 
 function popupHtml(p, editMode) {
   const stage = stageOf(p.stage);
-  const row = (label, value) => (value == null || value === '' || value === '—')
-    ? ''
-    : `<div class="tt-pop-row"><span>${esc(label)}</span><span>${esc(value)}</span></div>`;
-  let rows = '';
-  if (p.detail) {
-    const d = p.detail;
-    rows =
-      row('Location', p.location) +
-      row('Lender', d.lender) +
-      row('Loan', fmt$(d.loan_amount)) +
-      row('Maturity', d.maturity_date ? fmtDate(d.maturity_date) : null) +
-      row('Units', d.units) +
-      (p.stage === 'construction'
-        ? row('% Complete', d.pct_complete != null ? fmtPct(d.pct_complete) : null) + row('% Leased', d.pct_leased != null ? fmtPct(d.pct_leased) : null)
-        : row('Occupancy', d.pct_leased != null ? fmtPct(d.pct_leased) : null)) +
-      row('Fund', d.fund) +
-      row('Type', d.category ? d.category[0].toUpperCase() + d.category.slice(1) : null);
-  } else if (p.deal) {
-    const d = p.deal;
-    const finStage = d.committed ? 'Committed' : d.book_published ? 'Book out' : 'Pre-market';
-    rows =
-      row('Division', d.division) +
-      row('Deal type', d.type) +
-      row('Financing', finStage + (d.status === 'active' ? ' · in process' : '')) +
-      row('Closing', d.closing_date ? fmtDate(d.closing_date) : null) +
-      row('Lender', [d.primary_lender, d.secondary_lender].filter(Boolean).join(' / ')) +
-      row('Units', d.units) +
-      row('Budget', fmt$(d.total_budget));
-  }
+  const rows = projectRows(p)
+    .map(r => `<div class="tt-pop-row"><span>${esc(r.l)}</span><span>${esc(r.v)}</span></div>`)
+    .join('');
   return `
     <div class="tt-pop">
       <div class="tt-pop-head">
@@ -92,7 +105,7 @@ function popupHtml(p, editMode) {
         <span class="tt-pop-name">${esc(p.name)}</span>
         ${p.uid ? `<span class="tt-pop-uid">${esc(p.uid)}</span>` : ''}
       </div>
-      <div class="tt-pop-stage" style="color:${stage.color}">${esc(stage.label)}</div>
+      <div class="tt-pop-stage" style="color:${stage.text}">${esc(stage.label)}</div>
       ${rows}
       ${editMode ? `<button data-unpin class="tt-pop-unpin">Remove pin</button>` : ''}
     </div>`;
@@ -111,6 +124,7 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   const [stageOn,   setStageOn]   = useState({ pipeline: true, committed: true, construction: true, stabilized: true });
   const [coordDrafts, setCoordDrafts] = useState({}); // per-project paste-coordinates inputs
   const [search,    setSearch]    = useState('');
+  const [selectedKey, setSelectedKey] = useState(null); // drives the floating detail card + 1.4x pin
 
   const mapDivRef  = useRef(null);
   const mapRef     = useRef(null);
@@ -131,10 +145,12 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   const unpinned = useMemo(() => projects.filter(p => !locFor(p)), [projects, locations]);
   const visiblePins = useMemo(() => pinned.filter(p => stageOn[p.stage]), [pinned, stageOn]);
   const searchLower = search.trim().toLowerCase();
-  const unpinnedShown = useMemo(
-    () => unpinned.filter(p => !searchLower || p.name.toLowerCase().includes(searchLower) || (p.location || '').toLowerCase().includes(searchLower)),
-    [unpinned, searchLower]
-  );
+  // Sidebar list: every project; in edit mode the unplaced ones float to the
+  // top so they're easy to drag/place.
+  const listShown = useMemo(() => {
+    const f = projects.filter(p => !searchLower || p.name.toLowerCase().includes(searchLower) || (p.location || '').toLowerCase().includes(searchLower));
+    return editMode ? [...f.filter(p => !locFor(p)), ...f.filter(p => locFor(p))] : f;
+  }, [projects, searchLower, editMode, locations]);
 
   // ── Load everything ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -269,7 +285,7 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
     };
   }, []);
 
-  // The side panel appearing/disappearing changes the map's width.
+  // Layout around the map can shift (edit-mode helper rows) — keep tiles honest.
   useEffect(() => { mapRef.current?.invalidateSize(); }, [editMode]);
 
   // Esc cancels click-to-place.
@@ -303,22 +319,27 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
           lng += 0.004 * Math.cos(angle);
         }
         const marker = L.marker([lat, lng], {
-          icon: pinIcon(stageOf(p.stage).color),
+          icon: pinIcon(stageOf(p.stage).color, selectedKey === p.key),
           title: p.name,
           draggable: editMode,
         });
-        const el = document.createElement('div');
-        el.innerHTML = popupHtml(p, editMode);
-        el.querySelector('[data-unpin]')?.addEventListener('click', () => { marker.closePopup(); removePin(p.key); });
-        marker.bindPopup(el, { maxWidth: 300 });
-        if (editMode) marker.on('dragend', () => {
-          const ll = marker.getLatLng();
-          savePin(p.key, ll.lat, ll.lng);
-        });
+        marker.on('click', () => setSelectedKey(p.key));
+        if (editMode) {
+          // The popup (with Remove pin) is an edit-mode tool; in view mode the
+          // floating detail card carries the same rows.
+          const el = document.createElement('div');
+          el.innerHTML = popupHtml(p, true);
+          el.querySelector('[data-unpin]')?.addEventListener('click', () => { marker.closePopup(); removePin(p.key); });
+          marker.bindPopup(el, { maxWidth: 300 });
+          marker.on('dragend', () => {
+            const ll = marker.getLatLng();
+            savePin(p.key, ll.lat, ll.lng);
+          });
+        }
         marker.addTo(group);
       });
     }
-  }, [visiblePins, locations, editMode]);
+  }, [visiblePins, locations, editMode, selectedKey]);
 
   // ── UI ───────────────────────────────────────────────────────────────────
   const stageCounts = useMemo(() => {
@@ -337,173 +358,236 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
     mapRef.current?.flyTo([parsed.lat, parsed.lng], Math.max(mapRef.current.getZoom(), 7));
   }
 
+  function pickProject(p) {
+    setSelectedKey(p.key);
+    const l = locFor(p);
+    if (l) mapRef.current?.flyTo([l.lat, l.lng], Math.max(mapRef.current.getZoom(), 6));
+  }
+
   const armedProject = armedKey ? projects.find(p => p.key === armedKey) : null;
+  const sel = selectedKey ? projects.find(p => p.key === selectedKey) : null;
+  const selStage = sel ? stageOf(sel.stage) : null;
+  const selRows = sel ? projectRows(sel) : [];
+
+  const toggleStage = (key) => setStageOn(prev => ({ ...prev, [key]: !prev[key] }));
 
   return (
-    <div>
+    <div style={{ flex: 1, display: 'flex', minWidth: 0 }} className={armedKey ? 'tt-map-armed' : undefined}>
       <style>{`
         .leaflet-container { background: var(--panel2); font-family: inherit; }
         .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-          background: var(--panel3); color: var(--text);
-          box-shadow: 0 6px 20px rgba(0,0,0,0.35); border: 1px solid var(--border);
+          background: var(--panel); color: var(--text);
+          box-shadow: var(--pop-shadow); border: 1px solid var(--border2);
         }
+        .leaflet-popup-content-wrapper { border-radius: 10px; }
         .leaflet-popup-content { margin: 0; }
         .leaflet-popup-close-button { color: var(--muted) !important; }
-        .leaflet-bar a { background: var(--panel3); color: var(--text2); border-bottom: 1px solid var(--border); }
-        .leaflet-bar a:hover { background: var(--row-hover); color: var(--text); }
+        .leaflet-bar a { background: var(--panel); color: var(--text2); border-bottom: 1px solid var(--border); }
+        .leaflet-bar a:hover { background: var(--panel2); color: var(--text); }
         .leaflet-control-attribution { background: color-mix(in srgb, var(--panel) 78%, transparent) !important; color: var(--faint) !important; font-size: 0.6rem !important; }
-        .leaflet-control-attribution a { color: var(--faint2) !important; }
+        .leaflet-control-attribution a { color: var(--faint) !important; }
         .tt-pin { filter: drop-shadow(0 2px 3px rgba(0,0,0,0.35)); }
-        .tt-pop { padding: 0.7rem 0.9rem 0.75rem; min-width: 200px; font-size: 0.75rem; }
+        .tt-pop { padding: 11px 14px 12px; min-width: 200px; font-family: var(--font-sans); font-size: 11px; }
         .tt-pop-head { display: flex; align-items: center; gap: 7px; }
         .tt-pop-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-        .tt-pop-name { font-weight: 700; font-size: 0.85rem; color: var(--text); }
-        .tt-pop-uid { font-size: 0.6rem; color: var(--faint2); font-variant-numeric: tabular-nums; margin-left: auto; padding-left: 8px; }
-        .tt-pop-stage { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin: 2px 0 7px 16px; }
-        .tt-pop-row { display: flex; justify-content: space-between; gap: 16px; padding: 2.5px 0; border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
-        .tt-pop-row span:first-child { color: var(--muted); }
-        .tt-pop-row span:last-child { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
-        .tt-pop-unpin { margin-top: 8px; width: 100%; padding: 4px 8px; font-size: 0.68rem; cursor: pointer;
+        .tt-pop-name { font-weight: 600; font-size: 13px; color: var(--text); }
+        .tt-pop-uid { font-family: var(--font-mono); font-size: 9px; color: var(--faint); margin-left: auto; padding-left: 8px; }
+        .tt-pop-stage { font-family: var(--font-mono); font-size: 8.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin: 2px 0 7px 16px; }
+        .tt-pop-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
+        .tt-pop-row span:first-child { color: var(--text2); }
+        .tt-pop-row span:last-child { font-family: var(--font-mono); font-weight: 500; color: var(--text); text-align: right; }
+        .tt-pop-unpin { margin-top: 8px; width: 100%; padding: 4px 8px; cursor: pointer;
+          font-family: var(--font-mono); font-size: 10px; font-weight: 600;
           background: color-mix(in srgb, var(--fail) 10%, transparent); color: var(--fail);
           border: 1px solid color-mix(in srgb, var(--fail) 30%, transparent); border-radius: 5px; }
         .tt-pop-unpin:hover { background: color-mix(in srgb, var(--fail) 18%, transparent); }
         .tt-map-armed .leaflet-container { cursor: crosshair; }
-        .tt-unpinned-row { border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 0.6rem; background: var(--panel2); cursor: grab; }
-        .tt-unpinned-row:active { cursor: grabbing; }
-        .tt-unpinned-row.tt-armed { border-color: var(--accent); box-shadow: 0 0 0 2px var(--ring); }
       `}</style>
 
-      {msg && (
-        <div style={{ marginBottom: '0.9rem', padding: '0.6rem 0.9rem', borderRadius: 6, fontSize: '0.75rem', background: 'color-mix(in srgb, var(--warn) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--warn) 30%, transparent)', color: 'var(--warn)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-          <span>{msg}</span>
-          <button onClick={() => setMsg('')} className="btn btn-ghost btn-sm" style={{ padding: '0 4px' }}>✕</button>
-        </div>
-      )}
-      {setupNeeded && (
-        <div style={{ marginBottom: '0.9rem', padding: '0.6rem 0.9rem', borderRadius: 6, fontSize: '0.75rem', background: 'color-mix(in srgb, var(--fail) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fail) 28%, transparent)', color: 'var(--fail)' }}>
-          The <code>project_locations</code> table doesn&apos;t exist yet — run <code>db/map_setup.sql</code> once in the Supabase SQL editor, then reload.
-        </div>
-      )}
-
-      {/* ── Summary cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-        {[
-          { label: 'Projects Mapped', value: `${pinned.length} / ${projects.length}`, sub: unpinned.length ? `${unpinned.length} still need coordinates` : 'every project pinned', color: 'var(--text2)' },
-          ...STAGES.map(s => ({
-            label: s.label,
-            value: stageCounts[s.key].total,
-            sub: `${stageCounts[s.key].pinned} pinned · ${s.desc}`,
-            color: s.color,
-          })),
-        ].map(c => (
-          <div key={c.label} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.9rem 1rem' }}>
-            <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.04em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: c.color, lineHeight: 1.1 }}>{c.value}</div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', marginTop: '0.2rem' }}>{c.sub}</div>
+      {/* ── Left panel ── */}
+      <div style={{ width: 306, flex: 'none', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--panel)' }}>
+        <div style={{ padding: '18px 22px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+          <div>
+            <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 19, color: 'var(--text)' }}>Project Map</div>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+              {loading ? 'loading…' : `${projects.length} projects · ${pinned.length} pinned`}
+            </div>
           </div>
-        ))}
-      </div>
-
-      {/* ── Toolbar: stage filters + edit toggle ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-        {STAGES.map(s => (
-          <button key={s.key} onClick={() => setStageOn(prev => ({ ...prev, [s.key]: !prev[s.key] }))}
-            className="btn btn-sm"
-            style={stageOn[s.key]
-              ? { borderColor: `color-mix(in srgb, ${s.color} 40%, transparent)`, background: `color-mix(in srgb, ${s.color} 10%, transparent)`, color: s.color }
-              : { opacity: 0.5 }}>
-            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: s.color, marginRight: 6, verticalAlign: 'baseline' }} />
-            {s.label} ({stageCounts[s.key].pinned})
-          </button>
-        ))}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          {armedProject && (
-            <span style={{ fontSize: '0.72rem', color: 'var(--accent-strong)' }}>
-              Click the map to place <b>{armedProject.name}</b> — Esc to cancel
-            </span>
-          )}
-          <button
+          <span
             onClick={() => editMode ? (setEditMode(false), setArmedKey(null)) : requirePin(() => setEditMode(true))}
-            className={`btn btn-sm ${editMode ? 'btn-danger' : `btn-tinted ${pinUnlocked ? '' : 'btn-locked'}`}`}>
-            {editMode ? '✕ Done pinning' : pinUnlocked ? '📍 Edit pins' : <><LockIcon size={11} /> Edit pins</>}
-          </button>
+            style={{
+              cursor: 'pointer', fontFamily: MONO, fontWeight: 600, fontSize: 10, padding: '6px 10px', borderRadius: 6,
+              whiteSpace: 'nowrap', userSelect: 'none', display: 'inline-flex', alignItems: 'center', gap: 5,
+              ...(editMode
+                ? { color: 'var(--warn-text)', background: 'color-mix(in srgb, var(--warn) 13%, transparent)', border: '1px solid color-mix(in srgb, var(--warn) 35%, transparent)' }
+                : { color: 'var(--accent)', background: 'var(--panel)', border: '1px solid var(--border2)' }),
+            }}>
+            {editMode ? '◎ Done pinning' : pinUnlocked ? '◎ Edit pins' : <><LockIcon size={10} /> Edit pins</>}
+          </span>
         </div>
-      </div>
 
-      {/* ── Map + edit side panel ── */}
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'stretch' }} className={armedKey ? 'tt-map-armed' : undefined}>
-        <div ref={mapDivRef} style={{ flex: 1, minWidth: 0, height: 'min(72vh, 700px)', minHeight: 460, borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow)' }} />
+        {/* Stage legend — each row is a filter toggle */}
+        <div style={{ padding: '12px 22px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {STAGES.map(s => (
+            <div key={s.key} onClick={() => toggleStage(s.key)} title={s.desc}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: stageOn[s.key] ? 1 : 0.35, userSelect: 'none' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
+                <span style={{ fontFamily: SANS, fontWeight: 500, fontSize: 12, color: 'var(--text)' }}>{s.label}</span>
+              </span>
+              <span style={{ fontFamily: MONO, fontWeight: 600, fontSize: 11, color: 'var(--muted)' }}>{stageCounts[s.key].total}</span>
+            </div>
+          ))}
+        </div>
 
         {editMode && (
-          <div style={{ width: 320, flexShrink: 0, background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, display: 'flex', flexDirection: 'column', maxHeight: 'min(72vh, 700px)', minHeight: 460 }}>
-            <div style={{ padding: '0.8rem 0.95rem 0.6rem', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text2)' }}>
-                Unpinned projects ({unpinned.length})
-              </div>
-              <div style={{ fontSize: '0.66rem', color: 'var(--faint2)', marginTop: 4, lineHeight: 1.5 }}>
-                Drag a project onto the map, click <b>Place</b> then click the map, or paste coordinates from Google Maps (right-click a spot → copy the numbers).
-              </div>
-              <input type="text" placeholder="Search projects…" value={search} onChange={e => setSearch(e.target.value)}
-                style={{ marginTop: 8, fontSize: '0.74rem', padding: '0.3rem 0.55rem' }} />
-            </div>
+          <div style={{ padding: '11px 22px', background: 'color-mix(in srgb, var(--warn) 9%, transparent)', borderBottom: '1px solid color-mix(in srgb, var(--warn) 25%, transparent)', fontFamily: SANS, fontSize: 10.5, color: 'var(--warn-text)', lineHeight: 1.5 }}>
+            Unplaced · drag onto map, click <b>Place</b>, or paste <span style={{ fontFamily: MONO }}>39.46, -87.41</span>.
+            Drag a pin on the map to fine-tune; remove via its popup.
+          </div>
+        )}
 
-            <div style={{ overflowY: 'auto', padding: '0.6rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.45rem', flex: 1 }}>
-              {unpinnedShown.length === 0 && (
-                <div style={{ fontSize: '0.72rem', color: 'var(--faint)', textAlign: 'center', padding: '1rem 0' }}>
-                  {unpinned.length === 0 ? 'Every project is on the map 🎉' : 'No matches.'}
-                </div>
-              )}
-              {unpinnedShown.map(p => {
-                const s = stageOf(p.stage);
-                const armed = armedKey === p.key;
-                return (
-                  <div key={p.key} className={`tt-unpinned-row ${armed ? 'tt-armed' : ''}`}
-                    draggable
-                    onDragStart={e => { e.dataTransfer.setData('text/tt-project', p.key); e.dataTransfer.effectAllowed = 'copy'; }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} title={s.label} />
-                      <span style={{ fontSize: '0.76rem', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                      {p.location && <span style={{ fontSize: '0.64rem', color: 'var(--faint2)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>{p.location}</span>}
-                    </div>
-                    <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
-                      <input type="text" placeholder="lat, lng" value={coordDrafts[p.key] || ''}
-                        onChange={e => setCoordDrafts(prev => ({ ...prev, [p.key]: e.target.value }))}
-                        onKeyDown={e => { if (e.key === 'Enter') submitCoords(p); }}
-                        style={{ flex: 1, fontSize: '0.7rem', padding: '0.25rem 0.5rem' }} />
-                      {(coordDrafts[p.key] || '').trim()
-                        ? <button className="btn btn-sm btn-tinted" style={{ padding: '2px 9px' }} onClick={() => submitCoords(p)}>Pin</button>
-                        : <button className={`btn btn-sm ${armed ? 'btn-primary' : ''}`} style={{ padding: '2px 9px' }}
-                            onClick={() => setArmedKey(armed ? null : p.key)}>
-                            {armed ? 'Cancel' : 'Place'}
-                          </button>}
+        <div style={{ padding: '9px 22px', borderBottom: '1px solid var(--border)' }}>
+          <input type="text" placeholder="Search projects…" value={search} onChange={e => setSearch(e.target.value)}
+            style={{ width: '100%', fontFamily: MONO, fontSize: 11, padding: '5px 9px', borderRadius: 6, border: '1px solid var(--border2)', background: 'var(--panel)', color: 'var(--text)' }} />
+        </div>
+
+        {/* Project list */}
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          {loading && <div style={{ padding: '14px 22px', fontFamily: MONO, fontSize: 11, color: 'var(--muted)' }}>Loading projects…</div>}
+          {!loading && listShown.length === 0 && (
+            <div style={{ padding: '14px 22px', fontFamily: MONO, fontSize: 11, color: 'var(--faint)' }}>No matches.</div>
+          )}
+          {listShown.map(p => {
+            const s = stageOf(p.stage);
+            const placed = !!locFor(p);
+            const isSel = selectedKey === p.key;
+            const armed = armedKey === p.key;
+            return (
+              <div key={p.key}
+                onClick={() => pickProject(p)}
+                draggable={editMode && !placed}
+                onDragStart={e => { e.dataTransfer.setData('text/tt-project', p.key); e.dataTransfer.effectAllowed = 'copy'; }}
+                style={{
+                  cursor: editMode && !placed ? 'grab' : 'pointer', padding: '11px 22px 11px 19px',
+                  borderBottom: '1px solid color-mix(in srgb, var(--border) 70%, transparent)',
+                  borderLeft: isSel ? '3px solid var(--text)' : '3px solid transparent',
+                  background: isSel ? 'var(--panel2)' : armed ? 'color-mix(in srgb, var(--accent) 7%, transparent)' : 'transparent',
+                  opacity: stageOn[p.stage] ? 1 : 0.45,
+                }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                  <span title={s.label} style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, display: 'inline-block', flex: 'none' }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 12.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                    <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {p.location || (placed ? '' : 'no coordinates yet')}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-
-            {pinned.length > 0 && (
-              <div style={{ borderTop: '1px solid var(--border)', padding: '0.55rem 0.75rem', maxHeight: 190, overflowY: 'auto' }}>
-                <div style={{ fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--faint2)', marginBottom: 5 }}>
-                  Pinned ({pinned.length}) — drag a pin on the map to fine-tune
+                  {editMode && !placed && (
+                    <span
+                      onClick={e => { e.stopPropagation(); setArmedKey(armed ? null : p.key); }}
+                      style={{ cursor: 'pointer', fontFamily: MONO, fontWeight: 600, fontSize: 9, color: armed ? 'var(--fail)' : 'var(--accent)', flex: 'none', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {armed ? 'Cancel' : 'Place'}
+                    </span>
+                  )}
+                  {editMode && placed && (
+                    <span title="Remove pin"
+                      onClick={e => { e.stopPropagation(); removePin(p.key); }}
+                      style={{ cursor: 'pointer', fontFamily: MONO, fontWeight: 600, fontSize: 10, color: 'var(--fail)', flex: 'none', padding: '0 2px' }}>
+                      ✕
+                    </span>
+                  )}
                 </div>
-                {pinned.map(p => (
-                  <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2.5px 0', fontSize: '0.72rem' }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: stageOf(p.stage).color, flexShrink: 0 }} />
-                    <span style={{ color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.name}</span>
-                    <button className="btn btn-ghost btn-sm" title="Zoom to pin" style={{ padding: '0 5px' }}
-                      onClick={() => { const l = locFor(p); mapRef.current?.flyTo([l.lat, l.lng], Math.max(mapRef.current.getZoom(), 9)); }}>⌖</button>
-                    <button className="btn btn-ghost btn-sm" title="Remove pin" style={{ padding: '0 5px', color: 'var(--fail)' }}
-                      onClick={() => removePin(p.key)}>✕</button>
+                {editMode && !placed && (
+                  <div style={{ display: 'flex', gap: 5, marginTop: 7 }} onClick={e => e.stopPropagation()}>
+                    <input type="text" placeholder="lat, lng" value={coordDrafts[p.key] || ''}
+                      onChange={e => setCoordDrafts(prev => ({ ...prev, [p.key]: e.target.value }))}
+                      onKeyDown={e => { if (e.key === 'Enter') submitCoords(p); }}
+                      style={{ flex: 1, minWidth: 0, fontFamily: MONO, fontSize: 10.5, padding: '3px 8px', borderRadius: 5, border: '1px solid var(--border2)', background: 'var(--panel)', color: 'var(--text)' }} />
+                    {(coordDrafts[p.key] || '').trim() !== '' && (
+                      <button className="btn btn-sm btn-tinted" style={{ padding: '2px 9px' }} onClick={() => submitCoords(p)}>Pin</button>
+                    )}
                   </div>
-                ))}
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Map ── */}
+      <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+        <div ref={mapDivRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
+
+        {/* Notices float over the map */}
+        {(msg || setupNeeded || armedProject) && (
+          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 20, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 'min(520px, 80%)', width: 'max-content' }}>
+            {armedProject && (
+              <div style={{ padding: '7px 12px', borderRadius: 8, fontFamily: SANS, fontSize: 11.5, background: 'var(--panel)', border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)', color: 'var(--text)', boxShadow: 'var(--shadow)' }}>
+                Click the map to place <b>{armedProject.name}</b> — Esc to cancel
+              </div>
+            )}
+            {msg && (
+              <div style={{ padding: '8px 12px', borderRadius: 8, fontFamily: SANS, fontSize: 11.5, background: 'var(--panel)', border: '1px solid color-mix(in srgb, var(--warn) 40%, transparent)', color: 'var(--warn-text)', boxShadow: 'var(--shadow)', display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <span>{msg}</span>
+                <button onClick={() => setMsg('')} className="btn btn-ghost btn-sm" style={{ padding: '0 4px' }}>✕</button>
+              </div>
+            )}
+            {setupNeeded && (
+              <div style={{ padding: '8px 12px', borderRadius: 8, fontFamily: SANS, fontSize: 11.5, background: 'var(--panel)', border: '1px solid color-mix(in srgb, var(--fail) 35%, transparent)', color: 'var(--fail)', boxShadow: 'var(--shadow)' }}>
+                The <code>project_locations</code> table doesn&apos;t exist yet — run <code>db/map_setup.sql</code> once in the Supabase SQL editor, then reload.
               </div>
             )}
           </div>
         )}
-      </div>
 
-      {loading && <div style={{ marginTop: '0.7rem', fontSize: '0.74rem', color: 'var(--muted)' }}>Loading projects…</div>}
+        {/* Floating detail card */}
+        {sel && (
+          <div style={{ position: 'absolute', right: 20, top: 20, width: 236, zIndex: 20, background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 10, boxShadow: 'var(--pop-shadow)', overflow: 'auto', maxHeight: 'calc(100% - 40px)' }}>
+            <div style={{ padding: '13px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: SANS, fontWeight: 600, fontSize: 14, color: 'var(--text)', minWidth: 0 }}>{sel.name}</span>
+              <span style={{ flex: 'none', fontFamily: MONO, fontWeight: 600, fontSize: 8.5, letterSpacing: '0.06em', textTransform: 'uppercase', padding: '3px 7px', borderRadius: 4, color: selStage.text, background: `color-mix(in srgb, ${selStage.color} 13%, transparent)` }}>
+                {selStage.label}
+              </span>
+            </div>
+            <div style={{ padding: '6px 16px 8px' }}>
+              {selRows.length === 0 && (
+                <div style={{ padding: '10px 0', fontFamily: SANS, fontSize: 11, color: 'var(--muted)' }}>No details on file.</div>
+              )}
+              {selRows.map((r, i) => (
+                <div key={r.l} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: i < selRows.length - 1 ? '1px solid color-mix(in srgb, var(--border) 60%, transparent)' : 'none' }}>
+                  <span style={{ fontFamily: SANS, fontSize: 11, color: 'var(--text2)' }}>{r.l}</span>
+                  <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 11, color: 'var(--text)', textAlign: 'right' }}>{r.v}</span>
+                </div>
+              ))}
+              {!locFor(sel) && (
+                <div style={{ padding: '8px 0 4px', fontFamily: MONO, fontSize: 9.5, color: 'var(--faint)' }}>Not on the map yet.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Stage filter chips (mirror the legend) */}
+        <div style={{ position: 'absolute', left: 20, bottom: 20, zIndex: 20, display: 'flex', gap: 7, flexWrap: 'wrap', maxWidth: '70%' }}>
+          {STAGES.map(s => {
+            const on = stageOn[s.key];
+            return (
+              <span key={s.key} onClick={() => toggleStage(s.key)}
+                style={{
+                  cursor: 'pointer', fontFamily: MONO, fontWeight: 600, fontSize: 10, padding: '6px 11px', borderRadius: 20,
+                  userSelect: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: 'var(--panel)',
+                  color: on ? s.text : 'var(--faint)',
+                  border: on ? `1px solid color-mix(in srgb, ${s.color} 45%, transparent)` : '1px solid var(--border)',
+                  opacity: on ? 1 : 0.7,
+                }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color, display: 'inline-block', opacity: on ? 1 : 0.4 }} />
+                {s.label} · {stageCounts[s.key].pinned}
+              </span>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
