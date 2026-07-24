@@ -313,20 +313,14 @@ export function PipelineTab({ pinUnlocked = true }) {
     try { return Math.ceil((new Date(d + 'T12:00:00') - new Date()) / 86400000); } catch { return null; }
   };
 
-  const pill = (label, color, bg) => (
-    <span style={{ fontSize: '0.62rem', fontWeight: 700, padding: '2px 7px', borderRadius: 4,
-      background: bg, color, letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{label}</span>
-  );
   // Commitment / book stage is conveyed by the section grouping, so the card
-  // badge only reflects the deal's process status.
-  const statusBadge = (d) => {
-    if (d.status==='closed') return pill('CLOSED', 'var(--faint2)', 'color-mix(in srgb, var(--faint) 12%, transparent)');
-    if (d.status==='active') return pill('IN PROCESS', TT_ORANGE, 'color-mix(in srgb, var(--accent) 12%, transparent)');
-    return pill('PIPELINE', 'var(--faint2)', 'color-mix(in srgb, var(--faint) 12%, transparent)');
+  // tag reflects deal type — unless the deal still needs a lender, which
+  // overrides everything (red pill, per the console design).
+  const dealTag = (d) => {
+    if (!d.primary_lender) return <span className="pill red" style={{ whiteSpace: 'nowrap' }}>Needs lender</span>;
+    if (d.type === 'Perm/Bridge') return <span className="pill yellow" style={{ whiteSpace: 'nowrap' }}>Perm · Bridge</span>;
+    return <span className="pill blue" style={{ whiteSpace: 'nowrap' }}>Construction</span>;
   };
-  const typeBadge = (d) => d.type === 'Perm/Bridge'
-    ? pill('PERM/BRIDGE', 'var(--cat-violet)', 'color-mix(in srgb, var(--cat-violet) 12%, transparent)')
-    : pill('CONST', 'var(--cat-teal)', 'color-mix(in srgb, var(--cat-teal) 12%, transparent)');
 
   // ── Input style helpers ────────────────────────────────────────────────────
   const inputSt = (extra = {}) => ({
@@ -341,16 +335,13 @@ export function PipelineTab({ pinUnlocked = true }) {
   // Every deal falls into exactly one bucket: committed wins over book-published,
   // and anything without either flag is still in pre-marketing.
   const STAGES = [
-    { key: 'committed', label: 'Fully Committed', color: 'var(--pass)', desc: 'lender commitment in hand' },
-    { key: 'book',      label: 'Book Published',  color: 'var(--highlight)', desc: 'book out — awaiting commitment' },
-    { key: 'premarket', label: 'Pre-Marketing',   color: TT_ORANGE,     desc: 'no book published, no commitment' },
+    { key: 'committed', label: 'Fully Committed', color: 'var(--pass)' },
+    { key: 'book',      label: 'Book Published',  color: 'var(--accent)' },
+    { key: 'premarket', label: 'Pre-Marketing',   color: 'var(--warn)' },
   ];
   const stageOf = d => d.committed ? 'committed' : d.book_published ? 'book' : 'premarket';
 
   // ── Summary stats ──────────────────────────────────────────────────────────
-  const committedCount     = deals.filter(d => stageOf(d) === 'committed').length;
-  const bookOnlyCount      = deals.filter(d => stageOf(d) === 'book').length;
-  const premarketCount     = deals.filter(d => stageOf(d) === 'premarket').length;
   const needsLender        = deals.filter(d => !d.primary_lender).length;
   const totalBudget        = deals.reduce((s, d) => s + (d.total_budget || 0), 0);
   const totalUnits         = deals.reduce((s, d) => s + (d.units || 0), 0);
@@ -364,8 +355,16 @@ export function PipelineTab({ pinUnlocked = true }) {
     return true;
   });
 
+  // 2026 closing timeline — how many deals close in each month
+  const monthCounts = Array(12).fill(0);
+  deals.forEach(d => {
+    if (!d.closing_date) return;
+    const [y, m] = String(d.closing_date).split('-').map(Number);
+    if (y === 2026 && m >= 1 && m <= 12) monthCounts[m - 1]++;
+  });
+
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: '0.8rem' }}>
+    <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: 12 }}>
       Loading pipeline data…
     </div>
   );
@@ -570,7 +569,7 @@ export function PipelineTab({ pinUnlocked = true }) {
 
   // ── Main render ────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: '1.5rem 0', position: 'relative' }}>
+    <div style={{ position: 'relative' }}>
       {/* Rendered as function calls, NOT <EditModal /> elements: these closures are
           recreated on every render, so mounting them as JSX elements makes React see a
           new component type each keystroke and remount the modal — blurring the focused
@@ -582,16 +581,17 @@ export function PipelineTab({ pinUnlocked = true }) {
       {/* ── Empty state ── */}
       {deals.length === 0 && (
         <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-          <div style={{ fontSize: '2rem', opacity: 0.3, marginBottom: '1rem' }}>🏗</div>
-          <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.5rem' }}>No deals yet</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--faint)', marginBottom: '1.5rem' }}>Upload a bank package, start fresh, or seed from the 2026 pipeline book</div>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-            <button onClick={() => packageInputRef.current && packageInputRef.current.click()} disabled={parsing} className="btn btn-primary" style={{ padding: '7px 18px', fontSize: '0.78rem', opacity: parsing ? 0.7 : 1 }}>
-              {parsing ? 'Reading package…' : '⬆ Upload Bank Package'}
+          <div style={{ fontSize: '2rem', color: 'var(--faint)', marginBottom: '1rem' }}>◇</div>
+          <div style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600, marginBottom: 6 }}>No deals yet</div>
+          <div className="mono" style={{ fontSize: 11, color: 'var(--muted)', marginBottom: '1.5rem' }}>Upload a bank package, start fresh, or seed from the 2026 pipeline book</div>
+          {msg && <div className="mono" style={{ fontSize: 11, color: msg.isErr ? 'var(--fail)' : 'var(--pass)', marginBottom: 12 }}>{msg.text}</div>}
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button onClick={() => packageInputRef.current && packageInputRef.current.click()} disabled={parsing} className="tt-btn btn-primary" style={{ opacity: parsing ? 0.7 : 1, cursor: parsing ? 'wait' : 'pointer' }}>
+              {parsing ? 'Reading package…' : '↑ Upload Bank Package'}
             </button>
-            <button onClick={startNew} className="btn" style={{ padding: '7px 18px', fontSize: '0.78rem' }}>+ Add Deal</button>
-            <button onClick={seedFromBook} disabled={saving} style={{ padding: '8px 20px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: saving ? 'wait' : 'pointer', fontFamily: 'inherit', fontSize: '0.8rem', opacity: saving ? 0.6 : 1 }}>
-              {saving ? 'Seeding…' : '↓ Seed from Pipeline Book'}
+            <button onClick={startNew} className="tt-btn">+ Add Deal</button>
+            <button onClick={seedFromBook} disabled={saving} className="tt-btn" style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'wait' : 'pointer' }}>
+              {saving ? 'Seeding…' : '⟳ Seed from Pipeline Book'}
             </button>
           </div>
         </div>
@@ -599,191 +599,186 @@ export function PipelineTab({ pinUnlocked = true }) {
 
       {deals.length > 0 && (<>
 
-        {/* ── Summary Header ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
+        {/* ── Header: title + filter chips + edit-mode actions ── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+          <div>
+            <div style={{ fontSize: 21, fontWeight: 600, color: 'var(--text)' }}>Lender Pipeline</div>
+            <div className="mono" style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>
+              {deals.length} development deal{deals.length === 1 ? '' : 's'} · 2026 closing schedule
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {msg && <span className="mono" style={{ fontSize: 10.5, color: msg.isErr ? 'var(--fail)' : 'var(--pass)' }}>{msg.text}</span>}
+            {[['All', `All ${deals.length}`], ['Construction', 'Construction'], ['Perm/Bridge', 'Perm · Bridge']].map(([val, label]) => (
+              <button key={val} onClick={() => setFilterType(val)} className={`chip ${filterType === val ? 'chip-active' : ''}`}>{label}</button>
+            ))}
+            {pinUnlocked && (<>
+              <button onClick={() => packageInputRef.current && packageInputRef.current.click()} disabled={parsing} className="tt-btn" style={{ opacity: parsing ? 0.7 : 1, cursor: parsing ? 'wait' : 'pointer' }} title="Pull deal info from an Investment Overview PDF — you only enter the lenders">
+                {parsing ? 'Reading package…' : '↑ Bank Package'}
+              </button>
+              <button onClick={seedFromBook} disabled={saving} className="tt-btn" style={{ opacity: saving ? 0.6 : 1, cursor: saving ? 'wait' : 'pointer' }} title="Seed any missing deals from the 2026 pipeline book">
+                {saving ? 'Seeding…' : '⟳ Seed book'}
+              </button>
+              <button onClick={startNew} className="tt-btn btn-primary">+ Add Deal</button>
+            </>)}
+          </div>
+        </div>
+
+        {/* ── 5-up summary tiles ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
           {[
-            { label: 'Total Pipeline Budget', value: fmt$(totalBudget),  sub: `${deals.length} deals` },
-            { label: 'Total Pipeline Units',  value: fmtN(totalUnits),   sub: 'across all projects' },
-            { label: 'Financing Stage',       value: `${committedCount} / ${bookOnlyCount} / ${premarketCount}`, sub: 'committed / book out / pre-mkt' },
-            { label: 'Needs Lender',          value: needsLender,        sub: 'no lender assigned', warn: needsLender > 0 },
-            { label: 'Next Close',            value: nextClose ? nextClose.name.split(',')[0] : '—', sub: nextClose ? fmtDate(nextClose.closing_date) : 'no upcoming dates' },
-          ].map(c => (
-            <div key={c.label} style={{ background: 'var(--panel)', border: `1px solid ${c.warn ? 'color-mix(in srgb, var(--fail) 35%, transparent)' : 'var(--border)'}`, borderRadius: 6, padding: '0.9rem 1rem' }}>
-              <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.04em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
-              <div style={{ fontSize: '1.3rem', fontWeight: 700, color: c.warn ? 'var(--fail)' : 'var(--text2)', lineHeight: 1.1 }}>{c.value}</div>
-              <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', marginTop: '0.2rem' }}>{c.sub}</div>
+            { label: 'Pipeline budget', value: fmt$(totalBudget) },
+            { label: 'Units',           value: fmtN(totalUnits) },
+            { label: 'Deals',           value: String(deals.length) },
+            { label: 'Needs lender',    value: String(needsLender), color: needsLender > 0 ? 'var(--fail)' : undefined },
+            { label: 'Next close',      value: nextClose ? `${daysUntil(nextClose.closing_date)}d` : '—',
+              color: nextClose ? 'var(--highlight)' : undefined,
+              title: nextClose ? `${nextClose.name} — ${fmtDate(nextClose.closing_date)}` : 'no upcoming dates' },
+          ].map(t => (
+            <div key={t.label} title={t.title} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+              <div className="mono" style={{ fontSize: 9.5, fontWeight: 500, letterSpacing: '0.08em', color: 'var(--muted)', textTransform: 'uppercase' }}>{t.label}</div>
+              <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: t.color || 'var(--text)', marginTop: 6 }}>{t.value}</div>
             </div>
           ))}
         </div>
 
-        {/* ── Closing Timeline ── */}
-        {(() => {
-          const upcoming = deals.filter(d => d.closing_date && daysUntil(d.closing_date) >= -30).sort((a,b) => daysUntil(a.closing_date)-daysUntil(b.closing_date));
-          if (!upcoming.length) return null;
-          const now = new Date(); const rangeStart = new Date('2026-01-01'); const rangeEnd = new Date('2027-01-01');
-          const span = rangeEnd - rangeStart;
-          return (
-            <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
-              <div style={{ fontSize: '0.62rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.75rem', fontWeight: 700 }}>Closing Timeline</div>
-              <div style={{ position: 'relative', height: 32 }}>
-                <div style={{ position: 'absolute', top: 14, left: 0, right: 0, height: 2, background: 'var(--border)' }} />
-                {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
-                  <div key={m} style={{ position: 'absolute', top: 20, left: `${(i/11)*100}%`, transform: 'translateX(-50%)', fontSize: '0.52rem', color: 'var(--faint)' }}>{m}</div>
-                ))}
-                {upcoming.map(d => {
-                  const pct = Math.max(0, Math.min(98, (new Date(d.closing_date) - rangeStart) / span * 100));
-                  const color = d.committed ? 'var(--pass)' : d.book_published ? 'var(--highlight)' : TT_ORANGE;
-                  return <div key={d.id} title={`${d.name} — ${fmtDate(d.closing_date)}`}
-                    style={{ position: 'absolute', top: 4, left: `${pct}%`, transform: 'translateX(-50%)', width: 10, height: 10, borderRadius: '50%', background: color, boxShadow: `0 0 0 2px ${color}40`, cursor: 'default' }} />;
-                })}
+        {/* ── 2026 closing-timeline dot strip ── */}
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 22px', marginBottom: 20 }}>
+          <div className="mono" style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 16 }}>2026 closing timeline</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', paddingTop: 6 }}>
+            <div style={{ position: 'absolute', left: 0, right: 0, top: 11, height: 1.5, background: 'var(--border)' }} />
+            {['J','F','M','A','M','J','J','A','S','O','N','D'].map((mon, i) => (
+              <div key={i} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, flex: 1 }}>
+                <span style={{ width: 11, height: 11, borderRadius: '50%', background: monthCounts[i] ? 'var(--pass)' : 'var(--border2)', border: '2px solid var(--panel)', boxShadow: '0 0 0 1px var(--border2)', zIndex: 1 }} />
+                <span className="mono" style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--muted)' }}>{mon}</span>
+                <span className="mono" style={{ fontSize: 9, fontWeight: 600, color: 'var(--text)', minHeight: 11 }}>{monthCounts[i] || ''}</span>
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem 1rem', marginTop: '0.6rem' }}>
-                {upcoming.map(d => {
-                  const days = daysUntil(d.closing_date);
-                  return (
-                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.63rem' }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: d.committed ? 'var(--pass)' : d.book_published ? 'var(--highlight)' : TT_ORANGE }} />
-                      <span style={{ color: 'var(--muted)' }}>{d.name.split(',')[0]}</span>
-                      <span style={{ color: 'var(--faint)' }}>{fmtDate(d.closing_date)}</span>
-                      {days != null && days >= 0 && days <= 60 && <span style={{ color: days <= 30 ? 'var(--fail)' : TT_ORANGE }}>{days}d</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* ── Toolbar ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-          {['All','Construction','Perm/Bridge'].map(o => (
-            <button key={o} onClick={() => setFilterType(o)} className={`chip ${filterType===o ? 'chip-active' : ''}`}>{o}</button>
-          ))}
-          <div style={{ flex: 1 }} />
-          {msg && <span style={{ fontSize: '0.68rem', color: msg.isErr ? 'var(--fail)' : 'var(--pass)' }}>{msg.text}</span>}
-          <button onClick={() => packageInputRef.current && packageInputRef.current.click()} disabled={parsing} className="btn btn-sm" style={{ opacity: parsing ? 0.7 : 1, cursor: parsing ? 'wait' : 'pointer' }} title="Pull deal info from an Investment Overview PDF — you only enter the lenders">
-            {parsing ? 'Reading package…' : '⬆ Upload Bank Package'}
-          </button>
-          <button onClick={startNew} className="btn btn-sm btn-primary">+ Add Deal</button>
+            ))}
+          </div>
         </div>
 
         {/* ── Deal Cards, grouped by financing stage ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
           {STAGES.map(stage => {
           const stageDeals = filtered.filter(d => stageOf(d) === stage.key);
           if (!stageDeals.length) return null;
           const stageBudget = stageDeals.reduce((s, d) => s + (d.total_budget || 0), 0);
           return (
           <div key={stage.key}>
-            {/* Stage header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: '0.6rem', paddingBottom: '0.45rem', borderBottom: `1px solid color-mix(in srgb, ${stage.color} 30%, var(--border))` }}>
+            {/* Stage heading: colored dot + name + meta */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 12 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
-              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', color: stage.color }}>{stage.label}</span>
-              <span style={{ fontSize: '0.66rem', color: 'var(--faint2)' }}>
-                {stageDeals.length} deal{stageDeals.length === 1 ? '' : 's'} · {fmt$(stageBudget)}
+              <span className="mono" style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text)' }}>{stage.label}</span>
+              <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
+                · {stageDeals.length} deal{stageDeals.length === 1 ? '' : 's'} · {fmt$(stageBudget)}
               </span>
-              <span style={{ flex: 1 }} />
-              <span style={{ fontSize: '0.62rem', color: 'var(--faint)' }}>{stage.desc}</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {/* 3-up deal card grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 13, alignItems: 'start' }}>
           {stageDeals.map(d => {
             const isOpen = expandedId === d.id;
             const days = daysUntil(d.closing_date);
+            const [dealTitle, ...locParts] = String(d.name || '').split(',');
+            const loc = [locParts.join(',').trim() || null, d.division].filter(Boolean).join(' · ');
+            const detailRow = (lbl, val, valStyle) => (
+              <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--text2)' }}>{lbl}</span>
+                <span className="mono" style={{ fontSize: 11, fontWeight: 500, color: 'var(--text)', textAlign: 'right', ...valStyle }}>{val}</span>
+              </div>
+            );
+            const sectionLabel = (text, extra) => (
+              <div className="mono" style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.08em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 8, ...extra }}>{text}</div>
+            );
             return (
-              <div key={d.id} style={{ background: 'var(--panel)', border: `1px solid ${isOpen ? 'color-mix(in srgb, var(--accent) 38%, transparent)' : 'var(--border)'}`, borderRadius: 6, overflow: 'hidden' }}>
-                {/* Card header row */}
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1.2fr 1fr 1fr auto auto', alignItems: 'center', gap: '1rem', padding: '0.75rem 1.1rem' }}>
-                  {/* Name */}
-                  <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '0.9rem' }}>{d.name}</span>
-                    {d.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ fontSize: '0.6rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{d.deal_uid}</span>}
-                    {statusBadge(d)}{typeBadge(d)}
-                  </div>
-                  {/* Lender */}
-                  <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ cursor: 'pointer' }}>
-                    <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Lender</div>
-                    <div style={{ fontSize: '0.8rem', color: !d.primary_lender ? 'var(--fail)' : 'var(--muted)', fontWeight: 600 }}>
-                      {d.primary_lender || <span style={{ color: 'var(--fail)' }}>TBD</span>}
-                      {d.secondary_lender && <span style={{ color: 'var(--faint)', fontWeight: 400 }}> / {d.secondary_lender}</span>}
+              <div key={d.id} onClick={() => setExpandedId(isOpen ? null : d.id)}
+                style={{ cursor: 'pointer', background: 'var(--panel)', border: `1px solid ${isOpen ? 'color-mix(in srgb, var(--accent) 40%, transparent)' : 'var(--border)'}`, borderRadius: 10, padding: '15px 16px' }}>
+                {/* Name + loc + stage tag */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                      {dealTitle}
+                      {d.deal_uid && <span className="mono" title="Deal Registry id — stable across every tab" style={{ fontSize: 9, fontWeight: 500, color: 'var(--faint)', marginLeft: 7 }}>{d.deal_uid}</span>}
                     </div>
+                    <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 2 }}>{loc}</div>
                   </div>
-                  {/* Date */}
-                  <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ cursor: 'pointer' }}>
-                    <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>{d.type==='Perm/Bridge' ? (d.action||'Maturity') : 'Closing'}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600 }}>
-                      {fmtDate(d.closing_date)}
-                      {days != null && days >= 0 && days <= 90 && <span style={{ marginLeft: 6, fontSize: '0.63rem', color: days <= 30 ? 'var(--fail)' : TT_ORANGE }}>{days}d</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                    {dealTag(d)}
+                    {pinUnlocked && (<>
+                      <button onClick={e => { e.stopPropagation(); startEdit(d); }} className="btn btn-ghost btn-sm" style={{ padding: '2px 5px' }} title="Edit deal">✎</button>
+                      <button onClick={e => { e.stopPropagation(); setConfirmDel(d.id); }} className="btn btn-ghost btn-sm" style={{ padding: '2px 5px' }} title="Delete deal">✕</button>
+                    </>)}
+                  </div>
+                </div>
+                {/* Budget / Units / Dev yield */}
+                <div style={{ display: 'flex', gap: 16, marginTop: 14, paddingTop: 13, borderTop: '1px solid var(--border)' }}>
+                  {[
+                    ['Budget',    fmt$(d.total_budget),                                          'var(--text)'],
+                    ['Units',     d.units ? fmtN(d.units) : '—',                                 'var(--text)'],
+                    ['Dev yield', d.dev_yield ? `${Number(d.dev_yield).toFixed(2)}%` : '—',      'var(--pass)'],
+                  ].map(([lbl, val, color]) => (
+                    <div key={lbl}>
+                      <div className="mono" style={{ fontSize: 9, fontWeight: 500, letterSpacing: '0.06em', color: 'var(--muted)', textTransform: 'uppercase' }}>{lbl}</div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 600, color, marginTop: 3 }}>{val}</div>
                     </div>
-                  </div>
-                  {/* Units */}
-                  <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ cursor: 'pointer' }}>
-                    <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Units</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600 }}>{d.units ? fmtN(d.units) : '—'}</div>
-                  </div>
-                  {/* Budget */}
-                  <div onClick={() => setExpandedId(isOpen ? null : d.id)} style={{ cursor: 'pointer' }}>
-                    <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 2 }}>Total Budget</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 700 }}>{fmt$(d.total_budget)}</div>
-                  </div>
-                  {/* Edit / Delete — only in edit mode (PIN unlocked) */}
-                  {pinUnlocked && (
-                    <>
-                      <button onClick={() => startEdit(d)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--faint2)', cursor: 'pointer', padding: '3px 9px', fontSize: '0.7rem', fontFamily: 'inherit' }}>Edit</button>
-                      <button onClick={() => setConfirmDel(d.id)} style={{ background: 'none', border: 'none', color: 'var(--border)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 4px' }} title="Delete deal">✕</button>
-                    </>
-                  )}
+                  ))}
                 </div>
 
-                {/* Expanded detail */}
+                {/* Expanded detail — Stabilized Proforma + economics + financing + note */}
                 {isOpen && (
-                  <div style={{ borderTop: '1px solid var(--border)', padding: '1.1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
-                    {/* Economics */}
-                    <div>
-                      <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Deal Economics</div>
-                      {[['Total Budget',fmt$(d.total_budget)],['Cost / Unit',fmt$(d.cost_per_unit)],['Cost / SF',d.cost_per_sf?`$${d.cost_per_sf}`:'—'],['Hard Cost / Unit',fmt$(d.hard_cost_per_unit)],['Land Cost',fmt$(d.land_cost)],['Soft Costs',fmt$(d.soft_cost)],['Hard Costs',fmt$(d.hard_cost)]].map(([lbl,val]) => (
-                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--faint3)' }}>{lbl}</span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 600 }}>{val}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Proforma */}
-                    <div>
-                      <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Stabilized Proforma</div>
-                      {[['Total Units',fmtN(d.units)],['Avg Rent',d.avg_rent?`$${Number(d.avg_rent).toLocaleString()}`:'—'],['Avg SF',d.avg_sf?`${Number(d.avg_sf).toLocaleString()} SF`:'—'],['Gross Pot. Rent',fmt$(d.gpr)],['Gross Pot. Income',fmt$(d.gpi)],['Eff. Gross Income',fmt$(d.egi)],['Net Op. Income',fmt$(d.noi)],['Dev Yield',d.dev_yield?`${Number(d.dev_yield).toFixed(2)}%`:'—'],['Cap Rate',d.cap_rate?`${Number(d.cap_rate).toFixed(2)}%`:'—'],['Breakeven Occ.',d.breakeven_occ?`${Number(d.breakeven_occ).toFixed(2)}%`:'—'],['LTV',d.ltv?`${Number(d.ltv).toFixed(0)}%`:'—']].map(([lbl,val]) => (
-                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--faint3)' }}>{lbl}</span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 600 }}>{val}</span>
-                        </div>
-                      ))}
-                      {d.unit_mix && d.unit_mix.length > 0 && (
-                        <div style={{ marginTop: '0.75rem' }}>
-                          <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.4rem' }}>Unit Mix</div>
-                          {d.unit_mix.map((u, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
-                              <div style={{ fontSize: '0.65rem', color: 'var(--faint2)', width: 90, flexShrink: 0 }}>{u.type}</div>
-                              <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
-                                <div style={{ width: `${u.pct||0}%`, height: '100%', background: TT_ORANGE, borderRadius: 4 }} />
-                              </div>
-                              <div style={{ fontSize: '0.65rem', color: 'var(--muted)', width: 22, textAlign: 'right' }}>{u.count}</div>
-                              <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', width: 42, textAlign: 'right' }}>{u.market_rent ? `$${Number(u.market_rent).toLocaleString()}` : '—'}</div>
+                  <div style={{ marginTop: 13, paddingTop: 13, borderTop: '1px solid var(--border)' }}>
+                    {sectionLabel('Stabilized proforma')}
+                    {[
+                      ['Units · avg rent', d.units || d.avg_rent ? `${d.units ? fmtN(d.units) : '—'} · ${d.avg_rent ? '$' + Number(d.avg_rent).toLocaleString() : '—'}` : '—'],
+                      ['Avg SF',                 d.avg_sf ? `${Number(d.avg_sf).toLocaleString()} SF` : '—'],
+                      ['Gross potential rent',   fmt$(d.gpr)],
+                      ['Gross potential income', fmt$(d.gpi)],
+                      ['Effective gross income', fmt$(d.egi)],
+                      ['Stabilized NOI',         fmt$(d.noi)],
+                      ['Cap rate · dev yield',   d.cap_rate || d.dev_yield ? `${d.cap_rate ? Number(d.cap_rate).toFixed(2) + '%' : '—'} · ${d.dev_yield ? Number(d.dev_yield).toFixed(2) + '%' : '—'}` : '—'],
+                      ['Breakeven occupancy',    d.breakeven_occ ? `${Number(d.breakeven_occ).toFixed(2)}%` : '—'],
+                      ['LTV',                    d.ltv ? `${Number(d.ltv).toFixed(0)}%` : '—'],
+                    ].map(([lbl, val]) => detailRow(lbl, val))}
+                    {d.unit_mix && d.unit_mix.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        {sectionLabel('Unit mix', { marginBottom: 5 })}
+                        {d.unit_mix.map((u, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                            <div className="mono" style={{ fontSize: 10, color: 'var(--text2)', width: 78, flexShrink: 0 }}>{u.type}</div>
+                            <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
+                              <div style={{ width: `${u.pct || 0}%`, height: '100%', background: 'var(--accent)', borderRadius: 4 }} />
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    {/* Market + Financing */}
-                    <div>
-                      <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Market Highlights</div>
-                      <p style={{ fontSize: '0.75rem', color: 'var(--faint2)', lineHeight: 1.55, margin: '0 0 1rem' }}>{d.highlights || '—'}</p>
-                      <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 700 }}>Financing Status</div>
-                      {[['Primary Lender',d.primary_lender||'TBD',!d.primary_lender],['Secondary Lender',d.secondary_lender||'—',false],['Book Published',d.book_published?'Yes':'No',false,d.book_published],['Committed',d.committed?'Yes':'No',false,d.committed],['Closing / Maturity',fmtDate(d.closing_date),false]].map(([lbl,val,warn,ok]) => (
-                        <div key={lbl} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--faint3)' }}>{lbl}</span>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: warn?'var(--fail)':ok===true?'var(--pass)':ok===false&&val==='No'?'var(--fail)':'var(--muted)' }}>{val}</span>
-                        </div>
-                      ))}
-                    </div>
+                            <div className="mono" style={{ fontSize: 10, color: 'var(--text)', width: 24, textAlign: 'right' }}>{u.count}</div>
+                            <div className="mono" style={{ fontSize: 10, color: 'var(--muted)', width: 44, textAlign: 'right' }}>{u.market_rent ? `$${Number(u.market_rent).toLocaleString()}` : '—'}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {sectionLabel('Deal economics', { marginTop: 12 })}
+                    {[
+                      ['Total budget',     fmt$(d.total_budget)],
+                      ['Cost / unit',      fmt$(d.cost_per_unit)],
+                      ['Cost / SF',        d.cost_per_sf ? `$${d.cost_per_sf}` : '—'],
+                      ['Hard cost / unit', fmt$(d.hard_cost_per_unit)],
+                      ['Land cost',        fmt$(d.land_cost)],
+                      ['Soft costs',       fmt$(d.soft_cost)],
+                      ['Hard costs',       fmt$(d.hard_cost)],
+                    ].map(([lbl, val]) => detailRow(lbl, val))}
+                    {sectionLabel('Financing', { marginTop: 12 })}
+                    {detailRow('Primary lender', d.primary_lender || 'TBD', !d.primary_lender ? { color: 'var(--fail)' } : undefined)}
+                    {d.secondary_lender && detailRow('Secondary lender', d.secondary_lender)}
+                    {detailRow(
+                      d.type === 'Perm/Bridge' ? (d.action || 'Maturity') : 'Closing',
+                      <>
+                        {fmtDate(d.closing_date)}
+                        {days != null && days >= 0 && days <= 90 && <span style={{ marginLeft: 6, color: days <= 30 ? 'var(--fail)' : 'var(--highlight)' }}>{days}d</span>}
+                      </>
+                    )}
+                    {detailRow('Book published', d.book_published ? 'Yes' : 'No', { color: d.book_published ? 'var(--pass)' : 'var(--fail)' })}
+                    {detailRow('Committed', d.committed ? 'Yes' : 'No', { color: d.committed ? 'var(--pass)' : 'var(--fail)' })}
+                    {detailRow('Status', d.status === 'closed' ? 'Closed' : d.status === 'active' ? 'In process' : 'Pipeline')}
+                    {d.highlights && (
+                      <div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 9, lineHeight: 1.5 }}>{d.highlights}</div>
+                    )}
                   </div>
                 )}
               </div>
