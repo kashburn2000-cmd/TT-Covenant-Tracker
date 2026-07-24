@@ -28,6 +28,7 @@ import {
   buildLoanTasks,
   buildCovenantTasks,
   buildConversionTasks,
+  buildHedgeTasks,
   buildReportingTasks,
   tasksNeedingEmail,
   digestHtml,
@@ -77,6 +78,16 @@ async function main() {
   }
   const properties = await sbGet('properties?select=id,property,lender,test_type,covenant_type,covenant_req,covenant_date,hidden,waived');
 
+  let hedgeTasks = [];
+  try {
+    const hedges = await sbGet('hedges?select=id,deal_name,hedge_type,notional,strike_pct,fixed_rate_pct,maturity_date,counterparty');
+    hedgeTasks = buildHedgeTasks(hedges, TODAY);
+  } catch (err) {
+    if (err.status === 404 || /PGRST205|does not exist/.test(err.message)) {
+      console.log('hedges not set up yet — skipping hedge tasks.');
+    } else throw err;
+  }
+
   let reporting = [];
   try {
     const loanById = new Map(loans.map(l => [String(l.id), l]));
@@ -98,8 +109,8 @@ async function main() {
   const loanTasks = buildLoanTasks(loans, TODAY);
   const covenantTasks = buildCovenantTasks(properties, TODAY);
   const conversionTasks = buildConversionTasks(loans, TODAY);
-  const generated = [...loanTasks, ...covenantTasks, ...conversionTasks, ...reporting];
-  console.log(`Generated ${generated.length} task(s): ${loanTasks.length} loan, ${covenantTasks.length} covenant, ${conversionTasks.length} conversion, ${reporting.length} reporting.`);
+  const generated = [...loanTasks, ...covenantTasks, ...conversionTasks, ...hedgeTasks, ...reporting];
+  console.log(`Generated ${generated.length} task(s): ${loanTasks.length} loan, ${covenantTasks.length} covenant, ${conversionTasks.length} conversion, ${hedgeTasks.length} hedge, ${reporting.length} reporting.`);
 
   if (generated.length) await upsertTasks(generated);
   console.log('Tasks synced.');

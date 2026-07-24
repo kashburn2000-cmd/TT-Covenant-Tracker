@@ -93,6 +93,33 @@ export function buildLoanTasks(loans, todayISO) {
   return out;
 }
 
+// ── Hedges → maturity tasks ──────────────────────────────────────────────────
+// Cap/swap expirations need runway to price a replacement (or decide to run
+// unhedged), so hedge maturities remind at 120 days.
+export function buildHedgeTasks(hedges, todayISO) {
+  const out = [];
+  for (const h of hedges || []) {
+    if (!h.maturity_date || !inWindow(h.maturity_date, todayISO)) continue;
+    const terms = h.hedge_type === 'cap'
+      ? `${h.strike_pct != null ? `${h.strike_pct}% strike ` : ''}cap`
+      : `${h.fixed_rate_pct != null ? `${h.fixed_rate_pct}% fixed ` : ''}swap`;
+    out.push({
+      dedupe_key: dedupeKey('hedge_maturity', 'hedges', h.id, h.maturity_date),
+      kind: 'hedge_maturity',
+      title: `${h.deal_name} — ${h.hedge_type} expires`,
+      detail: `$${Math.round((h.notional || 0) / 1e6)}M ${terms}${h.counterparty ? ` with ${h.counterparty}` : ''}. Price a replacement or confirm the plan to run unhedged.`,
+      due_date: h.maturity_date,
+      lead_days: DEFAULT_LEAD_DAYS.hedge_maturity,
+      deal_name: h.deal_name,
+      lender: h.counterparty || null,
+      source: 'auto',
+      source_table: 'hedges',
+      source_id: String(h.id),
+    });
+  }
+  return out;
+}
+
 // ── Rate conversion options → window-opening tasks ───────────────────────────
 // Loans with a floating→fixed conversion option (db/loan_conversion_setup.sql)
 // get a reminder due when the exercise window opens, so the conversion

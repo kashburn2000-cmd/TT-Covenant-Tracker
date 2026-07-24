@@ -3,6 +3,7 @@ import {
   buildLoanTasks,
   buildCovenantTasks,
   buildConversionTasks,
+  buildHedgeTasks,
   buildReportingTasks,
   tasksNeedingEmail,
   digestHtml,
@@ -98,6 +99,28 @@ describe('buildCovenantTasks', () => {
   it('skips hidden and waived rows', () => {
     expect(buildCovenantTasks([{ ...prop, hidden: true }], TODAY)).toHaveLength(0);
     expect(buildCovenantTasks([{ ...prop, waived: true }], TODAY)).toHaveLength(0);
+  });
+});
+
+describe('buildHedgeTasks', () => {
+  const hedge = {
+    id: 'h-1', deal_name: 'North Port', hedge_type: 'cap', notional: 50_000_000,
+    strike_pct: 4.0, maturity_date: '2026-12-31', counterparty: 'Chatham',
+  };
+
+  it('emits a 120-day-lead expiration task', () => {
+    const tasks = buildHedgeTasks([hedge], TODAY);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].kind).toBe('hedge_maturity');
+    expect(tasks[0].lead_days).toBe(120);
+    expect(tasks[0].title).toBe('North Port — cap expires');
+    expect(tasks[0].detail).toContain('$50M 4% strike cap with Chatham');
+  });
+
+  it('describes swaps by their fixed leg and skips long-matured hedges', () => {
+    const swap = { ...hedge, hedge_type: 'swap', strike_pct: null, fixed_rate_pct: 3.5 };
+    expect(buildHedgeTasks([swap], TODAY)[0].detail).toContain('3.5% fixed swap');
+    expect(buildHedgeTasks([{ ...hedge, maturity_date: '2026-01-01' }], TODAY)).toHaveLength(0);
   });
 });
 

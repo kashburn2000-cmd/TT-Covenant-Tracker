@@ -13,6 +13,7 @@ import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistry
 import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
 import { TasksWidget } from './TasksWidget.jsx';
 import { buildLenderRollup, buildLenderComparison, rollupStats } from '../lenderExposure.js';
+import { capExpectedReceipts, swapMtm, hedgeSummary } from '../hedgeCalc.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -930,6 +931,171 @@ function LenderExposureWidget({ projects }) {
   );
 }
 
+// ── Hedge Tracker ─────────────────────────────────────────────────────────────
+// Interest-rate caps and swaps (public.hedges — db/hedges_setup.sql), valued
+// against the in-house SOFR forward curve (src/hedgeCalc.js): expected cap
+// receipts and payer-fixed swap MTM, both intrinsic/undiscounted monitoring
+// figures. Maturity reminders flow through the nightly task generator.
+const EMPTY_HEDGE = { deal_name: '', hedge_type: 'cap', notional: '', strike_pct: '', fixed_rate_pct: '', effective_date: '', maturity_date: '', counterparty: '', premium_paid: '' };
+
+function HedgeWidget({ pinUnlocked }) {
+  const [hedges, setHedges] = useState(null); // null = loading
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [draft, setDraft] = useState(null);   // EMPTY_HEDGE clone while adding
+  const [openId, setOpenId] = useState(null);
+
+  async function load() {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/hedges?order=maturity_date.asc`, { headers: SB_HEADERS });
+      if (!res.ok) {
+        const body = await res.text();
+        if (res.status === 404 || /relation .* does not exist|PGRST205/.test(body)) setSetupNeeded(true);
+        setHedges([]);
+        return;
+      }
+      setHedges(await res.json());
+    } catch { setHedges([]); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function saveDraft() {
+    const d = draft;
+    if (!d.deal_name.trim() || !d.notional || !d.maturity_date) return;
+    const body = {
+      deal_name: d.deal_name.trim(),
+      hedge_type: d.hedge_type,
+      notional: Number(d.notional),
+      strike_pct: d.hedge_type === 'cap' && d.strike_pct !== '' ? Number(d.strike_pct) : null,
+      fixed_rate_pct: d.hedge_type === 'swap' && d.fixed_rate_pct !== '' ? Number(d.fixed_rate_pct) : null,
+      effective_date: d.effective_date || null,
+      maturity_date: d.maturity_date,
+      counterparty: d.counterparty.trim() || null,
+      premium_paid: d.premium_paid !== '' ? Number(d.premium_paid) : null,
+    };
+    const res = await fetch(`${SB_URL}/rest/v1/hedges`, { method: 'POST', headers: SB_HEADERS, body: JSON.stringify(body) });
+    if (res.ok) { setDraft(null); load(); }
+  }
+
+  async function removeHedge(id) {
+    await fetch(`${SB_URL}/rest/v1/hedges?id=eq.${id}`, { method: 'DELETE', headers: SB_HEADERS });
+    load();
+  }
+
+  const today = todayISO();
+  const summary = useMemo(() => hedgeSummary(hedges || [], today), [hedges, today]);
+
+  const maturityPill = (iso) => {
+    const m = monthsUntil(iso);
+    if (m < 0) return ['red', 'EXPIRED'];
+    if (m < 4) return ['red', `${Math.ceil(m)} mo`];
+    if (m < 12) return ['yellow', `${Math.ceil(m)} mo`];
+    return ['green', m < 24 ? `${Math.ceil(m)} mo` : `${(m / 12).toFixed(1)} yr`];
+  };
+  const inSt = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.7rem', padding: '0.28rem 0.45rem' };
+
+  if (setupNeeded) {
+    return (
+      <div style={{ color: 'var(--muted)', fontSize: '0.78rem', lineHeight: 1.7, padding: '0.5rem' }}>
+        The hedges table hasn't been created yet — run <code>db/hedges_setup.sql</code> in the Supabase SQL editor once, then reload.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <StatTile label="Active hedges" value={summary.active} sub={`${fmtM(summary.notional)} notional`} />
+        <StatTile label="Cap value (intrinsic)" value={fmtM(summary.capValue)} sub="Expected receipts vs forwards" />
+        <StatTile label="Swap MTM" value={fmtM(summary.swapValue)} sub="Payer-fixed vs forwards, undiscounted" />
+        {pinUnlocked && !draft && (
+          <button onClick={() => setDraft({ ...EMPTY_HEDGE })} className="btn btn-sm" style={{ marginLeft: 'auto' }}>+ Add Hedge</button>
+        )}
+      </div>
+      {draft && (
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.55rem' }}>
+          <input placeholder="Deal / facility" value={draft.deal_name} onChange={e => setDraft(d => ({ ...d, deal_name: e.target.value }))} style={{ ...inSt, flex: '1.5 1 120px', background: 'var(--panel)' }} />
+          <select value={draft.hedge_type} onChange={e => setDraft(d => ({ ...d, hedge_type: e.target.value }))} style={{ ...inSt, background: 'var(--panel)' }}>
+            <option value="cap">cap</option><option value="swap">swap</option>
+          </select>
+          <input type="number" placeholder="Notional $" value={draft.notional} onChange={e => setDraft(d => ({ ...d, notional: e.target.value }))} style={{ ...inSt, width: 110, background: 'var(--panel)' }} />
+          {draft.hedge_type === 'cap'
+            ? <input type="number" step="0.05" placeholder="Strike %" value={draft.strike_pct} onChange={e => setDraft(d => ({ ...d, strike_pct: e.target.value }))} style={{ ...inSt, width: 80, background: 'var(--panel)' }} />
+            : <input type="number" step="0.05" placeholder="Fixed %" value={draft.fixed_rate_pct} onChange={e => setDraft(d => ({ ...d, fixed_rate_pct: e.target.value }))} style={{ ...inSt, width: 80, background: 'var(--panel)' }} />}
+          <input type="date" title="Effective date" value={draft.effective_date} onChange={e => setDraft(d => ({ ...d, effective_date: e.target.value }))} style={{ ...inSt, background: 'var(--panel)' }} />
+          <input type="date" title="Maturity date (required)" value={draft.maturity_date} onChange={e => setDraft(d => ({ ...d, maturity_date: e.target.value }))} style={{ ...inSt, background: 'var(--panel)' }} />
+          <input placeholder="Counterparty" value={draft.counterparty} onChange={e => setDraft(d => ({ ...d, counterparty: e.target.value }))} style={{ ...inSt, width: 110, background: 'var(--panel)' }} />
+          {draft.hedge_type === 'cap' && (
+            <input type="number" placeholder="Premium $" value={draft.premium_paid} onChange={e => setDraft(d => ({ ...d, premium_paid: e.target.value }))} style={{ ...inSt, width: 100, background: 'var(--panel)' }} />
+          )}
+          <button onClick={saveDraft} disabled={!draft.deal_name.trim() || !draft.notional || !draft.maturity_date} className="btn btn-sm">Save</button>
+          <button onClick={() => setDraft(null)} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem' }}>Cancel</button>
+        </div>
+      )}
+      <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>
+            <th>Deal</th><th>Type</th><th style={{ textAlign: 'right' }}>Notional</th><th style={{ textAlign: 'right' }}>Strike / Fixed</th>
+            <th>Counterparty</th><th>Maturity</th><th>Time left</th><th style={{ textAlign: 'right' }}>Value vs Fwds</th>{pinUnlocked && <th />}
+          </tr></thead>
+          <tbody>
+            {(hedges || []).map(h => {
+              const [cls, label] = maturityPill(h.maturity_date);
+              const cap = capExpectedReceipts(h, today);
+              const swap = swapMtm(h, today);
+              const value = cap ? cap.total : swap ? swap.total : null;
+              const isOpen = openId === h.id;
+              const months = cap ? cap.months.map(m => ({ ...m, amt: m.receipt })) : swap ? swap.months.map(m => ({ ...m, amt: m.net })) : [];
+              return (
+                <React.Fragment key={h.id}>
+                  <tr onClick={() => setOpenId(isOpen ? null : h.id)} style={{ cursor: 'pointer' }} title="Click for the month-by-month breakdown">
+                    <td style={{ fontWeight: 600 }}>{h.deal_name}</td>
+                    <td><span className={`pill ${h.hedge_type === 'cap' ? 'blue' : 'yellow'}`}>{h.hedge_type}</span></td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(h.notional)}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{h.strike_pct != null ? `${Number(h.strike_pct).toFixed(2)}%` : h.fixed_rate_pct != null ? `${Number(h.fixed_rate_pct).toFixed(2)}%` : '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{h.counterparty || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(h.maturity_date)}</td>
+                    <td><span className={`pill ${cls}`}>{label}</span></td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: value == null ? undefined : value >= 0 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)', fontWeight: 600 }}>
+                      {value == null ? '—' : fmtM(value)}
+                    </td>
+                    {pinUnlocked && (
+                      <td style={{ textAlign: 'right' }}>
+                        <button onClick={e => { e.stopPropagation(); removeHedge(h.id); }} title="Delete hedge"
+                          style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2 }}>✕</button>
+                      </td>
+                    )}
+                  </tr>
+                  {isOpen && months.length > 0 && (
+                    <tr style={{ background: 'var(--panel2)' }}>
+                      <td colSpan={pinUnlocked ? 9 : 8} style={{ padding: '0.5rem 0.85rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem 1rem', fontSize: '0.66rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                          {months.map(m => (
+                            <span key={m.date}>
+                              {m.date.slice(0, 7)}: fwd {(m.fwd * 100).toFixed(2)}% → <b style={{ color: m.amt >= 0 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)' }}>{fmtM(m.amt)}</b>
+                            </span>
+                          ))}
+                        </div>
+                        <div style={{ marginTop: 4, fontSize: '0.62rem', color: 'var(--faint)' }}>
+                          Intrinsic vs the in-house SOFR forward curve, undiscounted — a monitoring figure, not a dealer valuation. Attach confirmations to the loan's Documents (category: hedge).
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+        {hedges !== null && hedges.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>
+            No hedges recorded yet{pinUnlocked ? ' — use + Add Hedge above.' : '.'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Forward Curve Tracker ─────────────────────────────────────────────────────
 // Snapshot series are ordinal in time, so they wear a validated one-hue ramp:
 // older curves lighter, the newest darkest/strongest.
@@ -1758,6 +1924,7 @@ const WIDGETS = {
   curve:      { title: 'Forward Curve Tracker',  defaultGrid: { x: 0, y: 21, w: 12, h: 10, minW: 6, minH: 6 } },
   tasks:      { title: 'Tasks & Reminders',      defaultGrid: { x: 0, y: 31, w: 12, h: 9,  minW: 4, minH: 5 } },
   lenders:    { title: 'Lender Exposure',        defaultGrid: { x: 0, y: 40, w: 12, h: 10, minW: 5, minH: 5 } },
+  hedges:     { title: 'Hedge Tracker',          defaultGrid: { x: 0, y: 50, w: 12, h: 9,  minW: 5, minH: 5 } },
 };
 const DEFAULT_WIDGETS = Object.keys(WIDGETS);
 const DEFAULT_LAYOUT = DEFAULT_WIDGETS.map(k => ({ i: k, ...WIDGETS[k].defaultGrid }));
@@ -2020,6 +2187,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       case 'curve':      return <CurveWidget pinUnlocked={pinUnlocked} requirePin={requirePin} />;
       case 'tasks':      return <TasksWidget pinUnlocked={pinUnlocked} />;
       case 'lenders':    return <LenderExposureWidget projects={visibleProjects} />;
+      case 'hedges':     return <HedgeWidget pinUnlocked={pinUnlocked} />;
       default: return null;
     }
   }
