@@ -4,6 +4,7 @@ import { TT_ORANGE } from '../theme.js';
 import { LockIcon } from '../icons.jsx';
 import { slugify } from '../format.js';
 import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
+import { proposeRequirementsFromLoan } from '../parseReportingReqs.js';
 import { supabase } from '../auth.js';
 
 const DOC_CATEGORIES = {
@@ -288,6 +289,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const [reportingReqs, setReportingReqs] = useState([]);
   const [reqsAvailable, setReqsAvailable] = useState(true);
   const [reqDraft, setReqDraft] = useState(null); // { loanId, item, party, frequency, due_month, due_day, recipient } | null
+  const [reqProposals, setReqProposals] = useState(null); // { loanId, rows: [{...draft, include}] } — parsed from abstract prose
 
   // Amortization schedule viewer — open loan id + editable inputs (strings).
   // Hoisted here (not in Detail) so typing survives LoansTab re-renders.
@@ -1039,11 +1041,64 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         {rows.length === 0 && !drafting && (
           <div style={{ fontSize: '0.68rem', color: 'var(--faint)', padding: '2px 0' }}>None recorded yet.</div>
         )}
-        {pinUnlocked && !drafting && (
-          <button
-            onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}
-            style={{ marginTop: 4, background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', fontSize: '0.66rem', padding: '0.18rem 0.5rem', cursor: 'pointer' }}
-          >+ Add requirement</button>
+        {pinUnlocked && !drafting && reqProposals?.loanId !== l.id && (
+          <div style={{ display: 'flex', gap: '0.35rem', marginTop: 4 }}>
+            <button
+              onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', fontSize: '0.66rem', padding: '0.18rem 0.5rem', cursor: 'pointer' }}
+            >+ Add requirement</button>
+            {(l.financial_reporting_borrower || l.financial_reporting_guarantor) && (
+              <button
+                onClick={() => {
+                  const proposed = proposeRequirementsFromLoan(l)
+                    // don't re-propose items that already exist for this loan
+                    .filter(p => !rows.some(r => r.item.toLowerCase() === p.item.toLowerCase() && r.party === p.party));
+                  setReqProposals({ loanId: l.id, rows: proposed.map(p => ({ ...p, include: true })) });
+                }}
+                title="Parse the abstract's Reporting — Borrower / Guarantor prose into structured requirements for review"
+                style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', fontSize: '0.66rem', padding: '0.18rem 0.5rem', cursor: 'pointer' }}
+              >⚡ From abstract</button>
+            )}
+          </div>
+        )}
+        {reqProposals?.loanId === l.id && (
+          <div style={{ marginTop: 6, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.5rem 0.6rem' }}>
+            <div style={{ fontSize: '0.62rem', color: 'var(--muted)', marginBottom: 4 }}>
+              {reqProposals.rows.length
+                ? 'Parsed from the abstract’s reporting prose — uncheck anything wrong, then add. Dates are best-guess anchors ("within N days" of period end); adjust after adding if needed.'
+                : 'Nothing new found — the reporting prose has no frequency keywords (monthly / quarterly / semi-annual / annual) that aren’t already recorded.'}
+            </div>
+            {reqProposals.rows.map((p, i) => (
+              <label key={i} style={{ display: 'flex', gap: '0.45rem', alignItems: 'baseline', padding: '2px 0', fontSize: '0.7rem', cursor: 'pointer' }}>
+                <input type="checkbox" checked={p.include}
+                  onChange={() => setReqProposals(rp => ({ ...rp, rows: rp.rows.map((r, j) => j === i ? { ...r, include: !r.include } : r) }))} />
+                <span style={{ color: 'var(--text2)' }}>{p.item} <span style={{ color: 'var(--faint3)' }}>({p.party})</span></span>
+                <span style={{ marginLeft: 'auto', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{reqSchedule(p)}</span>
+              </label>
+            ))}
+            <div style={{ display: 'flex', gap: '0.4rem', marginTop: 5 }}>
+              {reqProposals.rows.some(p => p.include) && (
+                <button
+                  onClick={async () => {
+                    const rowsToAdd = reqProposals.rows.filter(p => p.include).map(p => ({
+                      loan_id: l.id, item: p.item, party: p.party, frequency: p.frequency,
+                      due_month: p.due_month, due_day: p.due_day, recipient: p.recipient, notes: p.notes,
+                    }));
+                    const res = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
+                      method: 'POST', headers: SB_HEADERS, body: JSON.stringify(rowsToAdd),
+                    });
+                    if (!res.ok) { const e = await res.json().catch(() => ({})); flash('Save error: ' + (e.message || res.status), true); return; }
+                    setReqProposals(null);
+                    refreshReqs();
+                    flash(`✓ Added ${rowsToAdd.length} requirement${rowsToAdd.length > 1 ? 's' : ''}`);
+                  }}
+                  style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.66rem', padding: '0.2rem 0.55rem', cursor: 'pointer', fontWeight: 600 }}
+                >Add selected ({reqProposals.rows.filter(p => p.include).length})</button>
+              )}
+              <button onClick={() => setReqProposals(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.66rem' }}>Cancel</button>
+            </div>
+          </div>
         )}
         {drafting && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: 5, alignItems: 'center' }}>

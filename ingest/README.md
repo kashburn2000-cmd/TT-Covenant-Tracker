@@ -67,6 +67,11 @@ Ridge construction loan). The keys are exactly the database column names.
   `due_month` (1–12) anchors the cycle (ignored for monthly); `due_day` above
   28 is clamped to 28; `lead_days` defaults to 21.
 
+  If the sidecar omits this array, nothing is lost: the Loans tab's
+  **⚡ From abstract** button parses the `financial_reporting_borrower` /
+  `financial_reporting_guarantor` prose into proposed requirement rows for
+  review — useful for backfilling loans imported before this feature.
+
 > **Tip for your Claude project:** ask it to emit this JSON sidecar alongside
 > the `.docx` it already generates. Point it at `abstract-sidecar.example.json`
 > as the target shape.
