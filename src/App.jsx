@@ -360,6 +360,13 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const DEFAULT_COLS = Object.fromEntries(ALL_COLS.map(c => [c.key, true]));
   const [visibleCols, setVisibleCols] = useState(DEFAULT_COLS);
 
+  // Saved report templates: named snapshots of { title, cols, onlyFailing }
+  // that drive the PDF export without touching the on-screen column picker.
+  // Stored company-wide in the settings table (key 'reportTemplates').
+  const [reportTemplates, setReportTemplates] = useState([]);
+  const [showTemplateSave, setShowTemplateSave] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState({ name: '', title: '', onlyFailing: false });
+
   // Persist a settings key to Supabase
   async function saveSetting(key, value) {
     try {
@@ -386,6 +393,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         if (row.key === 'lastUpdated' && val) setLastUpdated(new Date(val));
         if (row.key === 'forecastMonth' && val) setForecastMonth(val);
         if (row.key === 'visibleCols' && val) setVisibleCols({ ...DEFAULT_COLS, ...val });
+        if (row.key === 'reportTemplates' && Array.isArray(val)) setReportTemplates(val);
       }
     } catch (err) {
       console.warn('Could not load settings:', err);
@@ -989,9 +997,13 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     return window.jspdf;
   }
 
-  async function exportPDF() {
+  // template (optional, from reportTemplates): { name, title, cols, onlyFailing }
+  // — overrides the on-screen column picker / row set for this export only.
+  async function exportPDF(template = null) {
     setExportMsg('Generating PDF...');
     try {
+      const reportCols = template?.cols || visibleCols;
+      const reportRows = template?.onlyFailing ? activeRows.filter(r => !r.satisfied) : activeRows;
       const { jsPDF } = await loadJsPDF();
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
@@ -1012,7 +1024,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.setTextColor(...TT_ORANGE);
-      doc.text('Covenant Compliance Dashboard', 28, 20);
+      doc.text(template?.title || 'Covenant Compliance Dashboard', 28, 20);
 
       // Date
       doc.setFont('helvetica', 'normal');
@@ -1026,8 +1038,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       doc.text('Prepared by Kevin Ashburn  //  Updated Monthly', 28, 44);
 
       // Summary pills — top right
-      const passing = activeRows.filter(r => r.satisfied).length;
-      const failing = activeRows.filter(r => !r.satisfied).length;
+      const passing = reportRows.filter(r => r.satisfied).length;
+      const failing = reportRows.filter(r => !r.satisfied).length;
       const pillY = 14;
       let pillX = pageW - 28;
 
@@ -1156,11 +1168,11 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         },
       ];
 
-      const visibleDefs = COL_DEFS.filter(c => c.always || visibleCols[c.key]);
+      const visibleDefs = COL_DEFS.filter(c => c.always || reportCols[c.key]);
 
       // ── Table ─────────────────────────────────────────────────────────────
       const head = [visibleDefs.map(c => c.head)];
-      const body = activeRows.map(r => visibleDefs.map(c => c.cell(r)));
+      const body = reportRows.map(r => visibleDefs.map(c => c.cell(r)));
 
       // Per-row style — color result cell text by pass/fail
       const resultColIdx = visibleDefs.findIndex(c => c.key === 'result');
@@ -1196,7 +1208,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         },
         didParseCell: (data) => {
           if (data.section === 'body') {
-            const row = activeRows[data.row.index];
+            const row = reportRows[data.row.index];
             if (!row) return;
             // Result column — color by pass/fail
             if (resultColIdx !== -1 && data.column.index === resultColIdx) {
@@ -1228,7 +1240,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         },
       });
 
-      const filename = `TT_Covenant_Dashboard_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.pdf`;
+      const stamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const filename = template?.name
+        ? `TT_${template.name.replace(/[^\w]+/g, '_')}_${stamp}.pdf`
+        : `TT_Covenant_Dashboard_${stamp}.pdf`;
       doc.save(filename);
       setExportMsg('PDF exported!');
       setTimeout(() => setExportMsg(''), 3000);
@@ -1463,7 +1478,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowExportMenu(v => !v)} className="btn btn-sm" style={showExportMenu ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>↓ Export ▾</button>
             {showExportMenu && (
-              <div className="menu" style={{ minWidth: 150 }}>
+              <div className="menu" style={{ minWidth: 210 }}>
                 {[
                   ['Excel', () => exportXLSX(), "Drops straight into the workbook's Covenant Dashboard Export tab"],
                   ['CSV', () => exportCSV(), ''],
@@ -1473,6 +1488,49 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     <span style={{ opacity: 0.6 }}>↓</span>{label}
                   </div>
                 ))}
+                {reportTemplates.length > 0 && <div className="menu-heading">Report Templates (PDF)</div>}
+                {reportTemplates.map((t, i) => (
+                  <div key={t.name} className="menu-item" title={`${t.title || t.name}${t.onlyFailing ? ' · failing tests only' : ''}`}
+                    onClick={() => { exportPDF(t); setShowExportMenu(false); }}>
+                    <span style={{ opacity: 0.6 }}>▦</span>
+                    <span style={{ flex: 1 }}>{t.name}{t.onlyFailing ? ' ⚠' : ''}</span>
+                    <span
+                      title="Delete template"
+                      onClick={e => { e.stopPropagation(); const next = reportTemplates.filter((_, j) => j !== i); setReportTemplates(next); saveSetting('reportTemplates', next); }}
+                      style={{ color: 'var(--faint)', padding: '0 2px' }}
+                    >✕</span>
+                  </div>
+                ))}
+                <div className="menu-item" title="Snapshot the current column picker as a named PDF report layout"
+                  onClick={() => { setTemplateDraft({ name: '', title: '', onlyFailing: false }); setShowTemplateSave(true); setShowExportMenu(false); }}>
+                  <span style={{ opacity: 0.6 }}>＋</span>Save view as template…
+                </div>
+              </div>
+            )}
+            {showTemplateSave && (
+              <div className="menu" style={{ minWidth: 250, padding: '0.6rem 0.8rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                <div style={{ fontSize: '0.66rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>New report template</div>
+                <input placeholder="Template name (e.g. Exec Summary)" value={templateDraft.name} autoFocus
+                  onChange={e => setTemplateDraft(d => ({ ...d, name: e.target.value }))} style={inputStyle} />
+                <input placeholder="Report title (optional)" value={templateDraft.title}
+                  onChange={e => setTemplateDraft(d => ({ ...d, title: e.target.value }))} style={inputStyle} />
+                <label style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', gap: '0.4rem', alignItems: 'center', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={templateDraft.onlyFailing} onChange={e => setTemplateDraft(d => ({ ...d, onlyFailing: e.target.checked }))} />
+                  Failing tests only
+                </label>
+                <div style={{ fontSize: '0.62rem', color: 'var(--faint)' }}>Captures the columns currently checked in ⊞ Columns.</div>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button className="btn btn-sm" disabled={!templateDraft.name.trim()} onClick={() => {
+                    const next = [
+                      ...reportTemplates.filter(t => t.name !== templateDraft.name.trim()),
+                      { name: templateDraft.name.trim(), title: templateDraft.title.trim() || null, onlyFailing: templateDraft.onlyFailing, cols: { ...visibleCols } },
+                    ];
+                    setReportTemplates(next);
+                    saveSetting('reportTemplates', next);
+                    setShowTemplateSave(false);
+                  }}>Save</button>
+                  <button className="btn btn-sm" onClick={() => setShowTemplateSave(false)}>Cancel</button>
+                </div>
               </div>
             )}
           </div>
