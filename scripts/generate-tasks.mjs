@@ -71,7 +71,15 @@ async function main() {
 
   let reporting = [];
   try {
-    const reqs = await sbGet('loan_reporting_requirements?select=*');
+    const loanById = new Map(loans.map(l => [String(l.id), l]));
+    const reqs = (await sbGet('loan_reporting_requirements?select=*')).map(r => {
+      const loan = loanById.get(String(r.loan_id));
+      return {
+        ...r,
+        deal_name: r.deal_name || loan?.property_name || loan?.borrower_entity || null,
+        lender: r.lender || loan?.lead_lender || null,
+      };
+    });
     reporting = buildReportingTasks(reqs, TODAY);
   } catch (err) {
     if (err.status === 404 || /PGRST205|does not exist/.test(err.message)) {

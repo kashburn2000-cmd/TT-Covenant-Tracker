@@ -44,6 +44,23 @@ Ridge construction loan). The keys are exactly the database column names.
   (construction: completion date, development fee funding, retainage, letters of
   credit, post-closing items; refinance: lockbox, cash management waterfall,
   reserves/holdbacks, prior lender / future advance).
+- **Optional:** a `reporting_requirements` array turns the abstract's reporting
+  section into structured deliverables that drive the nightly Tasks & Reminders
+  digest (requires `db/loan_reporting_setup.sql`). Re-importing replaces the
+  loan's rows. Each entry:
+
+  ```json
+  "reporting_requirements": [
+    { "item": "Property operating statement", "party": "borrower",
+      "frequency": "quarterly", "due_month": 1, "due_day": 15,
+      "recipient": "Fifth Third", "lead_days": 21,
+      "notes": "within 15 days of quarter end" }
+  ]
+  ```
+
+  `frequency` is `monthly` / `quarterly` / `semiannual` / `annual`;
+  `due_month` (1–12) anchors the cycle (ignored for monthly); `due_day` above
+  28 is clamped to 28; `lead_days` defaults to 21.
 
 > **Tip for your Claude project:** ask it to emit this JSON sidecar alongside
 > the `.docx` it already generates. Point it at `abstract-sidecar.example.json`

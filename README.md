@@ -180,7 +180,7 @@ The **Tasks & Reminders** widget (Debt Dashboard → + Add Widget) is filled nig
 
 **One-time setup:**
 
-1. Run [`db/tasks_setup.sql`](db/tasks_setup.sql) in the Supabase SQL editor.
+1. Run [`db/tasks_setup.sql`](db/tasks_setup.sql) in the Supabase SQL editor. Optionally also run [`db/loan_reporting_setup.sql`](db/loan_reporting_setup.sql) to unlock the **Reporting Requirements** section in the Loans tab detail panel — its rows (operating statements, guarantor financials, rent rolls, …) get expanded into dated reminder tasks too.
 2. The Action reuses the existing `SUPABASE_KEY` secret — the table sync works with no further setup (run the workflow manually once to fill it).
 3. **Email digest (optional):** create a free [Resend](https://resend.com) account, then add repo secrets `RESEND_API_KEY` and `TASK_EMAIL_TO` (comma-separated recipients). Until a sending domain is verified in Resend, delivery only works to the Resend account owner's address — verify a domain and add a `TASK_EMAIL_FROM` secret (e.g. `Covenant Dashboard <alerts@yourdomain.com>`) for team-wide delivery. Without these secrets the nightly run still syncs tasks and just logs what it would have sent.
 
@@ -332,6 +332,7 @@ npm run lint      # eslint src/
 | `leasing_snapshot` | Latest Leasing Dashboard upload (single-row snapshot) | Created manually |
 | `deal_registry` | Stable deal ids (`TT-001`, …) + manual lifecycle status overrides and deal classification (`land_facility`) for the Deal Registry tab | `db/deal_registry_setup.sql` |
 | `tasks` | Reminder queue for the Tasks & Reminders widget + nightly email digest (loan maturities, covenant tests, reporting deliverables, manual tasks) | `db/tasks_setup.sql` |
+| `loan_reporting_requirements` | Structured lender deliverables per loan (operating statements, guarantor financials, …) — edited in the Loans tab detail panel, expanded into dated reminders by the nightly task generator | `db/loan_reporting_setup.sql` |
 
 > **Schema coverage note:** the `db/` scripts cover the Loans, Debt Dashboard, Map, Deal Registry, security, and Power BI features. The core covenant tables (`properties`, `property_events`, `settings`, `sofr_curve`, `ten_year_curve`) and the Pipeline / Land Facility / Leasing tables were created directly in the live Supabase project and have no `CREATE TABLE` script in the repo — [`db/security_setup.sql`](db/security_setup.sql) lists all of them for RLS (skipping any that don't exist), and the SQL in [Setup](#setup) adds the columns the app expects on `properties`. Standing up a fresh Supabase project therefore requires recreating those tables by hand (or from a dump of the live project).
 

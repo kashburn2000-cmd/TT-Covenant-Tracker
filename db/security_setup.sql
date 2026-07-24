@@ -42,6 +42,7 @@ begin
     'land_draws',
     'leasing_snapshot',
     'loans',
+    'loan_reporting_requirements',
     'project_locations',
     'tasks'
   ]

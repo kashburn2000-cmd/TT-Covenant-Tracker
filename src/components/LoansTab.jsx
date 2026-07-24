@@ -267,6 +267,13 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const [importJson, setImportJson] = useState('');
   const [importFile, setImportFile] = useState(null);
 
+  // Reporting requirements (structured lender deliverables — feeds the nightly
+  // Tasks & Reminders generator). reqsAvailable flips false until
+  // db/loan_reporting_setup.sql has been run, hiding the section gracefully.
+  const [reportingReqs, setReportingReqs] = useState([]);
+  const [reqsAvailable, setReqsAvailable] = useState(true);
+  const [reqDraft, setReqDraft] = useState(null); // { loanId, item, party, frequency, due_month, due_day, recipient } | null
+
   // filters + sort
   const [fType, setFType]         = useState('all');
   const [fLender, setFLender]     = useState('');
@@ -292,10 +299,49 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         if (res.ok) { const rows = await res.json(); setLoans(Array.isArray(rows) ? rows : []); }
         else { const e = await res.json().catch(() => ({})); flash('Load error: ' + (e.message || res.status), true); }
       } catch (err) { console.error('Loans load error:', err); flash('Load error: ' + err.message, true); }
+      await refreshReqs();
       setLoading(false);
     }
     load();
   }, []);
+
+  async function refreshReqs() {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?order=item.asc`, { headers: SB_HEADERS });
+      if (res.ok) { setReportingReqs(await res.json()); setReqsAvailable(true); return; }
+      const body = await res.text();
+      if (res.status === 404 || /relation .* does not exist|PGRST205/.test(body)) setReqsAvailable(false);
+    } catch { /* leave as-is */ }
+  }
+
+  async function addReq() {
+    const d = reqDraft;
+    if (!d || !d.item.trim()) return;
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
+        method: 'POST', headers: SB_HEADERS,
+        body: JSON.stringify({
+          loan_id: d.loanId,
+          item: d.item.trim(),
+          party: d.party || null,
+          frequency: d.frequency,
+          due_month: d.due_month ? parseInt(d.due_month, 10) : null,
+          due_day: d.due_day ? parseInt(d.due_day, 10) : null,
+          recipient: d.recipient.trim() || null,
+        }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); flash('Save error: ' + (e.message || res.status), true); return; }
+      setReqDraft(null);
+      refreshReqs();
+    } catch (err) { flash('Save error: ' + err.message, true); }
+  }
+
+  async function deleteReq(id) {
+    try {
+      await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?id=eq.${id}`, { method: 'DELETE', headers: SB_HEADERS });
+      refreshReqs();
+    } catch (err) { flash('Delete error: ' + err.message, true); }
+  }
 
   // ── Coerce a form/import object into a DB-ready row ──────────────────────────
   function coerceBody(src) {
@@ -376,6 +422,9 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     try { data = JSON.parse(importJson); } catch (e) { flash('Invalid JSON: ' + e.message, true); return; }
     if (!data.borrower_entity) { flash('JSON must include "borrower_entity"', true); return; }
     if (data.loan_amount == null) { flash('JSON must include "loan_amount"', true); return; }
+    // Optional child rows — not a loans column, so pull them out before coerceBody.
+    const reqRows = Array.isArray(data.reporting_requirements) ? data.reporting_requirements : null;
+    delete data.reporting_requirements;
     setSaving(true);
     try {
       let path = data.source_doc_path || null;
@@ -401,6 +450,28 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         const saved = await res.json();
         const row = Array.isArray(saved) ? saved[0] : saved;
         setLoans(prev => { const i = prev.findIndex(l => l.id === row.id); return i >= 0 ? prev.map(l => l.id === row.id ? row : l) : [...prev, row]; });
+        // Replace the loan's reporting requirements from the sidecar (re-import safe).
+        if (reqRows && reqsAvailable) {
+          const valid = reqRows.filter(r => r && r.item && ['monthly', 'quarterly', 'semiannual', 'annual'].includes(r.frequency));
+          await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?loan_id=eq.${row.id}`, { method: 'DELETE', headers: SB_HEADERS });
+          if (valid.length) {
+            await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
+              method: 'POST', headers: SB_HEADERS,
+              body: JSON.stringify(valid.map(r => ({
+                loan_id: row.id,
+                item: String(r.item),
+                party: r.party || null,
+                frequency: r.frequency,
+                due_month: r.due_month != null ? parseInt(r.due_month, 10) : null,
+                due_day: r.due_day != null ? parseInt(r.due_day, 10) : null,
+                lead_days: r.lead_days != null ? parseInt(r.lead_days, 10) : 21,
+                recipient: r.recipient || null,
+                notes: r.notes || null,
+              }))),
+            });
+          }
+          refreshReqs();
+        }
         flash('✓ Abstract imported');
         setShowImport(false); setImportJson(''); setImportFile(null);
       } else {
@@ -846,6 +917,76 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     </th>
   );
 
+  // ── Reporting Requirements (structured deliverables → nightly reminders) ────
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const reqSchedule = (r) => {
+    const day = r.due_day || 1;
+    const mo = r.due_month ? MONTHS[r.due_month - 1] : null;
+    if (r.frequency === 'monthly') return `monthly · day ${day}`;
+    if (r.frequency === 'quarterly') return `quarterly · from ${mo || 'Jan'} ${day}`;
+    if (r.frequency === 'semiannual') return `semi-annual · from ${mo || 'Jan'} ${day}`;
+    return `annual · ${mo || 'Jan'} ${day}`;
+  };
+
+  const ReqsBlock = ({ l }) => {
+    const rows = reportingReqs.filter(r => r.loan_id === l.id);
+    const drafting = reqDraft?.loanId === l.id;
+    const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.68rem', padding: '0.25rem 0.4rem' };
+    return (
+      <div style={{ marginBottom: '0.6rem' }}>
+        <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>
+          Reporting Requirements
+          <span style={{ textTransform: 'none', letterSpacing: 0, marginLeft: 6, color: 'var(--faint2)' }}>(drive nightly reminders)</span>
+        </div>
+        {rows.map(r => (
+          <div key={r.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline', padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.72rem' }}>
+            <span style={{ color: 'var(--text2)' }}>{r.item}{r.party ? ` (${r.party})` : ''}</span>
+            <span style={{ marginLeft: 'auto', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{reqSchedule(r)}</span>
+            {r.recipient && <span style={{ color: 'var(--faint3)', whiteSpace: 'nowrap' }}>→ {r.recipient}</span>}
+            {pinUnlocked && (
+              <button onClick={() => deleteReq(r.id)} title="Remove requirement"
+                style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem', padding: 0 }}>✕</button>
+            )}
+          </div>
+        ))}
+        {rows.length === 0 && !drafting && (
+          <div style={{ fontSize: '0.68rem', color: 'var(--faint)', padding: '2px 0' }}>None recorded yet.</div>
+        )}
+        {pinUnlocked && !drafting && (
+          <button
+            onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}
+            style={{ marginTop: 4, background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', fontSize: '0.66rem', padding: '0.18rem 0.5rem', cursor: 'pointer' }}
+          >+ Add requirement</button>
+        )}
+        {drafting && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: 5, alignItems: 'center' }}>
+            <input placeholder="Deliverable (e.g. Operating statement)" value={reqDraft.item} autoFocus
+              onChange={e => setReqDraft(d => ({ ...d, item: e.target.value }))} style={{ ...inSt, flex: '2 1 150px' }} />
+            <select value={reqDraft.party} onChange={e => setReqDraft(d => ({ ...d, party: e.target.value }))} style={inSt}>
+              <option value="borrower">borrower</option><option value="guarantor">guarantor</option>
+            </select>
+            <select value={reqDraft.frequency} onChange={e => setReqDraft(d => ({ ...d, frequency: e.target.value }))} style={inSt}>
+              <option value="monthly">monthly</option><option value="quarterly">quarterly</option>
+              <option value="semiannual">semi-annual</option><option value="annual">annual</option>
+            </select>
+            {reqDraft.frequency !== 'monthly' && (
+              <select value={reqDraft.due_month} onChange={e => setReqDraft(d => ({ ...d, due_month: e.target.value }))} style={inSt} title="Anchor month">
+                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
+            )}
+            <input type="number" min="1" max="28" value={reqDraft.due_day} title="Day of month (1–28)"
+              onChange={e => setReqDraft(d => ({ ...d, due_day: e.target.value }))} style={{ ...inSt, width: 52 }} />
+            <input placeholder="Recipient" value={reqDraft.recipient}
+              onChange={e => setReqDraft(d => ({ ...d, recipient: e.target.value }))} style={{ ...inSt, flex: '1 1 90px' }} />
+            <button onClick={addReq} disabled={!reqDraft.item.trim()}
+              style={{ ...inSt, cursor: 'pointer', fontWeight: 600 }}>Add</button>
+            <button onClick={() => setReqDraft(null)} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.68rem' }}>Cancel</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Detail panel (expanded row) ──────────────────────────────────────────────
   const Detail = ({ l }) => {
     const Row = ({ k, v }) => (v == null || v === '' ? null : (
@@ -912,6 +1053,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           <Prose k="Extension Test" v={l.extension_test_summary} />
           <Prose k="Extension Term Changes" v={l.extension_term_changes} />
           <Prose k="Prepayment Terms" v={l.prepayment_terms} />
+          {reqsAvailable && <ReqsBlock l={l} />}
           <Prose k="Reporting — Borrower" v={l.financial_reporting_borrower} />
           <Prose k="Reporting — Guarantor" v={l.financial_reporting_guarantor} />
           <Prose k="Miscellaneous" v={l.miscellaneous} />
