@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeLenderName, buildLenderRollup, rollupStats } from './lenderExposure.js';
+import { normalizeLenderName, buildLenderRollup, buildLenderComparison, rollupStats } from './lenderExposure.js';
 
 describe('normalizeLenderName', () => {
   it('folds case, punctuation, and generic bank suffixes', () => {
@@ -68,6 +68,38 @@ describe('buildLenderRollup', () => {
     const rollup = buildLenderRollup(PROJECTS, []);
     const none = rollup.find(r => r.key === '(no lender)');
     expect(none.totalLoan).toBe(10_000_000);
+  });
+});
+
+describe('buildLenderComparison', () => {
+  const ABSTRACTS = [
+    { lead_lender: 'Simmons Bank', loan_amount: 56_000_000, rate_spread_bps: 335, loan_fee_pct: 0.5, exit_fee_pct: null, extension_fee_pct: 0.25, dscr_covenant: 1.25, debt_yield_covenant: null, repayment_guaranty_pct: 25, extension_count: 2, prepayment_open: true },
+    { lead_lender: 'Simmons', loan_amount: 49_000_000, rate_spread_bps: 325, loan_fee_pct: 0.4, exit_fee_pct: null, extension_fee_pct: 0.25, dscr_covenant: 1.25, debt_yield_covenant: null, repayment_guaranty_pct: 25, extension_count: 1, prepayment_open: false },
+    { lead_lender: 'Truist', loan_amount: 51_900_000, rate_spread_bps: 231, loan_fee_pct: null, exit_fee_pct: 0.5, extension_fee_pct: null, dscr_covenant: 1.20, debt_yield_covenant: 8.0, repayment_guaranty_pct: null, extension_count: null, prepayment_open: true },
+    { lead_lender: '', loan_amount: 1, rate_spread_bps: 999 }, // no lender → excluded
+  ];
+
+  it('groups by normalized lender and weights terms by loan size', () => {
+    const cmp = buildLenderComparison(ABSTRACTS);
+    expect(cmp.map(c => c.key)).toEqual(['simmons', 'truist']);
+    const simmons = cmp[0];
+    expect(simmons.loanCount).toBe(2);
+    expect(simmons.totalCommitment).toBe(105_000_000);
+    expect(simmons.wAvgSpreadBps).toBeCloseTo(330.33, 1);
+    expect(simmons.wAvgLoanFeePct).toBeCloseTo((0.5 * 56 + 0.4 * 49) / 105, 3);
+    expect(simmons.wAvgGuarantyPct).toBe(25);
+    expect(simmons.avgExtensionCount).toBe(1.5);
+    expect(simmons.prepayOpenShare).toBe(0.5);
+  });
+
+  it('leaves metrics null when no abstract carries the field', () => {
+    const cmp = buildLenderComparison(ABSTRACTS);
+    const simmons = cmp[0], truist = cmp[1];
+    expect(simmons.wAvgExitFeePct).toBeNull();
+    expect(simmons.wAvgDebtYieldCovenant).toBeNull();
+    expect(truist.wAvgDebtYieldCovenant).toBe(8.0);
+    expect(truist.wAvgGuarantyPct).toBeNull();
+    expect(truist.avgExtensionCount).toBeNull();
   });
 });
 

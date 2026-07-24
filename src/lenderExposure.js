@@ -92,6 +92,56 @@ export function buildLenderRollup(projects, loans = []) {
     .sort((a, b) => b.totalLoan - a.totalLoan);
 }
 
+// ── Relationship comparison (loan abstracts only) ────────────────────────────
+// Compares lending relationships on the terms they actually wrote: credit
+// cost, fee load, covenant tightness, guaranty burden, and flexibility.
+// Weighted averages weight by loan_amount; null fields are excluded from
+// their metric (a lender with no DSCR covenant on any abstract shows —).
+export function buildLenderComparison(loans) {
+  const byLender = new Map();
+  for (const l of loans || []) {
+    const key = normalizeLenderName(l.lead_lender);
+    if (!key) continue;
+    if (!byLender.has(key)) {
+      byLender.set(key, { key, names: new Map(), loans: [] });
+    }
+    const row = byLender.get(key);
+    const label = (l.lead_lender || '').trim();
+    row.names.set(label, (row.names.get(label) || 0) + 1);
+    row.loans.push(l);
+  }
+
+  const wavg = (rows, field) => {
+    let sum = 0, w = 0;
+    for (const r of rows) {
+      const v = r[field];
+      if (v != null && r.loan_amount) { sum += Number(v) * r.loan_amount; w += r.loan_amount; }
+    }
+    return w ? sum / w : null;
+  };
+  const share = (rows, pred) => (rows.length ? rows.filter(pred).length / rows.length : null);
+
+  return [...byLender.values()]
+    .map(r => ({
+      key: r.key,
+      lender: [...r.names.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || r.key,
+      loanCount: r.loans.length,
+      totalCommitment: r.loans.reduce((s, l) => s + (l.loan_amount || 0), 0),
+      wAvgSpreadBps: wavg(r.loans, 'rate_spread_bps'),
+      wAvgLoanFeePct: wavg(r.loans, 'loan_fee_pct'),
+      wAvgExitFeePct: wavg(r.loans, 'exit_fee_pct'),
+      wAvgExtensionFeePct: wavg(r.loans, 'extension_fee_pct'),
+      wAvgDscrCovenant: wavg(r.loans, 'dscr_covenant'),
+      wAvgDebtYieldCovenant: wavg(r.loans, 'debt_yield_covenant'),
+      wAvgGuarantyPct: wavg(r.loans, 'repayment_guaranty_pct'),
+      avgExtensionCount: r.loans.some(l => l.extension_count != null)
+        ? r.loans.reduce((s, l) => s + (l.extension_count || 0), 0) / r.loans.length
+        : null,
+      prepayOpenShare: share(r.loans, l => l.prepayment_open === true),
+    }))
+    .sort((a, b) => b.totalCommitment - a.totalCommitment);
+}
+
 // Concentration stats for the tiles: top lender + top-3 share.
 export function rollupStats(rollup) {
   const total = rollup.reduce((s, r) => s + r.totalLoan, 0);

@@ -12,7 +12,7 @@ import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync, CLASSIFICATION_LABEL } from '../dealRegistry.js';
 import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
 import { TasksWidget } from './TasksWidget.jsx';
-import { buildLenderRollup, rollupStats } from '../lenderExposure.js';
+import { buildLenderRollup, buildLenderComparison, rollupStats } from '../lenderExposure.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -778,11 +778,12 @@ function LenderExposureWidget({ projects }) {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [loans, setLoans] = useState([]);
   const [openKey, setOpenKey] = useState(null);
+  const [mode, setMode] = useState('exposure'); // 'exposure' | 'compare'
 
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${SB_URL}/rest/v1/loans?select=lead_lender,rate_spread_bps,loan_amount`, { headers: SB_HEADERS });
+        const res = await fetch(`${SB_URL}/rest/v1/loans?select=lead_lender,rate_spread_bps,loan_amount,loan_fee_pct,exit_fee_pct,extension_fee_pct,dscr_covenant,debt_yield_covenant,repayment_guaranty_pct,extension_count,prepayment_open`, { headers: SB_HEADERS });
         if (res.ok) setLoans(await res.json());
       } catch { /* abstracts are enrichment only */ }
     })();
@@ -793,11 +794,90 @@ function LenderExposureWidget({ projects }) {
     [projects, loans, sourceFilter],
   );
   const stats = useMemo(() => rollupStats(rollup), [rollup]);
+  const comparison = useMemo(() => buildLenderComparison(loans), [loans]);
   const maxLoan = rollup[0]?.totalLoan || 1;
+
+  const modeBtn = (key, label) => (
+    <button
+      onClick={() => setMode(key)}
+      style={{
+        background: mode === key ? 'var(--panel2)' : 'none',
+        border: '1px solid ' + (mode === key ? 'var(--border)' : 'transparent'),
+        borderRadius: 5, color: mode === key ? 'var(--text)' : 'var(--muted)',
+        fontSize: '0.7rem', fontWeight: 600, padding: '0.25rem 0.6rem', cursor: 'pointer',
+      }}
+    >{label}</button>
+  );
+
+  // Terms-comparison columns: fmt renders, best marks which direction is
+  // borrower-favorable and gets the highlight.
+  const CMP_COLS = [
+    { label: 'Loans', get: c => c.loanCount, fmt: v => v, best: null },
+    { label: 'Borrowed', get: c => c.totalCommitment, fmt: v => fmtM(v), best: null },
+    { label: 'Spread', get: c => c.wAvgSpreadBps, fmt: v => `${Math.round(v)} bps`, best: 'min' },
+    { label: 'Orig Fee', get: c => c.wAvgLoanFeePct, fmt: v => `${v.toFixed(2)}%`, best: 'min' },
+    { label: 'Exit Fee', get: c => c.wAvgExitFeePct, fmt: v => `${v.toFixed(2)}%`, best: 'min' },
+    { label: 'Ext Fee', get: c => c.wAvgExtensionFeePct, fmt: v => `${v.toFixed(2)}%`, best: 'min' },
+    { label: 'DSCR Cov', get: c => c.wAvgDscrCovenant, fmt: v => `${v.toFixed(2)}x`, best: 'min' },
+    { label: 'DY Cov', get: c => c.wAvgDebtYieldCovenant, fmt: v => `${v.toFixed(2)}%`, best: 'min' },
+    { label: 'Guaranty', get: c => c.wAvgGuarantyPct, fmt: v => `${Math.round(v)}%`, best: 'min' },
+    { label: 'Extensions', get: c => c.avgExtensionCount, fmt: v => v.toFixed(1), best: 'max' },
+    { label: 'Prepay Open', get: c => c.prepayOpenShare, fmt: v => fmtPct(v, 0), best: 'max' },
+  ];
+  const bestValue = (col) => {
+    if (!col.best) return null;
+    const vals = comparison.map(col.get).filter(v => v != null);
+    if (vals.length < 2) return null; // highlighting needs something to beat
+    return col.best === 'min' ? Math.min(...vals) : Math.max(...vals);
+  };
+
+  if (mode === 'compare') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
+        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+          {modeBtn('exposure', 'Exposure')}
+          {modeBtn('compare', 'Terms Comparison')}
+          <span style={{ marginLeft: 'auto', fontSize: '0.64rem', color: 'var(--faint)' }}>
+            Loan-size-weighted terms from the loan abstracts · green = most borrower-favorable
+          </span>
+        </div>
+        <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr><th>Lender</th>{CMP_COLS.map(c => <th key={c.label} style={{ textAlign: 'right' }}>{c.label}</th>)}</tr></thead>
+            <tbody>
+              {comparison.map(c => (
+                <tr key={c.key}>
+                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{c.lender}</td>
+                  {CMP_COLS.map(col => {
+                    const v = col.get(c);
+                    const isBest = col.best && v != null && v === bestValue(col);
+                    return (
+                      <td key={col.label} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: isBest ? 'var(--good, #3fb46f)' : undefined, fontWeight: isBest ? 700 : undefined }}>
+                        {v == null ? '—' : col.fmt(v)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {comparison.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>
+              No loan abstracts yet — import abstracts in the Loans tab to compare lender terms.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
-      <div><SourceFilter value={sourceFilter} onChange={setSourceFilter} /></div>
+      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+        {modeBtn('exposure', 'Exposure')}
+        {modeBtn('compare', 'Terms Comparison')}
+        <div style={{ marginLeft: '0.5rem' }}><SourceFilter value={sourceFilter} onChange={setSourceFilter} /></div>
+      </div>
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
         <StatTile label="Total debt" value={fmtM(stats.total)} sub={`across ${stats.lenderCount} lender${stats.lenderCount === 1 ? '' : 's'}`} />
         <StatTile label="Largest relationship" value={stats.top ? fmtM(stats.top.totalLoan) : '—'} sub={stats.top ? `${stats.top.lender} · ${fmtPct(stats.top.share, 0)} of total` : ''} />
