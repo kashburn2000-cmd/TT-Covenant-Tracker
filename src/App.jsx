@@ -89,6 +89,21 @@ const SHARED_STYLES = `
   .tab-active   { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
   .tab-inactive { color: var(--muted); }
   .tab-inactive:hover { color: var(--text2); }
+  /* ── Mobile (≤ 720px) ────────────────────────────────────────────────────
+     Light-touch responsive pass: the tab bar scrolls horizontally instead of
+     wrapping, paddings tighten, the covenant summary cards drop to two-up,
+     and dense tables shrink a step. Wide tables already live inside their
+     own overflow containers, so the page itself never scrolls sideways. */
+  @media (max-width: 720px) {
+    .app-main { padding: 0.9rem !important; }
+    .tab-nav { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .tab-nav::-webkit-scrollbar { display: none; }
+    .tab-btn { padding: 0.55rem 0.7rem; font-size: 0.75rem; white-space: nowrap; flex-shrink: 0; }
+    .covenant-summary { grid-template-columns: repeat(2, 1fr) !important; }
+    th { padding: 0.45rem 0.55rem; font-size: 0.62rem; }
+    td { padding: 0.5rem 0.55rem; font-size: 0.74rem; }
+    .btn { padding: 5px 10px; font-size: 0.72rem; }
+  }
   .mx-high { background: color-mix(in srgb, var(--pass) 15%, transparent); color: var(--pass); font-weight: 600; }
   .mx-mid  { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); font-weight: 500; }
   .mx-low  { background: color-mix(in srgb, var(--fail) 11%, transparent); color: var(--fail); font-weight: 500; }
@@ -1294,7 +1309,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
       {/* ── Scenario Analysis (what-if shocks over the whole table) ── */}
       <ScenarioBar scenario={scenario} setScenario={setScenario} baseSummary={baseSummary} />
       {/* ── Summary Cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div className="covenant-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           {[
             { label: 'Total Properties', value: summary.total, color: 'var(--text)', sub: 'active tests tracked' },
             { label: 'Passing', value: summary.passing, color: summary.passing > 0 ? 'var(--pass)' : 'var(--text)', sub: 'meeting covenant' },
@@ -3048,10 +3063,10 @@ export default function App() {
           setActiveTab('leasing');
         }}
       />
-      <div style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
+      <div className="app-main" style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
 
         {/* ── Tab Nav ── */}
-        <div style={{ display: 'flex', borderBottom: `1px solid var(--border)`, marginBottom: '2rem', alignItems: 'flex-end', position: 'relative' }}>
+        <div className="tab-nav" style={{ display: 'flex', borderBottom: `1px solid var(--border)`, marginBottom: '2rem', alignItems: 'flex-end', position: 'relative' }}>
           {visibleTabs.calculator && <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("calculator")}>Calculator</button>}
           {visibleTabs.matrix     && <button className={`tab-btn ${activeTab === "matrix"     ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("matrix")}>DY / DSCR Matrix</button>}
           {visibleTabs.covenant   && <button className={`tab-btn ${activeTab === "covenant"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("covenant")}>Covenant Tracker</button>}
