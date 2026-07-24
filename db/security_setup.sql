@@ -43,6 +43,7 @@ begin
     'leasing_snapshot',
     'loans',
     'loan_reporting_requirements',
+    'deal_documents',
     'project_locations',
     'tasks'
   ]

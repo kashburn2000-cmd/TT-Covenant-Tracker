@@ -4,6 +4,12 @@ import { TT_ORANGE } from '../theme.js';
 import { LockIcon } from '../icons.jsx';
 import { slugify } from '../format.js';
 import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
+import { supabase } from '../auth.js';
+
+const DOC_CATEGORIES = {
+  loan_agreement: 'Loan Agreement', guaranty: 'Guaranty', amendment: 'Amendment',
+  closing: 'Closing', insurance: 'Insurance', hedge: 'Hedge', correspondence: 'Correspondence', other: 'Other',
+};
 
 // ── Loans Tab ───────────────────────────────────────────────────────────────
 // Queryable database of closed-loan abstracts (construction + refinance).
@@ -287,6 +293,12 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   // Hoisted here (not in Detail) so typing survives LoansTab re-renders.
   const [schedInputs, setSchedInputs] = useState(null); // { loanId, ratePct, amortYears, ioMonths, termMonths } | null
 
+  // Per-deal document repository (db/deal_documents_setup.sql).
+  const [dealDocs, setDealDocs] = useState([]);
+  const [docsAvailable, setDocsAvailable] = useState(true);
+  const [docCategory, setDocCategory] = useState('loan_agreement');
+  const [docBusy, setDocBusy] = useState(false);
+
   // filters + sort
   const [fType, setFType]         = useState('all');
   const [fLender, setFLender]     = useState('');
@@ -313,6 +325,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         else { const e = await res.json().catch(() => ({})); flash('Load error: ' + (e.message || res.status), true); }
       } catch (err) { console.error('Loans load error:', err); flash('Load error: ' + err.message, true); }
       await refreshReqs();
+      await refreshDocs();
       setLoading(false);
     }
     load();
@@ -354,6 +367,67 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?id=eq.${id}`, { method: 'DELETE', headers: SB_HEADERS });
       refreshReqs();
     } catch (err) { flash('Delete error: ' + err.message, true); }
+  }
+
+  // ── Deal documents (repository beyond the abstract .docx) ───────────────────
+  async function refreshDocs() {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/deal_documents?order=uploaded_at.desc`, { headers: SB_HEADERS });
+      if (res.ok) { setDealDocs(await res.json()); setDocsAvailable(true); return; }
+      const body = await res.text();
+      if (res.status === 404 || /relation .* does not exist|PGRST205/.test(body)) setDocsAvailable(false);
+    } catch { /* leave as-is */ }
+  }
+
+  async function uploadDealDoc(loan, file) {
+    if (!file) return;
+    setDocBusy(true);
+    try {
+      // Timestamped path = every upload is a new version; the table rows are
+      // the version history (newest first).
+      const path = `docs/${loan.id}/${Date.now()}-${file.name.replace(/[^\w.\- ]+/g, '_')}`;
+      const up = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${encodeURI(path)}`, {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Authorization': SB_HEADERS.Authorization, 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      if (!up.ok) { const e = await up.json().catch(() => ({})); throw new Error(e.message || `upload failed (${up.status})`); }
+      const user = (await supabase.auth.getUser()).data?.user;
+      const ins = await fetch(`${SB_URL}/rest/v1/deal_documents`, {
+        method: 'POST', headers: SB_HEADERS,
+        body: JSON.stringify({ loan_id: loan.id, category: docCategory, filename: file.name, storage_path: path, uploaded_by: user?.email || null }),
+      });
+      if (!ins.ok) { const e = await ins.json().catch(() => ({})); throw new Error(e.message || `save failed (${ins.status})`); }
+      flash('✓ Document uploaded');
+      refreshDocs();
+    } catch (err) { flash('Upload error: ' + err.message, true); }
+    setDocBusy(false);
+  }
+
+  async function deleteDealDoc(doc) {
+    setDocBusy(true);
+    try {
+      await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${encodeURI(doc.storage_path)}`, {
+        method: 'DELETE', headers: { 'apikey': SB_KEY, 'Authorization': SB_HEADERS.Authorization },
+      });
+      await fetch(`${SB_URL}/rest/v1/deal_documents?id=eq.${doc.id}`, { method: 'DELETE', headers: SB_HEADERS });
+      refreshDocs();
+    } catch (err) { flash('Delete error: ' + err.message, true); }
+    setDocBusy(false);
+  }
+
+  async function downloadDealDoc(doc) {
+    try {
+      const res = await fetch(`${SB_URL}/storage/v1/object/sign/${BUCKET}/${encodeURI(doc.storage_path)}`, {
+        method: 'POST', headers: SB_HEADERS, body: JSON.stringify({ expiresIn: 3600 }),
+      });
+      const body = await res.json();
+      if (res.ok && body.signedURL) {
+        const a = document.createElement('a');
+        a.href = `${SB_URL}/storage/v1${body.signedURL}`;
+        a.target = '_blank'; a.rel = 'noopener'; a.click();
+      } else flash('Could not generate download link', true);
+    } catch (err) { flash('Download error: ' + err.message, true); }
   }
 
   // ── Coerce a form/import object into a DB-ready row ──────────────────────────
@@ -1119,6 +1193,64 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     );
   };
 
+  // ── Documents repository block (expanded loan detail) ───────────────────────
+  const DocsBlock = ({ l }) => {
+    const docs = dealDocs.filter(d => d.loan_id === l.id);
+    const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.68rem', padding: '0.25rem 0.4rem' };
+    return (
+      <div style={{ borderTop: '1px solid var(--border)', padding: '0.7rem 1.25rem 1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--text2)', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Documents{docs.length > 0 && <span style={{ color: 'var(--faint)', fontWeight: 400 }}> ({docs.length})</span>}
+          </span>
+          {pinUnlocked && (
+            <span style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center' }}>
+              <select value={docCategory} onChange={e => setDocCategory(e.target.value)} style={inSt}>
+                {Object.entries(DOC_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+              <label style={{ ...inSt, cursor: docBusy ? 'wait' : 'pointer', fontWeight: 600 }}>
+                {docBusy ? 'Uploading…' : '↑ Upload'}
+                <input type="file" disabled={docBusy} style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files[0]; e.target.value = ''; uploadDealDoc(l, f); }} />
+              </label>
+            </span>
+          )}
+          {l.source_doc_path && (
+            <button onClick={() => downloadDoc(l)} className="btn btn-sm" title="The abstract .docx attached at import">
+              ⬇ Abstract (.docx)
+            </button>
+          )}
+        </div>
+        {docs.length > 0 && (
+          <div style={{ marginTop: '0.5rem' }}>
+            {docs.map(d => (
+              <div key={d.id} style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.73rem' }}>
+                <span className="pill blue">{DOC_CATEGORIES[d.category] || d.category}</span>
+                <button onClick={() => downloadDealDoc(d)} title="Download via signed link"
+                  style={{ background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer', fontSize: '0.73rem', padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                  {d.filename}
+                </button>
+                <span style={{ marginLeft: 'auto', color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: '0.66rem' }}>
+                  {fmtDate(d.uploaded_at?.slice(0, 10))}{d.uploaded_by ? ` · ${d.uploaded_by}` : ''}
+                </span>
+                {pinUnlocked && (
+                  <button onClick={() => deleteDealDoc(d)} title="Delete document" disabled={docBusy}
+                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem', padding: 0 }}>✕</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {docs.length === 0 && (
+          <div style={{ marginTop: 4, fontSize: '0.66rem', color: 'var(--faint)' }}>
+            No documents in the repository yet{l.source_doc_path ? ' (the abstract .docx is above)' : ''}.
+            {pinUnlocked ? ' Upload the loan agreement, guaranty, amendments, closing docs, …' : ''}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Detail panel (expanded row) ──────────────────────────────────────────────
   const Detail = ({ l }) => {
     const Row = ({ k, v }) => (v == null || v === '' ? null : (
@@ -1208,6 +1340,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         </div>
       </div>
       <AmortBlock l={l} />
+      {docsAvailable && <DocsBlock l={l} />}
       </>
     );
   };
