@@ -3,7 +3,6 @@ import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiv
 import { SB_URL, SB_HEADERS } from './supabase.js';
 import { supabase, signOut } from './auth.js';
 import { ScenarioBar, isScenarioActive } from './components/ScenarioBar.jsx';
-import { TT_NAVY, TT_ORANGE } from './theme.js';
 import { formatCurrency } from './format.js';
 import { PRIOR_TAG, isPriorBaseline, findPriorTest } from './priorTest.js';
 import { parseForecasts } from './parseForecasts.js';
@@ -21,7 +20,7 @@ import { LoansTab } from './components/LoansTab.jsx';
 import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
 import { MapTab } from './components/MapTab.jsx';
 import { RegistryTab } from './components/RegistryTab.jsx';
-import { WeeklyUploadBanner } from './components/WeeklyUploadBanner.jsx';
+import { useWeeklyUploads, WeeklyUploadPill, WeeklyUploadBannerRow } from './components/WeeklyUploadBanner.jsx';
 
 
 // 12 blank rows for a new variable-loan balance schedule. Never mutated in place
@@ -42,21 +41,24 @@ const SHARED_STYLES = `
   input[type=checkbox] { accent-color: var(--accent); }
   input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: var(--disabled); outline: none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 1.35rem 1.5rem; box-shadow: var(--shadow); }
-  .label { font-size: 0.7rem; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.45rem; }
-  .metric { font-size: 1.85rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
-  .pill { display: inline-block; padding: 2px 9px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em; border: 1px solid transparent; }
-  .green  { background: color-mix(in srgb, var(--pass) 12%, transparent); color: var(--pass); border-color: color-mix(in srgb, var(--pass) 20%, transparent); }
-  .yellow { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 20%, transparent); }
-  .red    { background: color-mix(in srgb, var(--fail) 12%, transparent); color: var(--fail); border-color: color-mix(in srgb, var(--fail) 20%, transparent); }
-  .blue   { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .mono { font-family: var(--font-mono); }
+  .card { background: var(--panel); border: 1px solid var(--border2); border-radius: 10px; padding: 1rem 1.15rem; box-shadow: var(--shadow); }
+  .label { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.11em;
+           text-transform: uppercase; color: var(--muted); margin-bottom: 0.45rem; }
+  .metric { font-family: var(--font-mono); font-size: 26px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 3px 7px; border-radius: 4px; font-family: var(--font-mono);
+          font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid transparent; }
+  .green  { background: color-mix(in srgb, var(--pass) 11%, transparent); color: var(--pass); }
+  .yellow { background: color-mix(in srgb, var(--warn) 13%, transparent); color: var(--warn-text); }
+  .red    { background: color-mix(in srgb, var(--fail) 11%, transparent); color: var(--fail); }
+  .blue   { background: color-mix(in srgb, var(--accent) 11%, transparent); color: var(--accent); }
   input[type=number], input[type=text], input[type=date], input[type=month], select {
-    background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+    background: var(--panel); border: 1px solid var(--border2); border-radius: 6px;
     color: var(--text); padding: 0.45rem 0.7rem; font-family: inherit;
     font-size: 0.85rem; width: 100%; outline: none;
     transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out, background-color 0.15s ease-out;
   }
-  input[type=number]:hover, input[type=text]:hover, input[type=date]:hover, input[type=month]:hover, select:hover { border-color: var(--border2); }
+  input[type=number]:hover, input[type=text]:hover, input[type=date]:hover, input[type=month]:hover, select:hover { border-color: var(--border2); background: var(--panel3); }
   input[type=number]:focus, input[type=text]:focus, input[type=date]:focus, input[type=month]:focus, select:focus {
     border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring);
   }
@@ -64,129 +66,123 @@ const SHARED_STYLES = `
   select {
     appearance: none; -webkit-appearance: none; cursor: pointer;
     padding-right: 1.8rem !important;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238B99AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a877f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 0.6rem center;
-  }
-  :root[data-theme="light"] select {
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   }
   .sub  { font-size: 0.76rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.55; }
   .note { font-size: 0.72rem; color: var(--faint2); margin-top: 0.4rem; line-height: 1.6; }
-  th { padding: 0.55rem 0.85rem; text-align: left; color: var(--muted); font-weight: 600;
-       letter-spacing: 0.05em; font-size: 0.68rem; text-transform: uppercase; }
-  td { padding: 0.6rem 0.85rem; font-size: 0.81rem; color: var(--text);
-       border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  th { padding: 0.5rem 0.85rem; text-align: left; color: var(--muted); font-weight: 600;
+       font-family: var(--font-mono); letter-spacing: 0.1em; font-size: 10px; text-transform: uppercase; }
+  td { padding: 0.6rem 0.85rem; font-size: 0.8rem; color: var(--text);
+       border-bottom: 1px solid var(--border);
        font-variant-numeric: tabular-nums; }
   tr:last-child td { border-bottom: none; }
   tbody tr { transition: background-color 0.13s ease-out; }
   tbody tr:hover > td { background-color: color-mix(in srgb, var(--row-hover) 65%, transparent); }
-  .section-title { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
-                   color: var(--text2); font-weight: 600; margin-bottom: 1rem; }
-  .tab-btn { padding: 0.6rem 1.1rem; border: none; cursor: pointer; font-family: inherit;
-             font-size: 0.82rem; font-weight: 500; letter-spacing: 0.01em;
-             border-bottom: 2px solid transparent; background: transparent;
-             transition: color 0.15s ease-out, border-color 0.15s ease-out; }
-  .tab-active   { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-  .tab-inactive { color: var(--muted); }
-  .tab-inactive:hover { color: var(--text2); }
+  .section-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.11em; text-transform: uppercase;
+                   color: var(--muted); font-weight: 600; margin-bottom: 1rem; }
   /* ── Mobile (≤ 720px) ────────────────────────────────────────────────────
-     Light-touch responsive pass: the tab bar scrolls horizontally instead of
-     wrapping, paddings tighten, the covenant summary cards drop to two-up,
-     and dense tables shrink a step. Wide tables already live inside their
-     own overflow containers, so the page itself never scrolls sideways. */
+     Light-touch responsive pass: the sidebar collapses to a dot rail, paddings
+     tighten, the covenant summary cards drop to two-up, and dense tables
+     shrink a step. Wide tables already live inside their own overflow
+     containers, so the page itself never scrolls sideways. */
   @media (max-width: 720px) {
+    .tt-sidebar { width: 56px !important; }
+    .tt-sidebar .nav-label, .tt-sidebar .sidebar-word { display: none !important; }
     .app-main { padding: 0.9rem !important; }
-    .tab-nav { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-    .tab-nav::-webkit-scrollbar { display: none; }
-    .tab-btn { padding: 0.55rem 0.7rem; font-size: 0.75rem; white-space: nowrap; flex-shrink: 0; }
     .covenant-summary { grid-template-columns: repeat(2, 1fr) !important; }
-    th { padding: 0.45rem 0.55rem; font-size: 0.62rem; }
+    th { padding: 0.45rem 0.55rem; font-size: 9px; }
     td { padding: 0.5rem 0.55rem; font-size: 0.74rem; }
-    .btn { padding: 5px 10px; font-size: 0.72rem; }
+    .btn { padding: 5px 10px; font-size: 10px; }
   }
   .mx-high { background: color-mix(in srgb, var(--pass) 15%, transparent); color: var(--pass); font-weight: 600; }
-  .mx-mid  { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); font-weight: 500; }
+  .mx-mid  { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn-text); font-weight: 500; }
   .mx-low  { background: color-mix(in srgb, var(--fail) 11%, transparent); color: var(--fail); font-weight: 500; }
   .mx-vlow { background: color-mix(in srgb, var(--fail) 24%, transparent); color: var(--fail); font-weight: 600; }
 
   /* ── Control system ─────────────────────────────────────────────────────
-     One button vocabulary for the whole app:
-       .btn          neutral secondary action (bordered, quiet)
-       .btn-primary  the one emphasized action in a context (solid blue)
-       .btn-tinted   emphasized-but-lighter action (tinted blue)
-       .btn-danger   destructive / dismiss-with-consequence
-       .btn-ghost    icon-adjacent utility, no chrome until hover
-       .btn-locked   PIN-locked variant of any of the above
-       .btn-sm       compact height for dense toolbars                    */
-  .btn {
+     One button vocabulary for the whole app (mono, terminal-institutional):
+       .btn / .tt-btn  neutral secondary action (white card, navy text)
+       .btn-primary    the one emphasized action in a context (solid ink)
+       .btn-tinted     emphasized-but-lighter action (tinted navy)
+       .btn-danger     destructive / dismiss-with-consequence
+       .btn-ghost      icon-adjacent utility, no chrome until hover
+       .btn-locked     PIN-locked variant of any of the above
+       .btn-sm         compact height for dense toolbars
+       .tt-ico         30×30 icon button                                    */
+  .btn, .tt-btn {
     display: inline-flex; align-items: center; gap: 0.4rem;
-    padding: 5px 13px; border-radius: 5px;
-    border: 1px solid var(--border); background: var(--panel3); color: var(--text2);
-    font-size: 0.75rem; font-weight: 500; line-height: 1.5;
+    padding: 7px 12px; border-radius: 6px;
+    border: 1px solid var(--border2); background: var(--panel); color: var(--accent);
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.02em; line-height: 1.4;
     cursor: pointer; white-space: nowrap; user-select: none;
   }
-  .btn:hover { border-color: var(--border2); color: var(--text); }
-  .btn-primary { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
-  .btn-primary:hover { background: color-mix(in srgb, var(--accent) 86%, #fff); border-color: transparent; color: #fff; }
+  .btn:hover, .tt-btn:hover { background: var(--panel2); color: var(--accent); }
+  .tt-ico {
+    cursor: pointer; width: 30px; height: 30px; border-radius: 6px;
+    border: 1px solid var(--border2); background: var(--panel);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; color: var(--text); user-select: none;
+  }
+  .tt-ico:hover { background: var(--panel2); }
+  .btn-primary { background: var(--text); border-color: var(--text); color: var(--header); }
+  .btn-primary:hover { background: color-mix(in srgb, var(--text) 86%, var(--header)); border-color: transparent; color: var(--header); }
   .btn-tinted {
-    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    background: color-mix(in srgb, var(--accent) 11%, transparent);
     border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-    color: var(--accent-strong); font-weight: 600;
+    color: var(--accent);
   }
   .btn-tinted:hover {
-    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
     border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-    color: var(--accent-strong);
+    color: var(--accent);
   }
   .btn-danger {
-    background: color-mix(in srgb, var(--fail) 12%, transparent);
+    background: color-mix(in srgb, var(--fail) 11%, transparent);
     border-color: color-mix(in srgb, var(--fail) 28%, transparent);
     color: var(--fail);
   }
-  .btn-danger:hover { background: color-mix(in srgb, var(--fail) 20%, transparent); border-color: color-mix(in srgb, var(--fail) 40%, transparent); color: var(--fail); }
+  .btn-danger:hover { background: color-mix(in srgb, var(--fail) 18%, transparent); border-color: color-mix(in srgb, var(--fail) 40%, transparent); color: var(--fail); }
   .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
   .btn-ghost:hover { background: var(--row-hover); border-color: transparent; color: var(--text2); }
   .btn-locked { opacity: 0.55; }
   .btn-locked:hover { opacity: 0.8; }
-  .btn-sm { padding: 3px 10px; font-size: 0.72rem; }
+  .btn-sm { padding: 4px 10px; font-size: 10px; }
 
-  /* Filter chips (sort controls, quick filters) */
+  /* Filter chips (status filters, quick filters) — pill-shaped, mono.
+     Active = ink background, inverted text. */
   .chip {
-    padding: 3px 11px; border-radius: 5px; border: 1px solid var(--border);
-    background: transparent; color: var(--muted);
-    font-size: 0.72rem; font-weight: 500; cursor: pointer; user-select: none;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    padding: 5px 11px; border-radius: 20px; border: 1px solid var(--border2);
+    background: transparent; color: var(--text2); cursor: pointer; user-select: none;
   }
-  .chip:hover { color: var(--text2); border-color: var(--border2); }
+  .chip:hover { color: var(--text); border-color: var(--border2); background: var(--panel2); }
   .chip-active {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    color: var(--accent-strong); font-weight: 600;
+    background: var(--text); border-color: var(--text); color: var(--header); font-weight: 600;
   }
+  .chip-active:hover { background: var(--text); color: var(--header); }
 
   /* Segmented toggles (DSCR / DY, I-O / Amort) */
-  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  .seg { display: inline-flex; border: 1px solid var(--border2); border-radius: 6px; overflow: hidden; background: var(--panel); }
   .seg button {
-    padding: 3px 11px; border: none; background: transparent; color: var(--muted);
-    font-size: 0.72rem; font-weight: 500; cursor: pointer;
+    padding: 4px 11px; border: none; background: transparent; color: var(--muted);
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; cursor: pointer;
   }
   .seg button + button { border-left: 1px solid var(--border); }
-  .seg button.on {
-    background: color-mix(in srgb, var(--accent) 15%, transparent);
-    color: var(--accent-strong); font-weight: 600;
-  }
+  .seg button.on { background: var(--text); color: var(--header); font-weight: 600; }
 
-  /* Dropdown menus (export, column picker, tab config, add widget) */
+  /* Dropdown menus / popovers (export, column picker, tab config, add widget) */
   .menu {
     position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 200;
-    background: var(--panel3); border: 1px solid var(--border2); border-radius: 6px;
-    padding: 0.35rem 0; min-width: 160px;
-    box-shadow: 0 10px 28px rgba(2, 6, 12, 0.45);
+    background: var(--panel); border: 1px solid var(--border2); border-radius: 10px;
+    padding: 0.4rem 0; min-width: 170px;
+    box-shadow: var(--pop-shadow);
   }
-  :root[data-theme="light"] .menu { box-shadow: 0 10px 28px rgba(16, 24, 40, 0.14); }
-  .menu-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.42rem 0.95rem; cursor: pointer; font-size: 0.75rem; color: var(--text2); }
+  .menu-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.95rem; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--text); }
   .menu-item:hover { background: var(--row-hover); }
   .menu-heading {
-    padding: 0.3rem 0.95rem 0.45rem; font-size: 0.64rem; letter-spacing: 0.05em;
+    padding: 0.3rem 0.95rem 0.5rem; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
     color: var(--muted); text-transform: uppercase; font-weight: 600;
     border-bottom: 1px solid var(--border); margin-bottom: 0.35rem;
   }
@@ -2961,23 +2957,59 @@ export default function App() {
     if (pinPendingAction) { pinPendingAction(); setPinPendingAction(null); }
   }
 
-  const LOGO_SRC = "data:image/png;base64,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yWczPcq4uFgS0Utt/P8ybvkd4AlHe5XxegoJsqW9z4f4jCCRmUJW19O0/1totHYcCc5PUXf5Cgx8rvYBEvE6Oq/mOniOzl3lmIdZs4sDLHPQY0IITz7jSPDMGlxOn72dXh/HOuqerqAR6BpqvHvkFlDqgm8if+MTUhgNbmluojjIbXyRI1s4ahIfpPgT0mJHQ0gqMI7O42MkfFO5z7fbfFSRuAcvKTFYcvKxKWdmqXy/yzRcZh2uImHt9mZ4F3WFv4dmaBykss7gKbfstc0ieYivBfPOkDOqrCPx+y6a33w99107FndwCgghPPmMowEEm33RLfv4AMoU3ScbeJu0GFKpVPpe45dJfO/gPjeLtVtFYrg8wGzUR2HhP2vAhUhzdTaJrvHJp9FH2C0v6K2PcBHPzt0Mmzt8FbdE55EIN6a1HzSW9j44w4QQnnzOI1/eKL0Z5bVtVfGUT90wTYvQkWRhXcNTzttylgco28xFklXYg7IU5SKR4upME0JYjJHco9Twvh9Y4HMvEhGMonL+BnUJu8Vi746jlPb3z8j39mtkEY7SnzyOR3HU/GXL7NOLgaPgJSWEMOg7ySr8Nr640yK+OtwmEsafDtkqDM4wIYTBIJnCA8RtGtsIHhK0F2IYDIMQwmAgJKvwKvLFzXB4mt8B8tMNe+AkOKOEEAaDpob76mwOch1PCPEkrMJg0IQQBn0ln6w0WYVvIdGzxAYbKAnDNLIWi6b9D4LChBAGfaXJOh4XkRU4jkJoFlCc4TQp6UFYhcEgCSEMBkqyCi8j0TOL8BaKRVxBmVweDKt8wdkkhLAYu/jc3zJqxObj6hab9WG+NJuT+5TepHoaR2W1rNXg+QqPw5LC1vDlNlfxZAudUEnbGccDxWfx9UM2m1iFjeeniqf5P64c9vul9J9zKLj7EoNbUP44LG3ZBD6QZOepJ2urBF8nhLAYZs1Mokq7g/u+uuUasozm0MjqHTTaeoPeZEFeRWXdwRtcu1mqF1GDvJBe15B192knBUhWoa0et4cL2xY6r3Wap7VqPD8rKCD6bSRwraiiUJ3vopvZl+haPkrHdBJYQseyjY5tFB3rCjr2oA/EBPMOacd31c3E/X5uv5tt97pc7foAG7d5ko6h15z08gVBEARBEARBEASFybLsr4ddhiAIekiWZX877DIE/SHLsr8cdhmCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAh6wP8GMDZpGBxVWa4AAAAASUVORK5CYII=";
-  const TTLogo = () => (
-    // The wordmark PNG is white-on-transparent; darken it on light surfaces.
-    <img src={LOGO_SRC} alt="Thompson Thrift" style={{ height: 44, objectFit: "contain", filter: theme === 'light' ? 'invert(0.82)' : 'none' }} />
-  );
+  // ── Weekly uploads: collapsed pill in the top bar → expandable amber row ──
+  const weekly = useWeeklyUploads({ sofrUpdated, activeTab });
+  const [bannerOpen, setBannerOpen] = useState(false);
 
+  // Covenant failing count for the sidebar status dot + badge — reported by
+  // CovenantTab once its rows are computed (null until first visit).
+  const [covFailing, setCovFailing] = useState(null);
+
+  function openLeasing() {
+    // The Leasing tab may be hidden from the shared tab config — reveal it for
+    // this session only (nothing is saved) so the upload is reachable; the
+    // gear menu still controls the permanent setting.
+    setVisibleTabs(v => (v.leasing ? v : { ...v, leasing: true }));
+    setActiveTab('leasing');
+  }
+
+  const NAV_ITEMS = [
+    ['covenant', 'Covenant Tracker'],
+    ['debt', 'Debt Dashboard'],
+    ['pipeline', 'Lender Pipeline'],
+    ['map', 'Project Map'],
+    ['loans', 'Loans'],
+    ['land', 'Land Facility'],
+    ['leasing', 'Leasing'],
+    ['calculator', 'Calculator'],
+    ['matrix', 'DY / DSCR Matrix'],
+  ].filter(([key]) => visibleTabs[key]);
+
+  const navItemStyle = (active) => ({
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    width: '100%', textAlign: 'left', padding: '10px 22px',
+    fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: active ? 600 : 500,
+    color: active ? 'var(--sidebar-active)' : 'var(--sidebar-text)',
+    background: active ? 'rgba(255,255,255,.08)' : 'transparent',
+    border: 'none', borderLeft: `2px solid ${active ? '#fff' : 'transparent'}`,
+  });
+
+  // Split-frame screens own their full pane (list column · detail); the rest
+  // get the standard padded scroll surface.
+  const fullBleed = activeTab === 'covenant' || activeTab === 'loans' || activeTab === 'map';
+
+  const lockLabel = pinUnlocked ? 'Editing' : 'View only';
+  const lockGlyph = pinUnlocked ? <UnlockIcon size={12} /> : <LockIcon size={12} />;
+  const toggleLock = () => (pinUnlocked ? setPinUnlocked(false) : setShowPinModal(true));
 
   return (
     <div style={{
-      fontFamily: "'Inter', sans-serif",
-      background: TT_NAVY,
-      minHeight: "100vh",
-      color: "var(--text)",
-      padding: "0",
-      display: "flex",
-      flexDirection: "column",
-      position: "relative",
+      fontFamily: 'var(--font-sans)',
+      background: 'var(--bg)',
+      height: '100vh',
+      color: 'var(--text)',
+      display: 'flex',
+      overflow: 'hidden',
     }}>
       <style>{SHARED_STYLES}</style>
 
@@ -2989,159 +3021,181 @@ export default function App() {
         />
       )}
 
-      {/* ── Header bar ── */}
-      <div style={{
-        background: "var(--header)",
-        borderBottom: "1px solid var(--border)",
-        padding: "0.85rem 2rem",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        position: "relative",
-        zIndex: 1,
+      {/* ── Sidebar ── */}
+      <div className="tt-sidebar" style={{
+        width: 196, flex: 'none', background: 'var(--sidebar-bg)',
+        display: 'flex', flexDirection: 'column', padding: '22px 0', overflowY: 'auto',
       }}>
-        {/* Logo + Title */}
-        <div style={{ display: "flex", alignItems: "center", gap: "1.1rem" }}>
-          <TTLogo />
-          <div style={{ width: 1, height: 30, background: "var(--border)", flexShrink: 0 }} />
-          <div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text)", letterSpacing: "0.01em", lineHeight: 1.3 }}>
-              Debt &amp; Capital Markets
-            </div>
-            <div style={{ fontSize: "0.68rem", color: "var(--muted)", lineHeight: 1.4 }}>
-              Portfolio Analytics &amp; Reporting
-            </div>
-          </div>
+        <div className="sidebar-word" style={{ padding: '0 22px 22px' }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: '#fff', lineHeight: 1.22 }}>Thompson<br />Thrift</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, fontSize: 9, letterSpacing: '.2em', color: 'var(--sidebar-faint)', textTransform: 'uppercase', marginTop: 7 }}>Debt Suite</div>
         </div>
-        {/* Right side — theme toggle + SOFR curve status + upload */}
-        <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-        <button
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          aria-label="Toggle light / dark mode"
-          style={{
-            width: 34, height: 34, borderRadius: 6, cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            background: 'var(--panel)', border: '1px solid var(--border)',
-            color: 'var(--text2)', fontSize: '0.9rem', lineHeight: 1, flexShrink: 0,
-            transition: 'background-color 0.15s ease-out, border-color 0.15s ease-out',
-          }}
-        >{theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}</button>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: "0.7rem", color: "var(--faint)" }}>Chatham 1-Mo Term SOFR Forward Curve</div>
-          <div style={{ fontSize: "0.7rem", color: sofrUpdated ? "var(--pass)" : "var(--faint)" }}>
-            {sofrUpdated
-              ? `Updated ${sofrUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-              : "as of 03 Mar 2026 (hardcoded)"}
-          </div>
-          {pinUnlocked ? (
-            <label className="btn btn-sm" style={{ marginTop: '0.35rem', fontSize: '0.66rem', padding: '2px 9px' }}>
-              ↑ Update Curve
-              <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
-            </label>
-          ) : (
-            <button onClick={() => setShowPinModal(true)} className="btn btn-sm btn-locked" style={{ marginTop: '0.35rem', fontSize: '0.66rem', padding: '2px 9px' }}>
-              <LockIcon size={10} /> Update Curve
+
+        {NAV_ITEMS.map(([key, name]) => {
+          const active = activeTab === key;
+          const failDot = key === 'covenant' && covFailing > 0;
+          return (
+            <button key={key} onClick={() => setActiveTab(key)} style={navItemStyle(active)}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', flex: 'none', display: 'inline-block', background: failDot ? 'var(--fail)' : 'rgba(255,255,255,.14)' }} />
+                <span className="nav-label" style={{ whiteSpace: 'nowrap' }}>{name}</span>
+              </span>
+              {failDot ? <span className="nav-label" style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 9, color: 'var(--fail)' }}>{covFailing}</span> : null}
             </button>
-          )}
-        </div>
+          );
+        })}
+
+        {/* Hidden admin item — appears only while editing is unlocked */}
+        {pinUnlocked && (
+          <button
+            onClick={() => setActiveTab('registry')}
+            title="Deal Registry — review every deal, assign stable ids, edit statuses (visible only while editing is unlocked)"
+            style={{
+              ...navItemStyle(activeTab === 'registry'),
+              justifyContent: 'flex-start', gap: 11,
+              marginTop: 8, borderTop: '1px dashed rgba(255,255,255,.14)', paddingTop: 14,
+            }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: '50%', flex: 'none', display: 'inline-block', background: 'var(--warn)' }} />
+            <span className="nav-label" style={{ whiteSpace: 'nowrap' }}>Deal Registry</span>
+          </button>
+        )}
+
+        {/* Footer: edit-lock + account */}
+        <div style={{ marginTop: 'auto', padding: '16px 22px 0', borderTop: '1px solid rgba(255,255,255,.1)' }}>
+          <button
+            onClick={toggleLock}
+            title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
+            style={{
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, padding: 0,
+              background: 'none', border: 'none',
+              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+              color: pinUnlocked ? '#8fd0a8' : 'var(--sidebar-text)',
+            }}
+          >{lockGlyph} <span className="nav-label">{lockLabel}</span></button>
+          <div className="nav-label" style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--sidebar-faint)', marginTop: 6 }}>
+            {pinUnlocked ? 'PIN accepted · changes live' : 'Unlock to edit · PIN'}
+          </div>
+          <button
+            onClick={() => signOut()}
+            title={userEmail ? `Signed in as ${userEmail} — click to sign out` : 'Sign out'}
+            className="nav-label"
+            style={{
+              cursor: 'pointer', background: 'none', border: 'none', padding: 0, marginTop: 12,
+              fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--sidebar-faint)',
+              textAlign: 'left', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block',
+            }}
+          >{userEmail ? `${userEmail} · Sign out` : 'Sign out'}</button>
         </div>
       </div>
 
-      {/* ── Weekly upload reminder (re-arms every Monday) ── */}
-      <WeeklyUploadBanner
-        sofrUpdated={sofrUpdated}
-        activeTab={activeTab}
-        pinUnlocked={pinUnlocked}
-        onCurveFile={handleSofrUpload}
-        onRequirePin={() => setShowPinModal(true)}
-        onOpenLeasing={() => {
-          // The Leasing tab may be hidden from the shared tab config — reveal
-          // it for this session only (nothing is saved) so the upload is
-          // reachable; the gear menu still controls the permanent setting.
-          setVisibleTabs(v => (v.leasing ? v : { ...v, leasing: true }));
-          setActiveTab('leasing');
-        }}
-      />
-      <div className="app-main" style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
+      {/* ── Main column ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--panel3)' }}>
 
-        {/* ── Tab Nav ── */}
-        <div className="tab-nav" style={{ display: 'flex', borderBottom: `1px solid var(--border)`, marginBottom: '2rem', alignItems: 'flex-end', position: 'relative' }}>
-          {visibleTabs.calculator && <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("calculator")}>Calculator</button>}
-          {visibleTabs.matrix     && <button className={`tab-btn ${activeTab === "matrix"     ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("matrix")}>DY / DSCR Matrix</button>}
-          {visibleTabs.covenant   && <button className={`tab-btn ${activeTab === "covenant"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("covenant")}>Covenant Tracker</button>}
-          {visibleTabs.leasing    && <button className={`tab-btn ${activeTab === "leasing"    ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("leasing")}>Leasing Dashboard</button>}
-          {visibleTabs.pipeline   && <button className={`tab-btn ${activeTab === "pipeline"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("pipeline")}>Lender Pipeline</button>}
-          {visibleTabs.land       && <button className={`tab-btn ${activeTab === "land"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("land")}>Land Facility</button>}
-          {visibleTabs.loans      && <button className={`tab-btn ${activeTab === "loans"      ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("loans")}>Loans</button>}
-          {visibleTabs.debt       && <button className={`tab-btn ${activeTab === "debt"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("debt")}>Debt Dashboard</button>}
-          {visibleTabs.map        && <button className={`tab-btn ${activeTab === "map"        ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("map")}>Project Map</button>}
-          {/* Hidden admin tab — appears only while editing is unlocked */}
-          {pinUnlocked && (
+        {/* Top utility bar */}
+        <div style={{
+          flex: 'none', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 24px', borderBottom: '1px solid var(--border2)', background: 'var(--header)',
+          position: 'relative', zIndex: 20,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            {weekly.due ? (
+              <WeeklyUploadPill dueCount={weekly.dueCount} onClick={() => setBannerOpen(v => !v)} />
+            ) : (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                SOFR fwd curve · {sofrUpdated
+                  ? `updated ${sofrUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                  : 'as of 03 Mar 2026'}
+              </span>
+            )}
+            {pinUnlocked && (
+              <label className="tt-btn btn-sm" title="Upload the weekly Chatham forward-curve workbook">
+                ↑ Update Curve
+                <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
+              </label>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <button className="tt-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} aria-label="Toggle light / dark mode">
+              {theme === 'dark' ? <><MoonIcon size={12} /> Dark</> : <><SunIcon size={12} /> Light</>}
+            </button>
             <button
-              className={`tab-btn ${activeTab === "registry" ? "tab-active" : "tab-inactive"}`}
-              onClick={() => setActiveTab("registry")}
-              title="Deal Registry — review every deal, assign stable ids, edit statuses (visible only while editing is unlocked)"
-            ><UnlockIcon size={10} style={{ marginRight: 5, verticalAlign: 'baseline' }} />Deal Registry</button>
-          )}
-          {/* Gear button */}
-          <button
-            onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
-            title={pinUnlocked ? 'Configure visible tabs' : 'Unlock to configure tabs'}
-            style={{ marginLeft: 'auto', marginBottom: 6, padding: '4px 8px', background: showTabConfig ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'none', border: showTabConfig ? `1px solid color-mix(in srgb, var(--accent) 27%, transparent)` : '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: showTabConfig ? TT_ORANGE : 'var(--faint)', fontSize: '0.9rem', lineHeight: 1 }}
-          >⚙</button>
-          {/* Tab config dropdown */}
+              className="tt-ico"
+              onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
+              title={pinUnlocked ? 'Configure visible tabs' : 'Unlock to configure tabs'}
+            >⚙</button>
+            <button
+              onClick={toggleLock}
+              title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
+              style={{
+                cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+                padding: '7px 13px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 6,
+                color: pinUnlocked ? 'var(--pass)' : 'var(--accent)',
+                background: pinUnlocked ? 'color-mix(in srgb, var(--pass) 10%, transparent)' : 'var(--panel)',
+                border: `1px solid ${pinUnlocked ? 'color-mix(in srgb, var(--pass) 35%, transparent)' : 'var(--border2)'}`,
+                userSelect: 'none',
+              }}
+            >{lockGlyph} {lockLabel}</button>
+          </div>
+
+          {/* Tab visibility gear popover */}
           {showTabConfig && (
-            <div className="menu" style={{ minWidth: 210, padding: '0.35rem 0 0.6rem' }}>
-              <div className="menu-heading">Visible Tabs</div>
-              {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans'],['debt','Debt Dashboard'],['map','Project Map']].map(([key, label]) => (
-                <label key={key} className="menu-item" style={{ padding: '0.3rem 0.95rem' }}>
-                  <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ width: 14, height: 14 }} />
-                  <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? 'var(--text)' : 'var(--faint2)' }}>{label}</span>
-                </label>
-              ))}
-              <div style={{ marginTop: '0.45rem', padding: '0 0.95rem', fontSize: '0.64rem', color: 'var(--faint2)' }}>Changes persist across sessions.</div>
+            <div style={{
+              position: 'absolute', right: 52, top: 48, width: 238,
+              background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 10,
+              boxShadow: 'var(--pop-shadow)', padding: '12px 0', zIndex: 40,
+            }}>
+              <div style={{ padding: '4px 16px 10px', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '.1em', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Visible tabs</div>
+              {[['covenant', 'Covenant Tracker'], ['debt', 'Debt Dashboard'], ['pipeline', 'Lender Pipeline'], ['map', 'Project Map'], ['loans', 'Loans'], ['land', 'Land Facility'], ['leasing', 'Leasing'], ['calculator', 'Calculator'], ['matrix', 'DY / DSCR Matrix']].map(([key, label]) => {
+                const on = !!visibleTabs[key];
+                return (
+                  <div
+                    key={key}
+                    onClick={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))}
+                    style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 16px', fontSize: 12, fontWeight: 500, color: 'var(--text)' }}
+                  >
+                    <span>{label}</span>
+                    <span style={{ width: 32, height: 18, borderRadius: 10, background: on ? 'var(--pass)' : 'var(--border2)', position: 'relative', transition: 'background-color .15s', flex: 'none' }}>
+                      <span style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.3)', transition: 'left .15s' }} />
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{ marginTop: 6, padding: '0 16px', fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--faint2)' }}>Changes persist across sessions.</div>
             </div>
           )}
         </div>
 
-        {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
-        {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
-        {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "leasing"    && <LeasingTab />}
-        {activeTab === "pipeline"   && <PipelineTab pinUnlocked={pinUnlocked} />}
-        {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "map"        && <MapTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "registry"   && pinUnlocked && <RegistryTab />}
+        {/* Weekly upload reminder — expanded amber row */}
+        {bannerOpen && weekly.due && (
+          <WeeklyUploadBannerRow
+            weekly={weekly}
+            pinUnlocked={pinUnlocked}
+            onCurveFile={handleSofrUpload}
+            onRequirePin={() => setShowPinModal(true)}
+            onOpenLeasing={openLeasing}
+            onClose={() => { setBannerOpen(false); weekly.dismiss(); }}
+          />
+        )}
 
-        {/* ── Footer ── */}
-        <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid var(--border)`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: "0.68rem", color: "var(--faint)" }}>
-            Chatham 1-Month Term SOFR Forward Curve · as of 03 Mar 2026
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-            <button
-              onClick={() => pinUnlocked ? setPinUnlocked(false) : setShowPinModal(true)}
-              className="btn btn-sm"
-              style={{ fontSize: '0.66rem', padding: '2px 9px', ...(pinUnlocked ? { color: 'var(--pass)', borderColor: 'color-mix(in srgb, var(--pass) 30%, transparent)', background: 'color-mix(in srgb, var(--pass) 9%, transparent)' } : {}) }}
-              title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
-            >
-              {pinUnlocked ? <><UnlockIcon size={11} /> Editing unlocked</> : <><LockIcon size={11} /> View only</>}
-            </button>
-            <button
-              onClick={() => signOut()}
-              title={userEmail ? `Signed in as ${userEmail} — click to sign out` : 'Sign out'}
-              className="btn btn-sm btn-ghost"
-              style={{ fontSize: '0.66rem', padding: '2px 9px' }}
-            >
-              {userEmail ? `${userEmail} · Sign out` : 'Sign out'}
-            </button>
-            <span style={{ fontSize: "0.8rem", color: "var(--text2)", fontWeight: 600, letterSpacing: "0.01em" }}>
-              Kevin Ashburn · <span style={{ color: "var(--highlight)" }}>Thompson Thrift</span>
-            </span>
-          </div>
+        {/* Screen content */}
+        <div
+          className={fullBleed ? undefined : 'app-main'}
+          style={fullBleed
+            ? { flex: 1, overflow: 'hidden', display: 'flex', minWidth: 0, position: 'relative' }
+            : { flex: 1, overflow: 'auto', padding: '24px 28px', minWidth: 0, position: 'relative' }}
+        >
+          {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
+          {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
+          {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} onCurveFile={handleSofrUpload} onFailingCount={setCovFailing} />}
+          {activeTab === "leasing"    && <LeasingTab />}
+          {activeTab === "pipeline"   && <PipelineTab pinUnlocked={pinUnlocked} />}
+          {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+          {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+          {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+          {activeTab === "map"        && <MapTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+          {activeTab === "registry"   && pinUnlocked && <RegistryTab />}
         </div>
       </div>
     </div>

@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 
-// ── Weekly Upload Banner ──────────────────────────────────────────────────────
+// ── Weekly uploads: status hook + pill + banner row ──────────────────────────
 // Every Monday morning the two weekly uploads come due: the Chatham forward
-// curves and the weekly leasing summary. This banner appears under the header
-// whenever either hasn't been refreshed since the start of the current week
-// (Monday 00:00), with a one-click path to each upload. Dismissing hides it
-// for the rest of the browser session; it re-arms on the next visit and every
-// new week until both uploads land.
+// curves and the weekly leasing summary. In the console shell the reminder is
+// collapsed by default to an amber pill in the top utility bar; clicking it
+// expands the full amber row with the outstanding items and jump links.
+// Dismissing hides it for the rest of the browser session; it re-arms on the
+// next visit and every new week until both uploads land.
 
 // Monday 00:00 local time of the current week.
 function weekStart() {
@@ -17,7 +17,12 @@ function weekStart() {
   return d;
 }
 
-export function WeeklyUploadBanner({ sofrUpdated, activeTab, pinUnlocked, onCurveFile, onRequirePin, onOpenLeasing }) {
+const fmt = d => d
+  ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  : 'never';
+
+// Shared freshness logic (settings.sofrUpdated, leasing_snapshot.uploaded_at).
+export function useWeeklyUploads({ sofrUpdated, activeTab }) {
   const [loaded, setLoaded] = useState(false);
   const [dbSofr, setDbSofr] = useState(null);
   const [leasingAt, setLeasingAt] = useState(null);
@@ -37,7 +42,7 @@ export function WeeklyUploadBanner({ sofrUpdated, activeTab, pinUnlocked, onCurv
 
   useEffect(() => {
     (async () => {
-      // Fetch both stamps directly so the banner doesn't flash stale while the
+      // Fetch both stamps directly so the pill doesn't flash stale while the
       // app shell is still loading its own copy of sofrUpdated.
       try {
         const res = await fetch(`${SB_URL}/rest/v1/settings?key=eq.sofrUpdated`, { headers: SB_HEADERS });
@@ -61,66 +66,75 @@ export function WeeklyUploadBanner({ sofrUpdated, activeTab, pinUnlocked, onCurv
   const monday = weekStart();
   const sofrOk = [sofrUpdated, dbSofr].some(d => d && d >= monday);
   const leasingOk = leasingAt && leasingAt >= monday;
-  if (!loaded || dismissed || (sofrOk && leasingOk)) return null;
+  const dueCount = (sofrOk ? 0 : 1) + (leasingOk ? 0 : 1);
 
   function dismiss() {
     try { sessionStorage.setItem('tt-weekly-dismissed', monday.toISOString()); } catch {}
     setDismissed(true);
   }
 
-  const fmt = d => d
-    ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : 'never';
-  const itemStyle = { display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' };
-  const actionStyle = {
-    padding: '3px 12px', borderRadius: 4, cursor: 'pointer', border: 'none',
-    background: 'color-mix(in srgb, var(--warn) 18%, transparent)', color: 'var(--warn)',
-    outline: '1px solid color-mix(in srgb, var(--warn) 40%, transparent)',
-    fontSize: '0.7rem', fontWeight: 700, fontFamily: 'inherit',
+  return {
+    due: loaded && !dismissed && dueCount > 0,
+    dueCount, sofrOk, leasingOk,
+    sofrLast: sofrUpdated || dbSofr,
+    leasingLast: leasingAt,
+    dismiss,
   };
+}
 
+// Collapsed amber pill for the top utility bar.
+export function WeeklyUploadPill({ dueCount, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8,
+      fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--warn-text)',
+      background: 'color-mix(in srgb, var(--warn) 9%, var(--header))',
+      border: '1px solid color-mix(in srgb, var(--warn) 30%, transparent)',
+      padding: '6px 12px', borderRadius: 20,
+    }}>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warn)', display: 'inline-block' }} />
+      {dueCount} weekly upload{dueCount === 1 ? '' : 's'} due
+    </button>
+  );
+}
+
+// Expanded amber row under the top bar: outstanding items + jump links + ✕.
+export function WeeklyUploadBannerRow({ weekly, pinUnlocked, onCurveFile, onRequirePin, onOpenLeasing, onClose }) {
+  const link = {
+    cursor: 'pointer', background: 'none', border: 'none', padding: 0,
+    fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+    color: 'var(--accent)', textDecoration: 'underline',
+  };
   return (
     <div style={{
+      flex: 'none', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+      padding: '11px 24px',
       background: 'color-mix(in srgb, var(--warn) 9%, var(--header))',
-      borderBottom: '1px solid color-mix(in srgb, var(--warn) 35%, var(--border))',
-      padding: '0.6rem 2rem',
-      display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap',
-      position: 'relative', zIndex: 1,
+      borderBottom: '1px solid color-mix(in srgb, var(--warn) 30%, transparent)',
     }}>
-      <div style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--warn)', whiteSpace: 'nowrap' }}>
-        ⚠ Weekly refresh due
-      </div>
-
-      {!sofrOk && (
-        <div style={itemStyle}>
-          <span style={{ fontSize: '0.72rem', color: 'var(--text2)' }}>
-            Chatham forward curves <span style={{ color: 'var(--faint)' }}>(last: {fmt(sofrUpdated || dbSofr)})</span>
-          </span>
-          {pinUnlocked ? (
-            <label style={actionStyle}>
-              ↑ Upload curve file
-              <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={onCurveFile} style={{ display: 'none' }} />
-            </label>
-          ) : (
-            <button onClick={onRequirePin} style={actionStyle}>Unlock to upload</button>
-          )}
-        </div>
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--warn)', display: 'inline-block', flex: 'none' }} />
+      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--warn-text)' }}>Weekly uploads due —</span>
+      <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+        {!weekly.sofrOk && <>Forward curves <b style={{ color: 'var(--warn-text)' }}>last {fmt(weekly.sofrLast)}</b></>}
+        {!weekly.sofrOk && !weekly.leasingOk && ' · '}
+        {!weekly.leasingOk && <>Weekly leasing <b style={{ color: 'var(--warn-text)' }}>last {fmt(weekly.leasingLast)}</b></>}
+      </span>
+      {!weekly.sofrOk && (pinUnlocked ? (
+        <label style={link}>
+          Update curve
+          <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={onCurveFile} style={{ display: 'none' }} />
+        </label>
+      ) : (
+        <button onClick={onRequirePin} style={link}>Update curve</button>
+      ))}
+      {!weekly.leasingOk && (
+        <button onClick={onOpenLeasing} style={link}>Upload leasing</button>
       )}
-
-      {!leasingOk && (
-        <div style={itemStyle}>
-          <span style={{ fontSize: '0.72rem', color: 'var(--text2)' }}>
-            Weekly leasing summary <span style={{ color: 'var(--faint)' }}>(last: {fmt(leasingAt)})</span>
-          </span>
-          <button onClick={onOpenLeasing} style={actionStyle}>Go to Leasing tab →</button>
-        </div>
-      )}
-
-      <div style={{ flex: 1 }} />
-      <button onClick={dismiss} title="Hide for this session — reappears next visit until both uploads are in"
-        style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.85rem', padding: '2px 6px', fontFamily: 'inherit' }}>
-        ✕
-      </button>
+      <button
+        onClick={onClose}
+        title="Hide for this session — reappears next visit until both uploads are in"
+        style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--warn)', cursor: 'pointer', fontSize: 15, padding: '2px 6px' }}
+      >✕</button>
     </div>
   );
 }
