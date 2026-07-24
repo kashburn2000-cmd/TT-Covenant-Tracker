@@ -12,6 +12,7 @@ import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync, CLASSIFICATION_LABEL } from '../dealRegistry.js';
 import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
 import { TasksWidget } from './TasksWidget.jsx';
+import { buildLenderRollup, rollupStats } from '../lenderExposure.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -763,6 +764,87 @@ function GuarantyWidget({ projects }) {
           </tbody>
         </table>
         {rows.length === 0 && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>No repayment guaranties found — upload the At Risk schedule above.</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── Lender Exposure ───────────────────────────────────────────────────────────
+// Rolls the visible schedule up by lender (name variants folded together —
+// src/lenderExposure.js) and enriches with weighted-average spread from the
+// loan abstracts. Dollars come only from the schedule, so totals tie out to
+// the Leverage Tracker and Guaranty Hub.
+function LenderExposureWidget({ projects }) {
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [loans, setLoans] = useState([]);
+  const [openKey, setOpenKey] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${SB_URL}/rest/v1/loans?select=lead_lender,rate_spread_bps,loan_amount`, { headers: SB_HEADERS });
+        if (res.ok) setLoans(await res.json());
+      } catch { /* abstracts are enrichment only */ }
+    })();
+  }, []);
+
+  const rollup = useMemo(
+    () => buildLenderRollup(projects.filter(p => sourceFilter === 'all' || p.source === sourceFilter), loans),
+    [projects, loans, sourceFilter],
+  );
+  const stats = useMemo(() => rollupStats(rollup), [rollup]);
+  const maxLoan = rollup[0]?.totalLoan || 1;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
+      <div><SourceFilter value={sourceFilter} onChange={setSourceFilter} /></div>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <StatTile label="Total debt" value={fmtM(stats.total)} sub={`across ${stats.lenderCount} lender${stats.lenderCount === 1 ? '' : 's'}`} />
+        <StatTile label="Largest relationship" value={stats.top ? fmtM(stats.top.totalLoan) : '—'} sub={stats.top ? `${stats.top.lender} · ${fmtPct(stats.top.share, 0)} of total` : ''} />
+        <StatTile label="Top-3 concentration" value={fmtPct(stats.top3Share, 0)} sub="Share of total debt" />
+      </div>
+      <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>
+            <th>Lender</th><th style={{ textAlign: 'right' }}>Deals</th><th style={{ textAlign: 'right' }}>Exposure</th>
+            <th style={{ minWidth: 90 }}>Share</th><th style={{ textAlign: 'right' }}>TTH Guaranty</th>
+            <th style={{ textAlign: 'right' }}>Wtd Spread</th><th>Next Maturity</th>
+          </tr></thead>
+          <tbody>
+            {rollup.map(r => (
+              <React.Fragment key={r.key}>
+                <tr onClick={() => setOpenKey(k => k === r.key ? null : r.key)} style={{ cursor: 'pointer' }} title="Click to list this lender's deals">
+                  <td style={{ fontWeight: 600 }}>{r.lender}{r.abstractCount > 0 && <span className="pill blue" style={{ marginLeft: 6 }} title="Loan abstracts on file">{r.abstractCount} abstract{r.abstractCount > 1 ? 's' : ''}</span>}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.dealCount}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(r.totalLoan)}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ flex: 1, height: 6, background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${(r.totalLoan / maxLoan) * 100}%`, height: '100%', background: TT_ORANGE, borderRadius: 3 }} />
+                      </div>
+                      <span style={{ fontSize: '0.66rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', minWidth: 32, textAlign: 'right' }}>{fmtPct(r.share, 0)}</span>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.totalGuaranty ? fmtM(r.totalGuaranty) : '—'}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.wAvgSpreadBps != null ? `${Math.round(r.wAvgSpreadBps)} bps` : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{r.nearestMaturity ? fmtDate(r.nearestMaturity) : '—'}</td>
+                </tr>
+                {openKey === r.key && r.deals.map((d, i) => (
+                  <tr key={i} style={{ background: 'var(--panel2)' }}>
+                    <td style={{ paddingLeft: '1.5rem', color: 'var(--muted)' }}>{d.name}</td>
+                    <td />
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{fmtM(d.loan_amount)}</td>
+                    <td />
+                    <td />
+                    <td style={{ textAlign: 'right', color: 'var(--faint)' }}>{SOURCE_LABEL[d.source] || d.source}</td>
+                    <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{d.maturity_date ? fmtDate(d.maturity_date) : '—'}</td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+        {rollup.length === 0 && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>No projects yet — upload the debt schedules above.</div>}
       </div>
     </div>
   );
@@ -1595,6 +1677,7 @@ const WIDGETS = {
   guaranty:   { title: 'Repayment Guaranty Hub', defaultGrid: { x: 6, y: 11, w: 6,  h: 10, minW: 4, minH: 5 } },
   curve:      { title: 'Forward Curve Tracker',  defaultGrid: { x: 0, y: 21, w: 12, h: 10, minW: 6, minH: 6 } },
   tasks:      { title: 'Tasks & Reminders',      defaultGrid: { x: 0, y: 31, w: 12, h: 9,  minW: 4, minH: 5 } },
+  lenders:    { title: 'Lender Exposure',        defaultGrid: { x: 0, y: 40, w: 12, h: 10, minW: 5, minH: 5 } },
 };
 const DEFAULT_WIDGETS = Object.keys(WIDGETS);
 const DEFAULT_LAYOUT = DEFAULT_WIDGETS.map(k => ({ i: k, ...WIDGETS[k].defaultGrid }));
@@ -1856,6 +1939,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       case 'guaranty':   return <GuarantyWidget projects={visibleProjects} />;
       case 'curve':      return <CurveWidget pinUnlocked={pinUnlocked} requirePin={requirePin} />;
       case 'tasks':      return <TasksWidget pinUnlocked={pinUnlocked} />;
+      case 'lenders':    return <LenderExposureWidget projects={visibleProjects} />;
       default: return null;
     }
   }
