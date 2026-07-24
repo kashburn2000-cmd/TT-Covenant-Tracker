@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiveSofrCurve, setActive10YCurve, fuzzyMatch, parseMonthLabel, parseCellNumber, computeNOI, calcCovenantRow } from './calc.js';
 import { SB_URL, SB_HEADERS } from './supabase.js';
 import { supabase, signOut } from './auth.js';
+import { ScenarioBar, isScenarioActive } from './components/ScenarioBar.jsx';
 import { TT_NAVY, TT_ORANGE } from './theme.js';
 import { formatCurrency } from './format.js';
 import { PRIOR_TAG, isPriorBaseline, findPriorTest } from './priorTest.js';
@@ -441,14 +442,30 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   // The pure calculation lives in calc.js (calcCovenantRow) so it can be unit-tested.
   const calcRow = calcCovenantRow;
 
+  // What-if scenario (ScenarioBar): null = base case; otherwise every row is
+  // computed with the shocks applied. View-layer only — never persisted.
+  const [scenario, setScenario] = useState(null);
+  const scenarioOn = isScenarioActive(scenario);
+
   const rows = useMemo(() => {
-    return properties.map(calcRow).sort((a, b) => {
+    return properties.map(p => calcRow(p, scenarioOn ? scenario : null)).sort((a, b) => {
       if (sortField === 'covenantDate') return new Date(a.covenantDate) - new Date(b.covenantDate);
       if (sortField === 'property') return a.property.localeCompare(b.property);
       if (sortField === 'satisfied') return a.satisfied - b.satisfied;
       return 0;
     });
-  }, [properties, sortField]);
+  }, [properties, sortField, scenario, scenarioOn]);
+
+  // Base-case summary shown alongside the shocked numbers while a scenario is on.
+  const baseSummary = useMemo(() => {
+    if (!scenarioOn) return null;
+    const act = properties.map(p => calcRow(p)).filter(r => !r.hidden);
+    return {
+      passing: act.filter(r => r.satisfied).length,
+      failing: act.filter(r => !r.satisfied).length,
+      totalPaydown: act.reduce((s, r) => s + r.paydown, 0),
+    };
+  }, [properties, scenarioOn]);
 
   // activeRows = the live set (hidden tests excluded). Used for summary cards,
   // exports and Doc View. visibleRows = what the dashboard table renders, which
@@ -1259,6 +1276,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>▦</span> Open Doc View
         </button>
       </div>
+      {/* ── Scenario Analysis (what-if shocks over the whole table) ── */}
+      <ScenarioBar scenario={scenario} setScenario={setScenario} baseSummary={baseSummary} />
       {/* ── Summary Cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           {[
