@@ -3,6 +3,7 @@ import { SB_URL, SB_KEY, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
 import { LockIcon } from '../icons.jsx';
 import { slugify } from '../format.js';
+import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
 
 // ── Loans Tab ───────────────────────────────────────────────────────────────
 // Queryable database of closed-loan abstracts (construction + refinance).
@@ -273,6 +274,10 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const [reportingReqs, setReportingReqs] = useState([]);
   const [reqsAvailable, setReqsAvailable] = useState(true);
   const [reqDraft, setReqDraft] = useState(null); // { loanId, item, party, frequency, due_month, due_day, recipient } | null
+
+  // Amortization schedule viewer — open loan id + editable inputs (strings).
+  // Hoisted here (not in Detail) so typing survives LoansTab re-renders.
+  const [schedInputs, setSchedInputs] = useState(null); // { loanId, ratePct, amortYears, ioMonths, termMonths } | null
 
   // filters + sort
   const [fType, setFType]         = useState('all');
@@ -987,6 +992,125 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     );
   };
 
+  // ── Amortization schedule viewer (expanded loan detail) ─────────────────────
+  const AmortBlock = ({ l }) => {
+    const open = schedInputs?.loanId === l.id;
+    const toggle = () => {
+      if (open) { setSchedInputs(null); return; }
+      const d = scheduleDefaultsFromLoan(l);
+      setSchedInputs({
+        loanId: l.id,
+        ratePct: d.annualRatePct != null ? String(d.annualRatePct) : '',
+        amortYears: d.amortYears != null ? String(d.amortYears) : '30',
+        ioMonths: String(d.ioMonths || 0),
+        termMonths: d.termMonths != null ? String(d.termMonths) : '',
+      });
+    };
+    const d = open ? scheduleDefaultsFromLoan(l) : null;
+    const sched = open ? buildAmortizationSchedule({
+      loanAmount: l.loan_amount,
+      annualRatePct: schedInputs.ratePct === '' ? null : Number(schedInputs.ratePct),
+      amortYears: schedInputs.amortYears === '' ? null : Number(schedInputs.amortYears),
+      ioMonths: Number(schedInputs.ioMonths) || 0,
+      startDate: d.startDate || new Date().toISOString().slice(0, 10),
+      termMonths: schedInputs.termMonths === '' ? null : Number(schedInputs.termMonths),
+    }) : null;
+
+    const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.7rem', padding: '0.25rem 0.45rem', width: 64 };
+    const lblSt = { fontSize: '0.62rem', color: 'var(--faint3)', display: 'flex', flexDirection: 'column', gap: 2 };
+    const tile = (k, v, sub) => (
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 5, padding: '0.45rem 0.7rem', minWidth: 110 }}>
+        <div style={{ fontSize: '0.56rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{k}</div>
+        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+        {sub && <div style={{ fontSize: '0.6rem', color: 'var(--muted)' }}>{sub}</div>}
+      </div>
+    );
+
+    // Balance sparkline: one x-step per month, y scaled to the loan amount.
+    const spark = sched && sched.rows.length > 1 ? (() => {
+      const max = l.loan_amount || 1;
+      const pts = sched.rows.map((r, i) => `${(i / (sched.rows.length - 1)) * 100},${24 - (r.balance / max) * 22}`).join(' ');
+      return (
+        <svg viewBox="0 0 100 26" preserveAspectRatio="none" style={{ width: '100%', height: 44, display: 'block' }}>
+          <polyline points={`0,2 ${pts}`} fill="none" stroke={TT_ORANGE} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        </svg>
+      );
+    })() : null;
+
+    let lastYear = null;
+    return (
+      <div style={{ borderTop: '1px solid var(--border)', padding: '0.7rem 1.25rem 1rem' }}>
+        <button onClick={toggle}
+          style={{ background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, padding: 0, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          {open ? '▾' : '▸'} Amortization Schedule
+        </button>
+        {open && (
+          <div style={{ marginTop: '0.7rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+            <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <label style={lblSt}>Rate (%)
+                <input type="number" step="0.01" value={schedInputs.ratePct} placeholder="e.g. 6.50"
+                  onChange={e => setSchedInputs(s => ({ ...s, ratePct: e.target.value }))} style={inSt} /></label>
+              <label style={lblSt}>Amort (yrs, 0 = IO)
+                <input type="number" value={schedInputs.amortYears}
+                  onChange={e => setSchedInputs(s => ({ ...s, amortYears: e.target.value }))} style={inSt} /></label>
+              <label style={lblSt}>IO period (mo)
+                <input type="number" value={schedInputs.ioMonths}
+                  onChange={e => setSchedInputs(s => ({ ...s, ioMonths: e.target.value }))} style={inSt} /></label>
+              <label style={lblSt}>Term (mo)
+                <input type="number" value={schedInputs.termMonths}
+                  onChange={e => setSchedInputs(s => ({ ...s, termMonths: e.target.value }))} style={inSt} /></label>
+              <span style={{ fontSize: '0.62rem', color: 'var(--faint)', maxWidth: 380 }}>
+                Pre-filled from the abstract ({l.amortization_type || 'no amortization type'}
+                {l.note_rate_pct != null ? `, note rate ${l.note_rate_pct}%` : l.rate_floor_pct != null ? `, floor ${l.rate_floor_pct}%` : ', no fixed rate — enter one'}).
+                Floating-rate loans: enter the rate to model.
+              </span>
+            </div>
+            {!sched ? (
+              <div style={{ fontSize: '0.72rem', color: 'var(--warn, #d29922)' }}>Enter a rate and term to build the schedule.</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  {tile('Monthly IO', fmtFull$(sched.monthlyIO))}
+                  {tile('Monthly P&I', fmtFull$(sched.monthlyPI))}
+                  {tile('Annual Debt Service', fmtFull$(sched.annualDS))}
+                  {tile('Balloon at Maturity', fmtFull$(sched.balloon), `${((sched.balloon / l.loan_amount) * 100).toFixed(1)}% of loan`)}
+                </div>
+                {spark}
+                <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 5 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead><tr><th>#</th><th>Date</th><th style={{ textAlign: 'right' }}>Payment</th><th style={{ textAlign: 'right' }}>Interest</th><th style={{ textAlign: 'right' }}>Principal</th><th style={{ textAlign: 'right' }}>Balance</th></tr></thead>
+                    <tbody>
+                      {sched.rows.map(r => {
+                        const year = r.date.slice(0, 4);
+                        const yearHeader = year !== lastYear;
+                        lastYear = year;
+                        return (
+                          <React.Fragment key={r.month}>
+                            {yearHeader && (
+                              <tr><td colSpan={6} style={{ background: 'var(--panel2)', color: 'var(--muted)', fontSize: '0.6rem', letterSpacing: '0.06em', fontWeight: 600, padding: '0.25rem 0.7rem' }}>{year}</td></tr>
+                            )}
+                            <tr style={{ fontSize: '0.7rem' }}>
+                              <td style={{ color: 'var(--faint)' }}>{r.month}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.date)}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtFull$(Math.round(r.payment))}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{fmtFull$(Math.round(r.interest))}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.principal > 0 ? undefined : 'var(--faint)' }}>{fmtFull$(Math.round(r.principal))}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtFull$(Math.round(r.balance))}</td>
+                            </tr>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Detail panel (expanded row) ──────────────────────────────────────────────
   const Detail = ({ l }) => {
     const Row = ({ k, v }) => (v == null || v === '' ? null : (
@@ -1004,6 +1128,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     const ts = l.type_specific && typeof l.type_specific === 'object' ? l.type_specific : {};
     const tsEntries = Object.entries(ts).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
     return (
+      <>
       <div style={{ borderTop: '1px solid var(--border)', padding: '1.1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
         <div>
           <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Loan Terms</div>
@@ -1071,6 +1196,8 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           )}
         </div>
       </div>
+      <AmortBlock l={l} />
+      </>
     );
   };
 
