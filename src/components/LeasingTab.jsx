@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { parseWeeklyLeasingRows } from '../parseWeeklyLeasing.js';
 
@@ -26,25 +26,26 @@ const failColor = 'var(--fail)';
 
 function Card({ label, value, sub, color }) {
   return (
-    <div style={{ background: 'var(--panel)', borderRadius: 6, border: '1px solid var(--border)', padding: '0.75rem 0.85rem', minWidth: 130, flex: '1 1 130px' }}>
-      <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: '0.3rem' }}>{label}</div>
-      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: color || 'var(--text2)' }}>{value}</div>
-      {sub && <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.2rem' }}>{sub}</div>}
+    <div className="card" style={{ padding: '13px 16px', minWidth: 150 }}>
+      <div className="label" style={{ marginBottom: 0, letterSpacing: '0.08em' }}>{label}</div>
+      <div className="mono" style={{ fontSize: 21, fontWeight: 600, color: color || 'var(--text)', marginTop: 5, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{value}</div>
+      {sub && <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }
 
-// Occupancy cell: number + a small inline bar with a tick at the 8-week projection
-function OccBar({ occ, proj }) {
-  if (occ == null) return <span style={{ color: 'var(--border)' }}>—</span>;
+// Occupancy cell: mono number + inline bar; the green tick marks the 8-week
+// projection. fill = accent for Lease-Up, green for Stabilized.
+function OccBar({ occ, proj, fill = 'var(--accent)' }) {
+  if (occ == null) return <span style={{ color: 'var(--faint)' }}>—</span>;
   const pct = Math.max(0, Math.min(1, occ)) * 100;
   return (
-    <div style={{ minWidth: 90 }}>
-      <div style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text)' }}>{fmtPct(occ)}</div>
-      <div style={{ position: 'relative', height: 4, background: 'var(--panel2)', borderRadius: 2, marginTop: 3, overflow: 'visible' }}>
-        <div style={{ position: 'absolute', inset: 0, width: `${pct}%`, background: 'var(--accent)', borderRadius: 2, opacity: 0.75 }} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 120 }}>
+      <span className="mono" style={{ fontWeight: 500, fontSize: 11.5, color: 'var(--text)', minWidth: 40 }}>{fmtPct(occ)}</span>
+      <div style={{ position: 'relative', flex: 1, height: 6, background: 'color-mix(in srgb, var(--text) 7%, transparent)', borderRadius: 3, overflow: 'visible' }}>
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: fill, borderRadius: 3 }} />
         {proj != null && (
-          <div title={`8-wk projected: ${fmtPct(proj)}`} style={{ position: 'absolute', left: `${Math.max(0, Math.min(1, proj)) * 100}%`, top: -2, width: 2, height: 8, background: 'var(--muted)' }} />
+          <div title={`8-wk projected: ${fmtPct(proj)}`} style={{ position: 'absolute', left: `${Math.max(0, Math.min(1, proj)) * 100}%`, top: -2, bottom: -2, width: 1.5, background: 'var(--pass)' }} />
         )}
       </div>
     </div>
@@ -72,38 +73,44 @@ function Section({ title, block, columns, sort, filterState }) {
     .sort(sort.cmp), [block.properties, filterState, sort.key, sort.dir]);
 
   return (
-    <div style={{ marginBottom: '2rem' }}>
-      <div style={{ fontSize: '0.72rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 600, margin: '0 0 0.6rem' }}>
-        {title} <span style={{ color: 'var(--faint)', textTransform: 'none', letterSpacing: 0 }}>· {rows.length} of {block.properties.length} properties</span>
+    <div style={{ marginBottom: 28 }}>
+      <div className="mono" style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text)', margin: '0 0 10px' }}>
+        {title} <span style={{ color: 'var(--muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>· {rows.length} of {block.properties.length} properties</span>
       </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              {columns.map(c => (
-                <th key={c.key} onClick={() => sort.toggle(c.key)} style={{
-                  padding: '0.55rem 0.7rem', fontSize: '0.6rem', letterSpacing: '0.05em', textTransform: 'uppercase',
-                  color: sort.key === c.key ? 'var(--accent)' : 'var(--muted)', fontWeight: 400,
-                  whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', textAlign: c.right ? 'right' : 'left',
-                }}>
-                  {c.label}{sort.key === c.key ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={r.name || r.cityState} style={{ background: i % 2 === 0 ? 'transparent' : 'var(--panel2)', borderBottom: '1px solid var(--bg)' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
                 {columns.map(c => (
-                  <td key={c.key} style={{ padding: '0.6rem 0.7rem', textAlign: c.right ? 'right' : 'left', whiteSpace: c.wrap ? 'normal' : 'nowrap' }}>
-                    {c.render(r)}
-                  </td>
+                  <th key={c.key} onClick={() => sort.toggle(c.key)} style={{
+                    padding: '10px 14px',
+                    color: sort.key === c.key ? 'var(--accent)' : undefined,
+                    whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none', textAlign: c.right ? 'right' : 'left',
+                  }}>
+                    {c.label}{sort.key === c.key ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--faint)', fontSize: '0.78rem' }}>No properties in this state.</div>}
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.name || r.cityState}>
+                  {columns.map(c => (
+                    <td key={c.key} className={c.right ? 'mono' : undefined} style={{
+                      padding: '10px 14px', textAlign: c.right ? 'right' : 'left',
+                      whiteSpace: c.wrap ? 'normal' : 'nowrap',
+                      fontSize: c.right ? 11.5 : undefined,
+                    }}>
+                      {c.render(r)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length === 0 && <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--faint)', fontSize: 12.5 }}>No properties in this state.</div>}
+        </div>
       </div>
     </div>
   );
@@ -187,35 +194,30 @@ export function LeasingTab() {
   }
 
   const uploadLabel = (big) => (
-    <label style={{
-      padding: big ? '8px 22px' : '5px 14px', borderRadius: 4,
-      background: 'color-mix(in srgb, var(--accent) 12%, transparent)', color: 'var(--accent)',
-      outline: '1px solid color-mix(in srgb, var(--accent) 27%, transparent)', cursor: 'pointer',
-      fontSize: big ? '0.78rem' : '0.72rem', fontWeight: 700, fontFamily: 'inherit',
-    }}>
-      ↑ {big ? 'Upload Weekly Leasing Summary' : 'Re-upload'}
+    <label className={`tt-btn ${big ? 'btn-tinted' : ''}`} style={big ? { padding: '9px 18px', fontSize: 12 } : undefined}>
+      ↑ {big ? 'Upload Weekly Leasing Summary' : 'Upload summary'}
       <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ display: 'none' }} />
     </label>
   );
 
   // ── Loading / empty states ─────────────────────────────────────────────────
   if (dbLoading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: '0.8rem' }}>
+    <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: 12 }}>
       Loading leasing data…
     </div>
   );
 
   if (!data) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: '1.25rem' }}>
-      <div style={{ fontSize: '1.7rem', color: 'var(--faint)' }}>▦</div>
-      <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600 }}>Weekly Leasing Summary</div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--faint)', maxWidth: 420, textAlign: 'center', lineHeight: 1.6 }}>
-        Upload the <strong style={{ color: 'var(--text2)' }}>Weekly_Leasing_Summary.xlsx</strong> attachment from the Monday morning
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: 20 }}>
+      <div style={{ fontSize: 28, color: 'var(--faint)' }}>▦</div>
+      <div style={{ fontSize: 15, color: 'var(--text)', fontWeight: 600 }}>Weekly Leasing Summary</div>
+      <div style={{ fontSize: 12.5, color: 'var(--muted)', maxWidth: 420, textAlign: 'center', lineHeight: 1.6 }}>
+        Upload the <strong className="mono" style={{ color: 'var(--text)', fontSize: 11.5 }}>Weekly_Leasing_Summary.xlsx</strong> attachment from the Monday morning
         email — no editing or refreshing needed, just save and upload it as-is.
         {legacySnapshot && <><br /><br />The previously stored data used the old Lender Leasing Comparison format; a fresh weekly-summary upload replaces it.</>}
       </div>
       {uploadLabel(true)}
-      {uploadMsg && <div style={{ fontSize: '0.72rem', color: 'var(--fail)', maxWidth: 420, textAlign: 'center' }}>{uploadMsg}</div>}
+      {uploadMsg && <div className="mono" style={{ fontSize: 11, color: 'var(--fail)', maxWidth: 420, textAlign: 'center' }}>{uploadMsg}</div>}
     </div>
   );
 
@@ -231,63 +233,69 @@ export function LeasingTab() {
 
   const propertyCell = (r) => (
     <div>
-      <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.82rem' }}>{r.name || r.cityState}</div>
-      <div style={{ fontSize: '0.65rem', color: 'var(--faint)', marginTop: '0.1rem' }}>{r.cityState} · {r.units ?? '—'} units</div>
+      <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 12.5 }}>{r.name || r.cityState}</div>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{r.cityState} · {r.units ?? '—'} units</div>
     </div>
   );
 
   const luColumns = [
     { key: 'name', label: 'Property', render: propertyCell },
-    { key: 'occPct', label: 'Occupied', render: r => <OccBar occ={r.occPct} proj={r.projOcc} /> },
+    { key: 'occPct', label: 'Occupancy · 8-wk proj', render: r => <OccBar occ={r.occPct} proj={r.projOcc} /> },
     { key: 'leasedPct', label: 'Leased', right: true, render: r => fmtPct(r.leasedPct) },
-    { key: 'projOcc', label: '8-Wk Proj', right: true, render: r => <span style={{ color: 'var(--muted)' }}>{fmtPct(r.projOcc)}</span> },
+    { key: 'projOcc', label: '8-Wk Proj', right: true, render: r => <span style={{ color: 'var(--text2)' }}>{fmtPct(r.projOcc)}</span> },
     { key: 'traffic', label: 'Traffic', right: true, render: r => fmtNum(r.traffic) },
-    { key: 'netRental', label: 'Wk Net', right: true, render: r => <span style={{ fontWeight: 700, color: netColor(r.netRental) }}>{r.netRental > 0 ? '+' : ''}{fmtNum(r.netRental)}</span> },
+    { key: 'netRental', label: 'Wk Net', right: true, render: r => <span style={{ fontWeight: 600, color: netColor(r.netRental) }}>{r.netRental > 0 ? '+' : ''}{fmtNum(r.netRental)}</span> },
     { key: 'closingRatio', label: 'Closing', right: true, render: r => fmtPct(r.closingRatio, 0) },
-    { key: 'inPlaceRentPF', label: 'Rent vs PF', right: true, render: r => <span style={{ fontWeight: 700, color: pfColor(r.inPlaceRentPF) }}>{fmtPct(r.inPlaceRentPF, 1)}</span> },
+    { key: 'inPlaceRentPF', label: 'Rent vs PF', right: true, render: r => <span style={{ fontWeight: 600, color: pfColor(r.inPlaceRentPF) }}>{fmtPct(r.inPlaceRentPF, 1)}</span> },
     { key: 'avgNetMI', label: 'Net MI/Mo', right: true, render: r => fmtNum(r.avgNetMI, 1) },
-    { key: 'dopDate', label: 'First DOP', render: r => <span style={{ color: 'var(--muted)' }}>{fmtDate(r.dopDate)}</span> },
-    { key: 'topConcession', label: 'Top Concession', wrap: true, render: r => <span style={{ color: 'var(--faint)', fontSize: '0.68rem' }}>{r.topConcession || '—'}</span> },
+    { key: 'dopDate', label: 'First DOP', render: r => <span className="mono" style={{ color: 'var(--text2)', fontSize: 11 }}>{fmtDate(r.dopDate)}</span> },
+    { key: 'topConcession', label: 'Top Concession', wrap: true, render: r => <span style={{ color: 'var(--muted)', fontSize: 11 }}>{r.topConcession || '—'}</span> },
   ];
 
   const stColumns = [
     { key: 'name', label: 'Property', render: propertyCell },
-    { key: 'occPct', label: 'Occupied', render: r => <OccBar occ={r.occPct} proj={r.projOcc} /> },
-    { key: 'projOcc', label: '8-Wk Proj', right: true, render: r => <span style={{ color: 'var(--muted)' }}>{fmtPct(r.projOcc)}</span> },
+    { key: 'occPct', label: 'Occupancy', render: r => <OccBar occ={r.occPct} proj={r.projOcc} fill="var(--pass)" /> },
+    { key: 'projOcc', label: '8-Wk Proj', right: true, render: r => <span style={{ color: 'var(--text2)' }}>{fmtPct(r.projOcc)}</span> },
     { key: 'traffic', label: 'Traffic', right: true, render: r => fmtNum(r.traffic) },
-    { key: 'netRental', label: 'Wk Net', right: true, render: r => <span style={{ fontWeight: 700, color: netColor(r.netRental) }}>{r.netRental > 0 ? '+' : ''}{fmtNum(r.netRental)}</span> },
+    { key: 'netRental', label: 'Wk Net', right: true, render: r => <span style={{ fontWeight: 600, color: netColor(r.netRental) }}>{r.netRental > 0 ? '+' : ''}{fmtNum(r.netRental)}</span> },
     { key: 'closingRatio', label: 'Closing', right: true, render: r => fmtPct(r.closingRatio, 0) },
-    { key: 'yoyRentGrowth', label: 'YOY Rent', right: true, render: r => <span style={{ fontWeight: 700, color: growthColor(r.yoyRentGrowth) }}>{r.yoyRentGrowth != null && r.yoyRentGrowth >= 0 ? '+' : ''}{fmtPct(r.yoyRentGrowth)}</span> },
-    { key: 'inPlaceRentPF', label: 'Rent vs PF', right: true, render: r => <span style={{ fontWeight: 700, color: pfColor(r.inPlaceRentPF) }}>{fmtPct(r.inPlaceRentPF, 1)}</span> },
-    { key: 'stabilizationDate', label: 'Stabilized', render: r => <span style={{ color: 'var(--muted)' }}>{fmtDate(r.stabilizationDate)}</span> },
-    { key: 'topConcession', label: 'Top Concession', wrap: true, render: r => <span style={{ color: 'var(--faint)', fontSize: '0.68rem' }}>{r.topConcession || '—'}</span> },
+    { key: 'yoyRentGrowth', label: 'YOY Growth', right: true, render: r => <span style={{ fontWeight: 600, color: growthColor(r.yoyRentGrowth) }}>{r.yoyRentGrowth != null && r.yoyRentGrowth >= 0 ? '+' : ''}{fmtPct(r.yoyRentGrowth)}</span> },
+    { key: 'inPlaceRentPF', label: 'Rent vs PF', right: true, render: r => <span style={{ fontWeight: 600, color: pfColor(r.inPlaceRentPF) }}>{fmtPct(r.inPlaceRentPF, 1)}</span> },
+    { key: 'stabilizationDate', label: 'Stabilized', render: r => <span className="mono" style={{ color: 'var(--text2)', fontSize: 11 }}>{fmtDate(r.stabilizationDate)}</span> },
+    { key: 'topConcession', label: 'Top Concession', wrap: true, render: r => <span style={{ color: 'var(--muted)', fontSize: 11 }}>{r.topConcession || '—'}</span> },
   ];
 
   return (
     <div>
-      {/* ── Toolbar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-        <div style={{ fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)' }}>
-          Week of {fmtDate(data.weekStart)} – {fmtDate(data.weekEnd)}
+      {/* ── Header: title + state filter chips + upload ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 21, fontWeight: 600, color: 'var(--text)' }}>Leasing Dashboard</div>
+          <div className="mono" style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>
+            Weekly Leasing Summary · {fmtDate(data.weekStart)} – {fmtDate(data.weekEnd)}
+          </div>
         </div>
-        <div style={{ flex: 1 }} />
-        <select value={filterState} onChange={e => setFilterState(e.target.value)}
-          style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', padding: '4px 10px', fontSize: '0.75rem', fontFamily: 'inherit', cursor: 'pointer', width: 'auto' }}>
-          {states.map(s => <option key={s} value={s}>{s === 'All' ? 'All States' : s}</option>)}
-        </select>
-        {uploadLabel(false)}
-        {uploadMsg && <span style={{ fontSize: '0.7rem', color: uploadMsg.startsWith('✓') ? passColor : failColor }}>{uploadMsg}</span>}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {states.map(s => (
+            <button key={s} className={`chip ${filterState === s ? 'chip-active' : ''}`} onClick={() => setFilterState(s)}>
+              {s === 'All' ? 'All states' : s}
+            </button>
+          ))}
+          {uploadLabel(false)}
+          {uploadMsg && <span className="mono" style={{ fontSize: 10.5, color: uploadMsg.startsWith('✓') ? passColor : failColor }}>{uploadMsg}</span>}
+        </div>
       </div>
 
       {/* ── Lease-Up section ── */}
       {lu && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.65rem', marginBottom: '1rem' }}>
+          <div className="mono" style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text)', margin: '0 0 8px' }}>Lease-Up</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 14 }}>
             <Card label="Lease-Up Portfolio" value={`${lu.totals.propertyCount ?? lu.properties.length} properties`} sub={`${fmtNum(lu.totals.units)} units`} />
             <Card label="Occupied" value={fmtPct(lu.totals.occPct)} sub={`Leased ${fmtPct(lu.totals.leasedPct)} · 8-wk proj ${fmtPct(lu.totals.projOcc)}`} />
             <Card label="Weekly Net Rentals" value={`${lu.totals.netRental > 0 ? '+' : ''}${fmtNum(lu.totals.netRental)}`} color={netColor(lu.totals.netRental)} sub={`${fmtNum(lu.totals.traffic)} traffic · ${fmtNum(lu.totals.leases)} leases`} />
             <Card label="Closing Ratio" value={fmtPct(lu.totals.closingRatio, 0)} sub="Leases ÷ traffic" />
-            <Card label="In-Place Rent vs Proforma" value={fmtPct(lu.totals.inPlaceRentPF)} color={pfColor(lu.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(lu.totals.marketRentPF)} of proforma`} />
+            <Card label="In-Place Rent vs PF" value={fmtPct(lu.totals.inPlaceRentPF)} color={pfColor(lu.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(lu.totals.marketRentPF)} of proforma`} />
             <Card label="Avg Net Move-Ins / Mo" value={fmtNum(lu.totals.avgNetMI, 0)} sub={`${fmtNum(lu.totals.avgNetLeases, 0)} net leases / mo`} />
           </div>
           <Section title="Lease-Up Properties" block={lu} columns={luColumns} sort={luSort} filterState={filterState} />
@@ -297,12 +305,13 @@ export function LeasingTab() {
       {/* ── Stabilized section ── */}
       {st && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.65rem', marginBottom: '1rem' }}>
+          <div className="mono" style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text)', margin: '0 0 8px' }}>Stabilized</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12, marginBottom: 14 }}>
             <Card label="Stabilized Portfolio" value={`${st.totals.propertyCount ?? st.properties.length} properties`} sub={`${fmtNum(st.totals.units)} units`} />
             <Card label="Occupied" value={fmtPct(st.totals.occPct)} sub={`8-wk proj ${fmtPct(st.totals.projOcc)}`} />
             <Card label="Weekly Net Rentals" value={`${st.totals.netRental > 0 ? '+' : ''}${fmtNum(st.totals.netRental)}`} color={netColor(st.totals.netRental)} sub={`${fmtNum(st.totals.traffic)} traffic · ${fmtNum(st.totals.leases)} leases`} />
             <Card label="YOY Rent Growth" value={`${st.totals.yoyRentGrowth != null && st.totals.yoyRentGrowth >= 0 ? '+' : ''}${fmtPct(st.totals.yoyRentGrowth)}`} color={growthColor(st.totals.yoyRentGrowth)} sub="Portfolio-wide" />
-            <Card label="In-Place Rent vs Proforma" value={fmtPct(st.totals.inPlaceRentPF)} color={pfColor(st.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(st.totals.marketRentPF)} of proforma`} />
+            <Card label="In-Place Rent vs PF" value={fmtPct(st.totals.inPlaceRentPF)} color={pfColor(st.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(st.totals.marketRentPF)} of proforma`} />
             <Card label="Closing Ratio" value={fmtPct(st.totals.closingRatio, 0)} sub="Leases ÷ traffic" />
           </div>
           <Section title="Stabilized Properties" block={st} columns={stColumns} sort={stSort} filterState={filterState} />
@@ -310,8 +319,8 @@ export function LeasingTab() {
       )}
 
       {/* ── Footer note ── */}
-      <div style={{ marginTop: '0.5rem', fontSize: '0.63rem', color: 'var(--faint)' }}>
-        * Occupancy bars show current occupancy; the tick marks the report's 8-week projection. Rent figures are the report's ratios to proforma.
+      <div className="mono" style={{ marginTop: 8, fontSize: 10, color: 'var(--faint)', lineHeight: 1.5 }}>
+        * Occupancy bars show current occupancy; the green tick marks the report's 8-week projection. Rent figures are the report's ratios to proforma.
       </div>
     </div>
   );

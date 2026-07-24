@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { SB_URL, SB_KEY, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
-import { LockIcon } from '../icons.jsx';
 import { slugify } from '../format.js';
 import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
 import { supabase } from '../auth.js';
@@ -310,9 +309,10 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const [sortDir, setSortDir]     = useState('asc');
 
   // view: table vs calendar, and the month the calendar is showing
-  const [viewMode, setViewMode]   = useState('table');   // 'table' | 'calendar'
+  const [viewMode, setViewMode]   = useState('table');   // 'table' (list+detail) | 'calendar'
   const [calRef, setCalRef]       = useState(() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); });
   const [calTypes, setCalTypes]   = useState({ closing: true, maturity: true, extension: true, covenant: true });
+  const [showFilters, setShowFilters] = useState(false);  // advanced filter drawer in the list column
 
   function flash(text, isErr = false) { setMsg({ text, isErr }); setTimeout(() => setMsg(''), 4000); }
 
@@ -623,6 +623,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const fmt$   = n => n == null ? '—' : '$' + (Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : Number(n).toLocaleString());
   const fmtFull$ = n => n == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
   const fmtDate = d => { if (!d) return '—'; try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
+  const matShort = d => { if (!d) return '—'; try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' }); } catch { return d; } };
   const fmtPct  = (v, dp = 2) => v == null ? '—' : Number(v).toFixed(dp) + '%';
   const fmtRate = l => {
     if (!l.rate_index) return l.note_rate_pct != null ? fmtPct(l.note_rate_pct) : '—';
@@ -842,7 +843,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
 
   // ── Styles ───────────────────────────────────────────────────────────────────
   const inputSt = (extra = {}) => ({ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', padding: '5px 8px', fontSize: '0.78rem', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box', ...extra });
-  const labelSt = { fontSize: '0.6rem', color: 'var(--faint3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
+  const labelSt = { fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 3, display: 'block' };
   const fieldSt = { marginBottom: '0.6rem' };
   const groupHdr = { fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.6rem' };
   const typeBadge = l => (
@@ -853,7 +854,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     </span>
   );
 
-  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: '0.8rem' }}>Loading loans…</div>;
+  if (loading) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>Loading loans…</div>;
 
   function renderField([key, label, type]) {
     const span = type === 'textarea' ? { gridColumn: '1 / -1' } : {};
@@ -998,12 +999,6 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     );
   };
 
-  const SortHdr = ({ field, label, align = 'left' }) => (
-    <th onClick={() => toggleSort(field)} style={{ padding: '0.55rem 0.85rem', textAlign: align, cursor: 'pointer', color: sortField === field ? TT_ORANGE : 'var(--muted)', fontWeight: 600, letterSpacing: '0.04em', fontSize: '0.62rem', textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none' }}>
-      {label}{sortField === field ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
-    </th>
-  );
-
   // ── Reporting Requirements (structured deliverables → nightly reminders) ────
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const reqSchedule = (r) => {
@@ -1015,38 +1010,46 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     return `annual · ${mo || 'Jan'} ${day}`;
   };
 
+  // Amber "due" tag: the anchor date each requirement is due (drives nightly reminders).
+  const reqDueTag = r => r.frequency === 'monthly'
+    ? `DAY ${r.due_day || 1}`
+    : `${(MONTHS[(r.due_month || 1) - 1] || 'Jan').toUpperCase()} ${r.due_day || 1}`;
+
   const ReqsBlock = ({ l }) => {
     const rows = reportingReqs.filter(r => r.loan_id === l.id);
     const drafting = reqDraft?.loanId === l.id;
-    const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.68rem', padding: '0.25rem 0.4rem' };
+    const inSt = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 10.5, padding: '4px 6px' };
     return (
-      <div style={{ marginBottom: '0.6rem' }}>
-        <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>
-          Reporting Requirements
-          <span style={{ textTransform: 'none', letterSpacing: 0, marginLeft: 6, color: 'var(--faint2)' }}>(drive nightly reminders)</span>
-        </div>
+      <>
         {rows.map(r => (
-          <div key={r.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline', padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.72rem' }}>
-            <span style={{ color: 'var(--text2)' }}>{r.item}{r.party ? ` (${r.party})` : ''}</span>
-            <span style={{ marginLeft: 'auto', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{reqSchedule(r)}</span>
-            {r.recipient && <span style={{ color: 'var(--faint3)', whiteSpace: 'nowrap' }}>→ {r.recipient}</span>}
+          <div key={r.id} title={`${reqSchedule(r)}${r.recipient ? ` → ${r.recipient}` : ''}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{r.item}{r.party ? ` (${r.party})` : ''}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', marginLeft: 8 }}>
+                {r.frequency}{r.recipient ? ` → ${r.recipient}` : ''}
+              </span>
+            </div>
+            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 9, letterSpacing: '0.04em', color: 'var(--warn-text)', background: 'color-mix(in srgb, var(--warn) 13%, transparent)', padding: '2px 7px', borderRadius: 3, whiteSpace: 'nowrap' }}>{reqDueTag(r)}</span>
             {pinUnlocked && (
               <button onClick={() => deleteReq(r.id)} title="Remove requirement"
-                style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem', padding: 0 }}>✕</button>
+                style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
             )}
           </div>
         ))}
         {rows.length === 0 && !drafting && (
-          <div style={{ fontSize: '0.68rem', color: 'var(--faint)', padding: '2px 0' }}>None recorded yet.</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>None recorded yet.</div>
         )}
         {pinUnlocked && !drafting && (
-          <button
-            onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}
-            style={{ marginTop: 4, background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', fontSize: '0.66rem', padding: '0.18rem 0.5rem', cursor: 'pointer' }}
-          >+ Add requirement</button>
+          <div style={{ padding: '9px 0' }}>
+            <button
+              onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}
+              style={{ background: 'none', border: 'none', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, padding: 0, cursor: 'pointer' }}
+            >+ Add requirement</button>
+          </div>
         )}
         {drafting && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: 5, alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '9px 0', alignItems: 'center' }}>
             <input placeholder="Deliverable (e.g. Operating statement)" value={reqDraft.item} autoFocus
               onChange={e => setReqDraft(d => ({ ...d, item: e.target.value }))} style={{ ...inSt, flex: '2 1 150px' }} />
             <select value={reqDraft.party} onChange={e => setReqDraft(d => ({ ...d, party: e.target.value }))} style={inSt}>
@@ -1067,10 +1070,10 @@ export function LoansTab({ pinUnlocked, requirePin }) {
               onChange={e => setReqDraft(d => ({ ...d, recipient: e.target.value }))} style={{ ...inSt, flex: '1 1 90px' }} />
             <button onClick={addReq} disabled={!reqDraft.item.trim()}
               style={{ ...inSt, cursor: 'pointer', fontWeight: 600 }}>Add</button>
-            <button onClick={() => setReqDraft(null)} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.68rem' }}>Cancel</button>
+            <button onClick={() => setReqDraft(null)} style={{ background: 'none', border: 'none', color: 'var(--faint)', fontFamily: 'var(--font-mono)', cursor: 'pointer', fontSize: 10.5 }}>Cancel</button>
           </div>
         )}
-      </div>
+      </>
     );
   };
 
@@ -1121,9 +1124,9 @@ export function LoansTab({ pinUnlocked, requirePin }) {
 
     let lastYear = null;
     return (
-      <div style={{ borderTop: '1px solid var(--border)', padding: '0.7rem 1.25rem 1rem' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 9, padding: '12px 16px' }}>
         <button onClick={toggle}
-          style={{ background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, padding: 0, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          style={{ background: 'none', border: 'none', color: 'var(--text)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, padding: 0, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
           {open ? '▾' : '▸'} Amortization Schedule
         </button>
         {open && (
@@ -1193,155 +1196,197 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     );
   };
 
-  // ── Documents repository block (expanded loan detail) ───────────────────────
+  // ── Documents repository (detail pane: chips → signed-URL downloads) ────────
   const DocsBlock = ({ l }) => {
     const docs = dealDocs.filter(d => d.loan_id === l.id);
-    const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.68rem', padding: '0.25rem 0.4rem' };
     return (
-      <div style={{ borderTop: '1px solid var(--border)', padding: '0.7rem 1.25rem 1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--text2)', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-            Documents{docs.length > 0 && <span style={{ color: 'var(--faint)', fontWeight: 400 }}> ({docs.length})</span>}
-          </span>
-          {pinUnlocked && (
-            <span style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center' }}>
-              <select value={docCategory} onChange={e => setDocCategory(e.target.value)} style={inSt}>
-                {Object.entries(DOC_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-              <label style={{ ...inSt, cursor: docBusy ? 'wait' : 'pointer', fontWeight: 600 }}>
-                {docBusy ? 'Uploading…' : '↑ Upload'}
-                <input type="file" disabled={docBusy} style={{ display: 'none' }}
-                  onChange={e => { const f = e.target.files[0]; e.target.value = ''; uploadDealDoc(l, f); }} />
-              </label>
+      <div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {l.source_doc_path && (
+            <button className="tt-btn" onClick={() => downloadDoc(l)} title="The abstract .docx attached at import"
+              style={{ fontFamily: 'var(--font-sans)', fontWeight: 500 }}>↓ Abstract (.docx)</button>
+          )}
+          {docs.map(d => (
+            <span key={d.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <button className="tt-btn" onClick={() => downloadDealDoc(d)}
+                title={`${DOC_CATEGORIES[d.category] || d.category} · ${fmtDate(d.uploaded_at?.slice(0, 10))}${d.uploaded_by ? ` · ${d.uploaded_by}` : ''} — download via signed link`}
+                style={{ fontFamily: 'var(--font-sans)', fontWeight: 500, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>↓ {d.filename}</button>
+              {pinUnlocked && (
+                <button onClick={() => deleteDealDoc(d)} title="Delete document" disabled={docBusy}
+                  style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
+              )}
+            </span>
+          ))}
+          {!l.source_doc_path && docs.length === 0 && (
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)' }}>
+              No documents on file.{pinUnlocked ? ' Upload the loan agreement, guaranty, amendments, …' : ''}
             </span>
           )}
-          {l.source_doc_path && (
-            <button onClick={() => downloadDoc(l)} className="btn btn-sm" title="The abstract .docx attached at import">
-              ⬇ Abstract (.docx)
-            </button>
-          )}
         </div>
-        {docs.length > 0 && (
-          <div style={{ marginTop: '0.5rem' }}>
-            {docs.map(d => (
-              <div key={d.id} style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.73rem' }}>
-                <span className="pill blue">{DOC_CATEGORIES[d.category] || d.category}</span>
-                <button onClick={() => downloadDealDoc(d)} title="Download via signed link"
-                  style={{ background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer', fontSize: '0.73rem', padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 }}>
-                  {d.filename}
-                </button>
-                <span style={{ marginLeft: 'auto', color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: '0.66rem' }}>
-                  {fmtDate(d.uploaded_at?.slice(0, 10))}{d.uploaded_by ? ` · ${d.uploaded_by}` : ''}
-                </span>
-                {pinUnlocked && (
-                  <button onClick={() => deleteDealDoc(d)} title="Delete document" disabled={docBusy}
-                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem', padding: 0 }}>✕</button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        {docs.length === 0 && (
-          <div style={{ marginTop: 4, fontSize: '0.66rem', color: 'var(--faint)' }}>
-            No documents in the repository yet{l.source_doc_path ? ' (the abstract .docx is above)' : ''}.
-            {pinUnlocked ? ' Upload the loan agreement, guaranty, amendments, closing docs, …' : ''}
+        {pinUnlocked && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <select value={docCategory} onChange={e => setDocCategory(e.target.value)}
+              style={{ background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 4, color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 10.5, padding: '4px 6px' }}>
+              {Object.entries(DOC_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <label className="tt-btn" style={{ cursor: docBusy ? 'wait' : 'pointer' }}>
+              {docBusy ? 'Uploading…' : '↑ Upload'}
+              <input type="file" disabled={docBusy} style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files[0]; e.target.value = ''; uploadDealDoc(l, f); }} />
+            </label>
           </div>
         )}
       </div>
     );
   };
 
-  // ── Detail panel (expanded row) ──────────────────────────────────────────────
+  // ── Detail pane body: 2-col grid of ledger cards ─────────────────────────────
   const Detail = ({ l }) => {
-    const Row = ({ k, v }) => (v == null || v === '' ? null : (
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
-        <span style={{ fontSize: '0.7rem', color: 'var(--faint3)', flexShrink: 0 }}>{k}</span>
-        <span style={{ fontSize: '0.76rem', color: 'var(--text2)', textAlign: 'right' }}>{v}</span>
+    const Eyebrow = ({ children, mt }) => (
+      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, letterSpacing: '0.12em', color: 'var(--muted)', textTransform: 'uppercase', margin: mt ? '18px 0 10px' : '0 0 10px' }}>{children}</div>
+    );
+    const Card = ({ children, pad = '6px 16px' }) => (
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 9, padding: pad }}>{children}</div>
+    );
+    const Row = ({ k, v, bold }) => (v == null || v === '' ? null : (
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 12, color: 'var(--text2)', flexShrink: 0 }}>{k}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: bold ? 600 : 500, color: 'var(--text)', textAlign: 'right', overflowWrap: 'anywhere' }}>{v}</span>
       </div>
     ));
     const Prose = ({ k, v }) => (!v ? null : (
-      <div style={{ marginBottom: '0.6rem' }}>
-        <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>{k}</div>
-        <div style={{ fontSize: '0.74rem', color: 'var(--muted)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v}</div>
+      <div style={{ padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>{k}</div>
+        <div style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v}</div>
       </div>
     ));
     const ts = l.type_specific && typeof l.type_specific === 'object' ? l.type_specific : {};
     const tsEntries = Object.entries(ts).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
+    const hasGuaranty = l.completion_guaranty_pct != null || l.repayment_guaranty_pct != null || l.guarantor_entity || l.guaranty_reduction_terms;
+    const hasExt = l.extension_count != null || l.extension_term_months != null || l.extension_fee_pct != null || l.extension_fee_amount != null
+      || l.extension_maturity_date || l.extension_test_summary || l.extension_term_changes || l.prepayment_open || l.exit_fee_pct != null || l.prepayment_terms;
+    const hasLender = l.lead_lender || l.lead_lender_role || l.lead_lender_commitment != null || (l.participants || []).length > 0 || l.lender_contact;
+    const hasConv = l.conversion_window_start || l.conversion_window_end || l.conversion_terms || l.conversion_fee_pct != null;
+    const isFixed = String(l.rate_index || '').toLowerCase() === 'fixed';
     return (
-      <>
-      <div style={{ borderTop: '1px solid var(--border)', padding: '1.1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
-        <div>
-          <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Loan Terms</div>
-          <Row k="Borrower" v={l.borrower_entity} />
-          <Row k="Units" v={l.unit_count} />
-          <Row k="Closing" v={fmtDate(l.closing_date)} />
-          <Row k="Loan Amount" v={fmtFull$(l.loan_amount)} />
-          <Row k="Loan Fee" v={l.loan_fee_amount != null ? `${fmtFull$(l.loan_fee_amount)}${l.loan_fee_pct != null ? ` (${fmtPct(l.loan_fee_pct)})` : ''}` : (l.loan_fee_pct != null ? fmtPct(l.loan_fee_pct) : null)} />
-          <Row k="Annual Fee" v={l.annual_fee_amount != null ? fmtFull$(l.annual_fee_amount) : null} />
-          <Row k="Rate" v={fmtRate(l)} />
-          <Row k="Rate Cap" v={l.rate_cap_pct != null ? fmtPct(l.rate_cap_pct) : null} />
-          <Row k="Initial Term" v={l.initial_term_months != null ? `${l.initial_term_months} mo` : null} />
-          <Row k="Maturity" v={fmtDate(l.maturity_date)} />
-          <Row k="LTC / LTV" v={(l.ltc_pct != null || l.ltv_pct != null) ? `${l.ltc_pct != null ? fmtPct(l.ltc_pct, 0) : '—'} / ${l.ltv_pct != null ? fmtPct(l.ltv_pct, 0) : '—'}` : null} />
-          <Prose k="Repayment" v={l.repayment_summary} />
-          <div style={{ marginTop: '0.5rem', fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.4rem' }}>Lender</div>
-          <Row k="Lead Lender" v={l.lead_lender} />
-          <Row k="Role" v={l.lead_lender_role} />
-          <Row k="Lead Commitment" v={l.lead_lender_commitment != null ? fmtFull$(l.lead_lender_commitment) : null} />
-          {(l.participants || []).map((p, i) => <Row key={i} k={`Participant — ${p.name || '?'}`} v={`${p.commitment != null ? fmt$(Number(p.commitment)) : ''}${p.pct != null ? ` (${p.pct}%)` : ''}`} />)}
-          <Prose k="Lender Contact" v={l.lender_contact} />
-        </div>
-        <div>
-          <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Guaranty & Covenants</div>
-          <Row k="Completion Guaranty" v={l.completion_guaranty_pct != null ? fmtPct(l.completion_guaranty_pct, 0) : null} />
-          <Row k="Repayment Guaranty" v={l.repayment_guaranty_pct != null ? fmtPct(l.repayment_guaranty_pct, 0) : null} />
-          <Row k="Guarantor" v={l.guarantor_entity} />
-          <Row k="TTH Min Net Worth" v={fmt$(l.min_net_worth)} />
-          <Row k="TTH Min Liquidity" v={fmt$(l.min_liquidity)} />
-          <Row k="DSCR Covenant" v={l.dscr_covenant != null ? `${Number(l.dscr_covenant).toFixed(2)}x` : null} />
-          <Row k="Debt Yield Covenant" v={l.debt_yield_covenant != null ? fmtPct(l.debt_yield_covenant) : null} />
-          <Row k="DSCR Test Freq." v={l.dscr_test_frequency} />
-          <Row k="Assumed Reserves" v={l.lender_assumed_reserves_per_unit != null ? `$${l.lender_assumed_reserves_per_unit}/unit` : null} />
-          <div style={{ marginTop: '0.5rem' }} />
-          <Prose k="Guaranty Reductions" v={l.guaranty_reduction_terms} />
-          <Prose k="DSCR Formula" v={l.dscr_formula} />
-          <Prose k="Debt Yield Formula" v={l.debt_yield_formula} />
-          <Prose k="Significant Covenants" v={l.significant_covenants} />
-        </div>
-        <div>
-          <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Extension / Prepay / Other</div>
-          <Row k="Extension" v={(l.extension_count != null || l.extension_term_months != null) ? `${l.extension_count ?? '?'} × ${l.extension_term_months ?? '?'} mo` : null} />
-          <Row k="Extension Fee" v={l.extension_fee_pct != null ? fmtPct(l.extension_fee_pct) : (l.extension_fee_amount != null ? fmtFull$(l.extension_fee_amount) : null)} />
-          <Row k="Extension Maturity" v={l.extension_maturity_date ? fmtDate(l.extension_maturity_date) : null} />
-          <Row k="Prepayment" v={l.prepayment_open ? 'Open, no penalty' : null} />
-          <Row k="Exit Fee" v={l.exit_fee_pct != null ? fmtPct(l.exit_fee_pct) : null} />
-          <Row k="Conversion Window" v={l.conversion_window_start ? `${fmtDate(l.conversion_window_start)} – ${l.conversion_window_end ? fmtDate(l.conversion_window_end) : 'maturity'}` : null} />
-          <Row k="Conversion Fee" v={l.conversion_fee_pct != null ? fmtPct(l.conversion_fee_pct) : null} />
-          <Prose k="Conversion Terms" v={l.conversion_terms} />
-          <Prose k="Extension Test" v={l.extension_test_summary} />
-          <Prose k="Extension Term Changes" v={l.extension_term_changes} />
-          <Prose k="Prepayment Terms" v={l.prepayment_terms} />
-          {reqsAvailable && <ReqsBlock l={l} />}
-          <Prose k="Reporting — Borrower" v={l.financial_reporting_borrower} />
-          <Prose k="Reporting — Guarantor" v={l.financial_reporting_guarantor} />
-          <Prose k="Miscellaneous" v={l.miscellaneous} />
-          <Prose k="Notes" v={l.notes} />
-          {tsEntries.length > 0 && (
-            <div style={{ marginTop: '0.5rem' }}>
-              <div style={{ fontSize: '0.62rem', color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4, fontWeight: 600 }}>{LOAN_TYPE_LABEL[l.loan_type]}-specific</div>
-              {tsEntries.map(([k, v]) => (
-                <div key={k} style={{ marginBottom: 5 }}>
-                  <span style={{ fontSize: '0.62rem', color: 'var(--faint3)' }}>{k}: </span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'pre-wrap' }}>{typeof v === 'object' ? JSON.stringify(v, null, 1) : String(v)}</span>
-                </div>
-              ))}
-            </div>
+      <div style={{ padding: '18px 26px 26px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+        <div style={{ minWidth: 0 }}>
+          <Eyebrow>Terms</Eyebrow>
+          <Card>
+            <Row k="Borrower" v={l.borrower_entity} />
+            <Row k="Units" v={l.unit_count} />
+            <Row k="Closing" v={fmtDate(l.closing_date)} />
+            <Row k="Loan amount" v={fmtFull$(l.loan_amount)} bold />
+            <Row k="Loan fee" v={l.loan_fee_amount != null ? `${fmtFull$(l.loan_fee_amount)}${l.loan_fee_pct != null ? ` (${fmtPct(l.loan_fee_pct)})` : ''}` : (l.loan_fee_pct != null ? fmtPct(l.loan_fee_pct) : null)} />
+            <Row k="Annual fee" v={l.annual_fee_amount != null ? fmtFull$(l.annual_fee_amount) : null} />
+            <Row k="Rate" v={fmtRate(l)} />
+            <Row k="Rate cap" v={l.rate_cap_pct != null ? fmtPct(l.rate_cap_pct) : null} />
+            <Row k="Initial term" v={l.initial_term_months != null ? `${l.initial_term_months} mo` : null} />
+            <Row k="Maturity" v={fmtDate(l.maturity_date)} bold />
+            <Row k="LTC / LTV" v={(l.ltc_pct != null || l.ltv_pct != null) ? `${l.ltc_pct != null ? fmtPct(l.ltc_pct, 0) : '—'} / ${l.ltv_pct != null ? fmtPct(l.ltv_pct, 0) : '—'}` : null} />
+            <Row k="Amortization" v={l.amortization_type} />
+            <Prose k="Repayment" v={l.repayment_summary} />
+          </Card>
+          <Eyebrow mt>Covenants</Eyebrow>
+          <Card>
+            <Row k="DSCR covenant" v={l.dscr_covenant != null ? `${Number(l.dscr_covenant).toFixed(2)}x` : null} />
+            <Row k="Debt yield covenant" v={l.debt_yield_covenant != null ? fmtPct(l.debt_yield_covenant) : null} />
+            <Row k="DSCR test frequency" v={l.dscr_test_frequency} />
+            <Row k="TTH min net worth" v={fmt$(l.min_net_worth)} />
+            <Row k="TTH min liquidity" v={fmt$(l.min_liquidity)} />
+            <Row k="Assumed reserves" v={l.lender_assumed_reserves_per_unit != null ? `$${l.lender_assumed_reserves_per_unit}/unit` : null} />
+            <Prose k="DSCR formula" v={l.dscr_formula} />
+            <Prose k="Debt yield formula" v={l.debt_yield_formula} />
+            <Prose k="Significant covenants" v={l.significant_covenants} />
+            {l.dscr_covenant == null && l.debt_yield_covenant == null && l.min_net_worth == null && l.min_liquidity == null && !l.significant_covenants && (
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>No financial covenants recorded.</div>
+            )}
+          </Card>
+          {hasGuaranty && (
+            <>
+              <Eyebrow mt>Guaranty</Eyebrow>
+              <Card>
+                <Row k="Completion guaranty" v={l.completion_guaranty_pct != null ? fmtPct(l.completion_guaranty_pct, 0) : null} />
+                <Row k="Repayment guaranty" v={l.repayment_guaranty_pct != null ? fmtPct(l.repayment_guaranty_pct, 0) : null} />
+                <Row k="Guarantor" v={l.guarantor_entity} />
+                <Prose k="Guaranty reductions" v={l.guaranty_reduction_terms} />
+              </Card>
+            </>
+          )}
+          {hasExt && (
+            <>
+              <Eyebrow mt>Extension &amp; prepayment</Eyebrow>
+              <Card>
+                <Row k="Extension" v={(l.extension_count != null || l.extension_term_months != null) ? `${l.extension_count ?? '?'} × ${l.extension_term_months ?? '?'} mo` : null} />
+                <Row k="Extension fee" v={l.extension_fee_pct != null ? fmtPct(l.extension_fee_pct) : (l.extension_fee_amount != null ? fmtFull$(l.extension_fee_amount) : null)} />
+                <Row k="Extension maturity" v={l.extension_maturity_date ? fmtDate(l.extension_maturity_date) : null} />
+                <Row k="Prepayment" v={l.prepayment_open ? 'Open, no penalty' : null} />
+                <Row k="Exit fee" v={l.exit_fee_pct != null ? fmtPct(l.exit_fee_pct) : null} />
+                <Prose k="Extension test" v={l.extension_test_summary} />
+                <Prose k="Extension term changes" v={l.extension_term_changes} />
+                <Prose k="Prepayment terms" v={l.prepayment_terms} />
+              </Card>
+            </>
           )}
         </div>
+        <div style={{ minWidth: 0 }}>
+          <Eyebrow>Reporting requirements</Eyebrow>
+          <Card>
+            {reqsAvailable && ReqsBlock({ l })}
+            <Prose k="Reporting — Borrower" v={l.financial_reporting_borrower} />
+            <Prose k="Reporting — Guarantor" v={l.financial_reporting_guarantor} />
+            {!reqsAvailable && !l.financial_reporting_borrower && !l.financial_reporting_guarantor && (
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>None recorded.</div>
+            )}
+          </Card>
+          <Eyebrow mt>Rate conversion</Eyebrow>
+          <Card pad="14px 16px">
+            <div style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>
+              {hasConv ? (
+                <>
+                  {l.conversion_window_start
+                    ? `Floating→fixed conversion window ${fmtDate(l.conversion_window_start)} – ${l.conversion_window_end ? fmtDate(l.conversion_window_end) : 'maturity'}.`
+                    : 'Floating→fixed conversion option.'}
+                  {l.conversion_fee_pct != null ? ` Conversion fee ${fmtPct(l.conversion_fee_pct)}.` : ''}
+                  {l.conversion_terms && <div style={{ marginTop: 6, whiteSpace: 'pre-wrap', color: 'var(--text2)' }}>{l.conversion_terms}</div>}
+                </>
+              ) : (isFixed ? 'Fixed rate — no conversion.' : 'No rate conversion option on this loan.')}
+            </div>
+          </Card>
+          {hasLender && (
+            <>
+              <Eyebrow mt>Lender</Eyebrow>
+              <Card>
+                <Row k="Lead lender" v={l.lead_lender} />
+                <Row k="Role" v={l.lead_lender_role} />
+                <Row k="Lead commitment" v={l.lead_lender_commitment != null ? fmtFull$(l.lead_lender_commitment) : null} bold />
+                {(l.participants || []).map((p, i) => <Row key={i} k={`Participant — ${p.name || '?'}`} v={`${p.commitment != null ? fmt$(Number(p.commitment)) : ''}${p.pct != null ? ` (${p.pct}%)` : ''}`} />)}
+                <Prose k="Lender contact" v={l.lender_contact} />
+              </Card>
+            </>
+          )}
+          {(l.miscellaneous || l.notes || tsEntries.length > 0) && (
+            <>
+              <Eyebrow mt>Notes &amp; other</Eyebrow>
+              <Card>
+                <Prose k="Miscellaneous" v={l.miscellaneous} />
+                <Prose k="Notes" v={l.notes} />
+                {tsEntries.map(([k, v]) => (
+                  <Prose key={k} k={`${LOAN_TYPE_LABEL[l.loan_type] || ''} · ${k.replace(/_/g, ' ')}`}
+                    v={typeof v === 'object' ? JSON.stringify(v, null, 1) : String(v)} />
+                ))}
+              </Card>
+            </>
+          )}
+          {docsAvailable && (
+            <>
+              <Eyebrow mt>Documents</Eyebrow>
+              {DocsBlock({ l })}
+            </>
+          )}
+        </div>
+        <div style={{ gridColumn: '1 / -1' }}>{AmortBlock({ l })}</div>
       </div>
-      <AmortBlock l={l} />
-      {docsAvailable && <DocsBlock l={l} />}
-      </>
     );
   };
 
@@ -1449,8 +1494,14 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     );
   };
 
+  // Selected loan for the detail pane — falls back to the first visible row.
+  const selected = loans.find(l => l.id === expandedId) || sorted[0] || null;
+  const advFilterCount = (fLender ? 1 : 0) + (fYear !== 'all' ? 1 : 0) + (fGuaranty !== '' ? 1 : 0) + (fNW !== '' ? 1 : 0) + (fLiq !== '' ? 1 : 0);
+  const icoActive = { background: 'var(--text)', color: 'var(--panel)', borderColor: 'var(--text)' };
+  const listAddRow = { cursor: 'pointer', padding: '14px 22px', fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12, color: 'var(--accent)' };
+
   return (
-    <div style={{ padding: '1.5rem 0', position: 'relative' }}>
+    <div style={{ flex: 1, display: 'flex', minWidth: 0, overflow: 'hidden' }}>
       {/* Rendered as function calls, NOT <EditModal /> elements: these closures are
           recreated on every render, so mounting them as JSX elements makes React see a
           new component type each keystroke and remount the modal — blurring the focused
@@ -1460,128 +1511,128 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       {ConfirmDeleteModal()}
       {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msg.isErr ? 'color-mix(in srgb, var(--fail) 14%, var(--panel))' : 'color-mix(in srgb, var(--pass) 14%, var(--panel))', border: `1px solid ${msg.isErr ? 'var(--fail)' : 'var(--pass)'}`, color: msg.isErr ? 'var(--fail)' : 'var(--pass)', padding: '8px 18px', borderRadius: 6, fontSize: '0.78rem', boxShadow: 'var(--shadow)' }}>{msg.text}</div>}
 
-      {/* ── Summary cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
-        {[
-          { label: 'Loans (filtered)', value: filtered.length, sub: `${constructionCount} const · ${refinanceCount} refi` },
-          { label: 'Total Loan Amount', value: fmt$(totalAmount), sub: 'across filtered loans' },
-          { label: `Maturing ${thisYear}`, value: maturingThisYear, sub: 'in current calendar year' },
-          { label: 'In Database', value: loans.length, sub: 'all loans' },
-        ].map(c => (
-          <div key={c.label} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.9rem 1rem', boxShadow: 'var(--shadow)' }}>
-            <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.04em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>{c.label}</div>
-            <div style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--text2)', lineHeight: 1.1 }}>{c.value}</div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--faint3)', marginTop: '0.2rem' }}>{c.sub}</div>
+      {/* ── Left: loan list column ── */}
+      <div style={{ width: 340, flex: 'none', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minHeight: 0, background: 'var(--panel)' }}>
+        <div style={{ padding: '18px 22px 14px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 19, fontWeight: 600, color: 'var(--text)' }}>Loans</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                {filtered.length} · {fmt$(totalAmount)} · {constructionCount} constr / {refinanceCount} refi{maturingThisYear ? ` · ${maturingThisYear} maturing ${thisYear}` : ''}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+              <button className="tt-ico" title="List + detail view" onClick={() => setViewMode('table')} style={viewMode === 'table' ? icoActive : undefined}>▤</button>
+              <button className="tt-ico" title="Calendar view (closings, maturities, covenant tests)" onClick={() => setViewMode('calendar')} style={viewMode === 'calendar' ? icoActive : undefined}>▦</button>
+            </div>
           </div>
-        ))}
-      </div>
-
-      {/* ── Filter bar ── */}
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.85rem 1rem', marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '0.75rem', boxShadow: 'var(--shadow)' }}>
-        <div>
-          <label style={labelSt}>View</label>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[['table', '☰ Table'], ['calendar', '▦ Calendar']].map(([v, lbl]) => (
-              <button key={v} onClick={() => setViewMode(v)} className={`chip ${viewMode === v ? 'chip-active' : ''}`}>{lbl}</button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label style={labelSt}>Type</label>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[['all', 'All'], ['construction', 'Const'], ['refinance', 'Refi']].map(([v, lbl]) => (
+          <div style={{ display: 'flex', gap: 7, marginTop: 13, flexWrap: 'wrap', alignItems: 'center' }}>
+            {[['all', 'All'], ['construction', 'Construction'], ['refinance', 'Refinance']].map(([v, lbl]) => (
               <button key={v} onClick={() => setFType(v)} className={`chip ${fType === v ? 'chip-active' : ''}`}>{lbl}</button>
             ))}
+            <button onClick={() => setShowFilters(s => !s)} className={`chip ${showFilters || advFilterCount ? 'chip-active' : ''}`} title="More filters & sort">
+              ⚙{advFilterCount ? ` ${advFilterCount}` : ''}
+            </button>
           </div>
+          {showFilters && (
+            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 10px' }}>
+              <div style={{ gridColumn: '1 / -1' }}><label style={labelSt}>Lender</label><input style={inputSt()} value={fLender} onChange={e => setFLender(e.target.value)} placeholder="e.g. BOKF" /></div>
+              <div>
+                <label style={labelSt}>Maturity year</label>
+                <select style={inputSt()} value={fYear} onChange={e => setFYear(e.target.value)}>
+                  <option value="all">All</option>
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelSt}>Sort</label>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <select style={inputSt()} value={sortField} onChange={e => { setSortField(e.target.value); setSortDir('asc'); }}>
+                    <option value="maturity_date">Maturity</option>
+                    <option value="loan_amount">Amount</option>
+                    <option value="property_name">Name</option>
+                    <option value="lead_lender">Lender</option>
+                    <option value="closing_date">Closing</option>
+                  </select>
+                  <button className="tt-ico" title="Toggle sort direction" onClick={() => toggleSort(sortField)} style={{ flex: 'none' }}>{sortDir === 'asc' ? '↑' : '↓'}</button>
+                </div>
+              </div>
+              <div><label style={labelSt}>Repay guar ≥ %</label><input style={inputSt()} type="number" value={fGuaranty} onChange={e => setFGuaranty(e.target.value)} placeholder="35" /></div>
+              <div><label style={labelSt}>TTH NW ≥ $M</label><input style={inputSt()} type="number" value={fNW} onChange={e => setFNW(e.target.value)} placeholder="75" /></div>
+              <div><label style={labelSt}>TTH Liq ≥ $M</label><input style={inputSt()} type="number" value={fLiq} onChange={e => setFLiq(e.target.value)} placeholder="15" /></div>
+              <div style={{ alignSelf: 'end' }}><button onClick={clearFilters} className="btn btn-sm btn-ghost">Clear filters</button></div>
+            </div>
+          )}
         </div>
-        <div><label style={labelSt}>Lender</label><input style={inputSt({ width: 130 })} value={fLender} onChange={e => setFLender(e.target.value)} placeholder="e.g. BOKF" /></div>
-        <div>
-          <label style={labelSt}>Maturity Year</label>
-          <select style={inputSt({ width: 110 })} value={fYear} onChange={e => setFYear(e.target.value)}>
-            <option value="all">All</option>
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
-        <div><label style={labelSt}>Repay Guar ≥ %</label><input style={inputSt({ width: 90 })} type="number" value={fGuaranty} onChange={e => setFGuaranty(e.target.value)} placeholder="35" /></div>
-        <div><label style={labelSt}>TTH NW ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fNW} onChange={e => setFNW(e.target.value)} placeholder="75" /></div>
-        <div><label style={labelSt}>TTH Liq ≥ $M</label><input style={inputSt({ width: 90 })} type="number" value={fLiq} onChange={e => setFLiq(e.target.value)} placeholder="15" /></div>
-        <button onClick={clearFilters} className="btn btn-sm btn-ghost">Clear</button>
-        <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans" className="btn btn-sm">↓ Export Excel</button>
-          <button onClick={exportPDF} className="btn btn-sm">↓ Export PDF</button>
-          <button onClick={() => requirePin(() => setShowImport(true))} className={`btn btn-sm btn-tinted ${pinUnlocked ? '' : 'btn-locked'}`}>{pinUnlocked ? '⇪ Import Abstract' : <><LockIcon size={11} /> Import</>}</button>
-          <button onClick={() => requirePin(startNew)} className={`btn btn-sm btn-primary ${pinUnlocked ? '' : 'btn-locked'}`}>{pinUnlocked ? '+ Add Loan' : <><LockIcon size={11} /> Add Loan</>}</button>
+        <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+          {sorted.map(l => {
+            const sel = viewMode === 'table' && selected && l.id === selected.id;
+            return (
+              <div key={l.id} onClick={() => setExpandedId(l.id)}
+                style={{ cursor: 'pointer', padding: '13px 22px 13px 19px', borderBottom: '1px solid var(--border)', background: sel ? 'var(--panel2)' : 'transparent', borderLeft: `3px solid ${sel ? 'var(--text)' : 'transparent'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.property_name || l.borrower_entity || '—'}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}>{fmt$(l.loan_amount)}</span>
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--muted)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {l.lead_lender || '—'} · {LOAN_TYPE_LABEL[l.loan_type] || l.loan_type} · {matShort(l.maturity_date)}
+                </div>
+              </div>
+            );
+          })}
+          {sorted.length === 0 && (
+            <div style={{ padding: '18px 22px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--faint)', lineHeight: 1.6 }}>
+              {loans.length === 0 ? 'No loans yet — use “+ Import Abstract” below, or run the backfill script.' : 'No loans match the current filters.'}
+            </div>
+          )}
+          {pinUnlocked && (
+            <>
+              <div onClick={() => requirePin(() => setShowImport(true))} style={listAddRow}>+ Import Abstract</div>
+              <div onClick={() => requirePin(startNew)} style={{ ...listAddRow, paddingTop: 0 }}>+ Add Loan</div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* ── Body: table or calendar ── */}
-      {loans.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-          <div style={{ fontSize: '2rem', opacity: 0.3, marginBottom: '1rem' }}>📄</div>
-          <div style={{ fontSize: '0.9rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.5rem' }}>No loans yet</div>
-          <div style={{ fontSize: '0.75rem', color: 'var(--faint)' }}>Use “Import Abstract” to add your first loan, or run the backfill script.</div>
-        </div>
-      ) : viewMode === 'calendar' ? (
-        <CalendarView />
-      ) : (
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                <SortHdr field="property_name" label="Property" />
-                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'left', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.04em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Type</th>
-                <SortHdr field="lead_lender" label="Lender" />
-                <SortHdr field="maturity_date" label="Maturity" />
-                <SortHdr field="loan_amount" label="Loan Amount" align="right" />
-                <SortHdr field="repayment_guaranty_pct" label="Repay Guar" align="right" />
-                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.04em', fontSize: '0.62rem', textTransform: 'uppercase' }}>DSCR</th>
-                <th style={{ padding: '0.55rem 0.85rem', textAlign: 'right', color: 'var(--muted)', fontWeight: 600, letterSpacing: '0.04em', fontSize: '0.62rem', textTransform: 'uppercase' }}>Doc</th>
-                <th style={{ width: 70 }} />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map(l => {
-                const isOpen = expandedId === l.id;
-                return (
-                  <React.Fragment key={l.id}>
-                    <tr style={{ borderBottom: isOpen ? 'none' : '1px solid var(--bg)', background: isOpen ? 'var(--border)' : 'transparent', cursor: 'pointer' }} onClick={() => setExpandedId(isOpen ? null : l.id)}>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.82rem', color: 'var(--text2)', fontWeight: 600 }}>
-                        <span style={{ color: TT_ORANGE, marginRight: 6, fontSize: '0.7rem' }}>{isOpen ? '▾' : '▸'}</span>
-                        {l.property_name || l.borrower_entity || '—'}
-                        {l.property_state && <span style={{ color: 'var(--faint3)', fontWeight: 400 }}> · {l.property_state}</span>}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.85rem' }}>{typeBadge(l)}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)' }}>{l.lead_lender || '—'}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)' }}>{fmtDate(l.maturity_date)}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--text2)', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtFull$(l.loan_amount)}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', textAlign: 'right' }}>{l.repayment_guaranty_pct != null ? fmtPct(l.repayment_guaranty_pct, 0) : '—'}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', fontSize: '0.8rem', color: 'var(--muted)', textAlign: 'right' }}>{l.dscr_covenant != null ? `${Number(l.dscr_covenant).toFixed(2)}x` : '—'}</td>
-                      <td style={{ padding: '0.65rem 0.85rem', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                        {l.source_doc_path
-                          ? <button onClick={() => downloadDoc(l)} title="Download source .docx" style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: TT_ORANGE, cursor: 'pointer', padding: '3px 8px', fontSize: '0.68rem', fontFamily: 'inherit' }}>↓ .docx</button>
-                          : <span style={{ fontSize: '0.68rem', color: 'var(--border)' }}>—</span>}
-                      </td>
-                      <td style={{ padding: '0.65rem 0.5rem', whiteSpace: 'nowrap', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                        {pinUnlocked && (
-                          <>
-                            <button onClick={() => startEdit(l)} title="Edit" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.75rem', padding: '2px 5px' }}>✏</button>
-                            <button onClick={() => setConfirmDel(l.id)} title="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 40%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }}>✕</button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                    {isOpen && (
-                      <tr><td colSpan={9} style={{ padding: 0, background: 'var(--panel3)' }}><Detail l={l} /></td></tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-          {sorted.length === 0 && <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--faint)', fontSize: '0.8rem' }}>No loans match the current filters.</div>}
-        </div>
-      )}
+      {/* ── Right: detail pane / calendar ── */}
+      <div style={{ flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--panel3)' }}>
+        {viewMode === 'calendar' ? (
+          <div style={{ padding: '20px 26px' }}><CalendarView /></div>
+        ) : !selected ? (
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--faint)' }}>
+            {loans.length === 0 ? 'No loans yet — import an abstract to get started.' : 'Select a loan from the list.'}
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: '20px 26px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 21, fontWeight: 600, color: 'var(--text)' }}>{selected.property_name || selected.borrower_entity || '—'}</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>
+                  {[
+                    selected.lead_lender,
+                    LOAN_TYPE_LABEL[selected.loan_type] || selected.loan_type,
+                    [selected.property_city, selected.property_state].filter(Boolean).join(', ') || null,
+                    selected.closing_date ? `Closed ${fmtDate(selected.closing_date)}` : null,
+                    selected.loan_amount != null ? fmtFull$(selected.loan_amount) : null,
+                  ].filter(Boolean).join(' · ')}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: 'none' }}>
+                {selected.source_doc_path && <button className="tt-btn" onClick={() => downloadDoc(selected)} title="Download the source abstract via signed link">↓ Download .docx</button>}
+                <button className="tt-btn" onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans">⤓ Export Excel</button>
+                <button className="tt-btn" onClick={exportPDF} title="PDF of the filtered loan list">⤓ Export PDF</button>
+                {pinUnlocked && (
+                  <>
+                    <button className="tt-btn" onClick={() => startEdit(selected)}>✎ Edit</button>
+                    <button className="tt-btn btn-danger" onClick={() => setConfirmDel(selected.id)}>✕ Delete</button>
+                  </>
+                )}
+              </div>
+            </div>
+            {Detail({ l: selected })}
+          </>
+        )}
+      </div>
     </div>
   );
 }

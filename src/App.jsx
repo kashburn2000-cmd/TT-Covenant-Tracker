@@ -3,7 +3,6 @@ import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiv
 import { SB_URL, SB_HEADERS } from './supabase.js';
 import { supabase, signOut } from './auth.js';
 import { ScenarioBar, isScenarioActive } from './components/ScenarioBar.jsx';
-import { TT_NAVY, TT_ORANGE } from './theme.js';
 import { formatCurrency } from './format.js';
 import { PRIOR_TAG, isPriorBaseline, findPriorTest } from './priorTest.js';
 import { parseForecasts } from './parseForecasts.js';
@@ -11,7 +10,6 @@ import { parseChathamWorkbook, curveDateFromFilename } from './curveParse.js';
 import { PinModal } from './components/PinModal.jsx';
 import { MatrixTab } from './components/MatrixTab.jsx';
 import { CalculatorTab } from './components/CalculatorTab.jsx';
-import { MathLine } from './components/MathLine.jsx';
 import { PipelineTab } from './components/PipelineTab.jsx';
 import { LandFacilityTab } from './components/LandFacilityTab.jsx';
 import { LeasingTab } from './components/LeasingTab.jsx';
@@ -21,7 +19,7 @@ import { LoansTab } from './components/LoansTab.jsx';
 import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
 import { MapTab } from './components/MapTab.jsx';
 import { RegistryTab } from './components/RegistryTab.jsx';
-import { WeeklyUploadBanner } from './components/WeeklyUploadBanner.jsx';
+import { useWeeklyUploads, WeeklyUploadPill, WeeklyUploadBannerRow } from './components/WeeklyUploadBanner.jsx';
 
 
 // 12 blank rows for a new variable-loan balance schedule. Never mutated in place
@@ -42,21 +40,24 @@ const SHARED_STYLES = `
   input[type=checkbox] { accent-color: var(--accent); }
   input[type=range] { -webkit-appearance: none; width: 100%; height: 4px; border-radius: 2px; background: var(--disabled); outline: none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 1.35rem 1.5rem; box-shadow: var(--shadow); }
-  .label { font-size: 0.7rem; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.45rem; }
-  .metric { font-size: 1.85rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
-  .pill { display: inline-block; padding: 2px 9px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em; border: 1px solid transparent; }
-  .green  { background: color-mix(in srgb, var(--pass) 12%, transparent); color: var(--pass); border-color: color-mix(in srgb, var(--pass) 20%, transparent); }
-  .yellow { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 20%, transparent); }
-  .red    { background: color-mix(in srgb, var(--fail) 12%, transparent); color: var(--fail); border-color: color-mix(in srgb, var(--fail) 20%, transparent); }
-  .blue   { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .mono { font-family: var(--font-mono); }
+  .card { background: var(--panel); border: 1px solid var(--border2); border-radius: 10px; padding: 1rem 1.15rem; box-shadow: var(--shadow); }
+  .label { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.11em;
+           text-transform: uppercase; color: var(--muted); margin-bottom: 0.45rem; }
+  .metric { font-family: var(--font-mono); font-size: 26px; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+  .pill { display: inline-block; padding: 3px 7px; border-radius: 4px; font-family: var(--font-mono);
+          font-size: 9px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid transparent; }
+  .green  { background: color-mix(in srgb, var(--pass) 11%, transparent); color: var(--pass); }
+  .yellow { background: color-mix(in srgb, var(--warn) 13%, transparent); color: var(--warn-text); }
+  .red    { background: color-mix(in srgb, var(--fail) 11%, transparent); color: var(--fail); }
+  .blue   { background: color-mix(in srgb, var(--accent) 11%, transparent); color: var(--accent); }
   input[type=number], input[type=text], input[type=date], input[type=month], select {
-    background: var(--panel2); border: 1px solid var(--border); border-radius: 5px;
+    background: var(--panel); border: 1px solid var(--border2); border-radius: 6px;
     color: var(--text); padding: 0.45rem 0.7rem; font-family: inherit;
     font-size: 0.85rem; width: 100%; outline: none;
     transition: border-color 0.15s ease-out, box-shadow 0.15s ease-out, background-color 0.15s ease-out;
   }
-  input[type=number]:hover, input[type=text]:hover, input[type=date]:hover, input[type=month]:hover, select:hover { border-color: var(--border2); }
+  input[type=number]:hover, input[type=text]:hover, input[type=date]:hover, input[type=month]:hover, select:hover { border-color: var(--border2); background: var(--panel3); }
   input[type=number]:focus, input[type=text]:focus, input[type=date]:focus, input[type=month]:focus, select:focus {
     border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring);
   }
@@ -64,129 +65,123 @@ const SHARED_STYLES = `
   select {
     appearance: none; -webkit-appearance: none; cursor: pointer;
     padding-right: 1.8rem !important;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238B99AF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a877f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 0.6rem center;
-  }
-  :root[data-theme="light"] select {
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2364748B' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   }
   .sub  { font-size: 0.76rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.55; }
   .note { font-size: 0.72rem; color: var(--faint2); margin-top: 0.4rem; line-height: 1.6; }
-  th { padding: 0.55rem 0.85rem; text-align: left; color: var(--muted); font-weight: 600;
-       letter-spacing: 0.05em; font-size: 0.68rem; text-transform: uppercase; }
-  td { padding: 0.6rem 0.85rem; font-size: 0.81rem; color: var(--text);
-       border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  th { padding: 0.5rem 0.85rem; text-align: left; color: var(--muted); font-weight: 600;
+       font-family: var(--font-mono); letter-spacing: 0.1em; font-size: 10px; text-transform: uppercase; }
+  td { padding: 0.6rem 0.85rem; font-size: 0.8rem; color: var(--text);
+       border-bottom: 1px solid var(--border);
        font-variant-numeric: tabular-nums; }
   tr:last-child td { border-bottom: none; }
   tbody tr { transition: background-color 0.13s ease-out; }
   tbody tr:hover > td { background-color: color-mix(in srgb, var(--row-hover) 65%, transparent); }
-  .section-title { font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase;
-                   color: var(--text2); font-weight: 600; margin-bottom: 1rem; }
-  .tab-btn { padding: 0.6rem 1.1rem; border: none; cursor: pointer; font-family: inherit;
-             font-size: 0.82rem; font-weight: 500; letter-spacing: 0.01em;
-             border-bottom: 2px solid transparent; background: transparent;
-             transition: color 0.15s ease-out, border-color 0.15s ease-out; }
-  .tab-active   { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
-  .tab-inactive { color: var(--muted); }
-  .tab-inactive:hover { color: var(--text2); }
+  .section-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.11em; text-transform: uppercase;
+                   color: var(--muted); font-weight: 600; margin-bottom: 1rem; }
   /* ── Mobile (≤ 720px) ────────────────────────────────────────────────────
-     Light-touch responsive pass: the tab bar scrolls horizontally instead of
-     wrapping, paddings tighten, the covenant summary cards drop to two-up,
-     and dense tables shrink a step. Wide tables already live inside their
-     own overflow containers, so the page itself never scrolls sideways. */
+     Light-touch responsive pass: the sidebar collapses to a dot rail, paddings
+     tighten, the covenant summary cards drop to two-up, and dense tables
+     shrink a step. Wide tables already live inside their own overflow
+     containers, so the page itself never scrolls sideways. */
   @media (max-width: 720px) {
+    .tt-sidebar { width: 56px !important; }
+    .tt-sidebar .nav-label, .tt-sidebar .sidebar-word { display: none !important; }
     .app-main { padding: 0.9rem !important; }
-    .tab-nav { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-    .tab-nav::-webkit-scrollbar { display: none; }
-    .tab-btn { padding: 0.55rem 0.7rem; font-size: 0.75rem; white-space: nowrap; flex-shrink: 0; }
     .covenant-summary { grid-template-columns: repeat(2, 1fr) !important; }
-    th { padding: 0.45rem 0.55rem; font-size: 0.62rem; }
+    th { padding: 0.45rem 0.55rem; font-size: 9px; }
     td { padding: 0.5rem 0.55rem; font-size: 0.74rem; }
-    .btn { padding: 5px 10px; font-size: 0.72rem; }
+    .btn { padding: 5px 10px; font-size: 10px; }
   }
   .mx-high { background: color-mix(in srgb, var(--pass) 15%, transparent); color: var(--pass); font-weight: 600; }
-  .mx-mid  { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); font-weight: 500; }
+  .mx-mid  { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn-text); font-weight: 500; }
   .mx-low  { background: color-mix(in srgb, var(--fail) 11%, transparent); color: var(--fail); font-weight: 500; }
   .mx-vlow { background: color-mix(in srgb, var(--fail) 24%, transparent); color: var(--fail); font-weight: 600; }
 
   /* ── Control system ─────────────────────────────────────────────────────
-     One button vocabulary for the whole app:
-       .btn          neutral secondary action (bordered, quiet)
-       .btn-primary  the one emphasized action in a context (solid blue)
-       .btn-tinted   emphasized-but-lighter action (tinted blue)
-       .btn-danger   destructive / dismiss-with-consequence
-       .btn-ghost    icon-adjacent utility, no chrome until hover
-       .btn-locked   PIN-locked variant of any of the above
-       .btn-sm       compact height for dense toolbars                    */
-  .btn {
+     One button vocabulary for the whole app (mono, terminal-institutional):
+       .btn / .tt-btn  neutral secondary action (white card, navy text)
+       .btn-primary    the one emphasized action in a context (solid ink)
+       .btn-tinted     emphasized-but-lighter action (tinted navy)
+       .btn-danger     destructive / dismiss-with-consequence
+       .btn-ghost      icon-adjacent utility, no chrome until hover
+       .btn-locked     PIN-locked variant of any of the above
+       .btn-sm         compact height for dense toolbars
+       .tt-ico         30×30 icon button                                    */
+  .btn, .tt-btn {
     display: inline-flex; align-items: center; gap: 0.4rem;
-    padding: 5px 13px; border-radius: 5px;
-    border: 1px solid var(--border); background: var(--panel3); color: var(--text2);
-    font-size: 0.75rem; font-weight: 500; line-height: 1.5;
+    padding: 7px 12px; border-radius: 6px;
+    border: 1px solid var(--border2); background: var(--panel); color: var(--accent);
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.02em; line-height: 1.4;
     cursor: pointer; white-space: nowrap; user-select: none;
   }
-  .btn:hover { border-color: var(--border2); color: var(--text); }
-  .btn-primary { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
-  .btn-primary:hover { background: color-mix(in srgb, var(--accent) 86%, #fff); border-color: transparent; color: #fff; }
+  .btn:hover, .tt-btn:hover { background: var(--panel2); color: var(--accent); }
+  .tt-ico {
+    cursor: pointer; width: 30px; height: 30px; border-radius: 6px;
+    border: 1px solid var(--border2); background: var(--panel);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; color: var(--text); user-select: none;
+  }
+  .tt-ico:hover { background: var(--panel2); }
+  .btn-primary { background: var(--text); border-color: var(--text); color: var(--header); }
+  .btn-primary:hover { background: color-mix(in srgb, var(--text) 86%, var(--header)); border-color: transparent; color: var(--header); }
   .btn-tinted {
-    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    background: color-mix(in srgb, var(--accent) 11%, transparent);
     border-color: color-mix(in srgb, var(--accent) 30%, transparent);
-    color: var(--accent-strong); font-weight: 600;
+    color: var(--accent);
   }
   .btn-tinted:hover {
-    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
     border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-    color: var(--accent-strong);
+    color: var(--accent);
   }
   .btn-danger {
-    background: color-mix(in srgb, var(--fail) 12%, transparent);
+    background: color-mix(in srgb, var(--fail) 11%, transparent);
     border-color: color-mix(in srgb, var(--fail) 28%, transparent);
     color: var(--fail);
   }
-  .btn-danger:hover { background: color-mix(in srgb, var(--fail) 20%, transparent); border-color: color-mix(in srgb, var(--fail) 40%, transparent); color: var(--fail); }
+  .btn-danger:hover { background: color-mix(in srgb, var(--fail) 18%, transparent); border-color: color-mix(in srgb, var(--fail) 40%, transparent); color: var(--fail); }
   .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
   .btn-ghost:hover { background: var(--row-hover); border-color: transparent; color: var(--text2); }
   .btn-locked { opacity: 0.55; }
   .btn-locked:hover { opacity: 0.8; }
-  .btn-sm { padding: 3px 10px; font-size: 0.72rem; }
+  .btn-sm { padding: 4px 10px; font-size: 10px; }
 
-  /* Filter chips (sort controls, quick filters) */
+  /* Filter chips (status filters, quick filters) — pill-shaped, mono.
+     Active = ink background, inverted text. */
   .chip {
-    padding: 3px 11px; border-radius: 5px; border: 1px solid var(--border);
-    background: transparent; color: var(--muted);
-    font-size: 0.72rem; font-weight: 500; cursor: pointer; user-select: none;
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 600;
+    padding: 5px 11px; border-radius: 20px; border: 1px solid var(--border2);
+    background: transparent; color: var(--text2); cursor: pointer; user-select: none;
   }
-  .chip:hover { color: var(--text2); border-color: var(--border2); }
+  .chip:hover { color: var(--text); border-color: var(--border2); background: var(--panel2); }
   .chip-active {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    color: var(--accent-strong); font-weight: 600;
+    background: var(--text); border-color: var(--text); color: var(--header); font-weight: 600;
   }
+  .chip-active:hover { background: var(--text); color: var(--header); }
 
   /* Segmented toggles (DSCR / DY, I-O / Amort) */
-  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  .seg { display: inline-flex; border: 1px solid var(--border2); border-radius: 6px; overflow: hidden; background: var(--panel); }
   .seg button {
-    padding: 3px 11px; border: none; background: transparent; color: var(--muted);
-    font-size: 0.72rem; font-weight: 500; cursor: pointer;
+    padding: 4px 11px; border: none; background: transparent; color: var(--muted);
+    font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; cursor: pointer;
   }
   .seg button + button { border-left: 1px solid var(--border); }
-  .seg button.on {
-    background: color-mix(in srgb, var(--accent) 15%, transparent);
-    color: var(--accent-strong); font-weight: 600;
-  }
+  .seg button.on { background: var(--text); color: var(--header); font-weight: 600; }
 
-  /* Dropdown menus (export, column picker, tab config, add widget) */
+  /* Dropdown menus / popovers (export, column picker, tab config, add widget) */
   .menu {
     position: absolute; top: 100%; right: 0; margin-top: 6px; z-index: 200;
-    background: var(--panel3); border: 1px solid var(--border2); border-radius: 6px;
-    padding: 0.35rem 0; min-width: 160px;
-    box-shadow: 0 10px 28px rgba(2, 6, 12, 0.45);
+    background: var(--panel); border: 1px solid var(--border2); border-radius: 10px;
+    padding: 0.4rem 0; min-width: 170px;
+    box-shadow: var(--pop-shadow);
   }
-  :root[data-theme="light"] .menu { box-shadow: 0 10px 28px rgba(16, 24, 40, 0.14); }
-  .menu-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.42rem 0.95rem; cursor: pointer; font-size: 0.75rem; color: var(--text2); }
+  .menu-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.95rem; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--text); }
   .menu-item:hover { background: var(--row-hover); }
   .menu-heading {
-    padding: 0.3rem 0.95rem 0.45rem; font-size: 0.64rem; letter-spacing: 0.05em;
+    padding: 0.3rem 0.95rem 0.5rem; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
     color: var(--muted); text-transform: uppercase; font-weight: 600;
     border-bottom: 1px solid var(--border); margin-bottom: 0.35rem;
   }
@@ -215,7 +210,45 @@ const FUND_SHEETS = {
   wwymi: 'Wyoming',
 };
 
-function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn() }) {
+// Status vocabulary for the console list/detail layout. WAIVED trumps FAIL,
+// THIN = passing but inside a 5% cushion of the requirement.
+function covenantStatus(r) {
+  if (r.waived) return 'WAIVED';
+  if (!r.satisfied) return 'FAIL';
+  if (r.currentVal < r.covenantReq * 1.05) return 'THIN';
+  return 'PASS';
+}
+const STATUS_META = {
+  PASS:   { label: 'PASS',   cls: 'green',  color: 'var(--pass)',      fill: 'var(--pass)' },
+  THIN:   { label: 'THIN',   cls: 'yellow', color: 'var(--warn-text)', fill: 'var(--warn)' },
+  WAIVED: { label: 'WAIVED', cls: 'yellow', color: 'var(--warn-text)', fill: 'var(--fail)' },
+  FAIL:   { label: 'FAIL',   cls: 'red',    color: 'var(--fail)',      fill: 'var(--fail)' },
+};
+const STATUS_ORDER = { FAIL: 0, WAIVED: 1, THIN: 2, PASS: 3 };
+
+// Mono eyebrow heading used across the detail pane
+function Eyebrow({ children, style }) {
+  return (
+    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, letterSpacing: '.12em', color: 'var(--muted)', textTransform: 'uppercase', margin: '12px 0 10px', ...style }}>
+      {children}
+    </div>
+  );
+}
+
+// Label / value ledger row (sans label, mono value) for the math cards
+function LedgerRow({ label, value, eq, color, strong, indent }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+      <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: strong ? 600 : 400, color: color || (strong ? 'var(--text)' : 'var(--text2)'), paddingLeft: indent ? 14 : 0 }}>{label}</span>
+      <span style={{ textAlign: 'right' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: strong ? 600 : 500, fontVariantNumeric: 'tabular-nums', color: color || 'var(--text)' }}>{value}</span>
+        {eq && <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)' }}>{eq}</div>}
+      </span>
+    </div>
+  );
+}
+
+function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn(), onCurveFile, onFailingCount }) {
   const SOFR_MIN = getActiveSofrCurve()[0].date;
   const SOFR_MAX = getActiveSofrCurve()[getActiveSofrCurve().length - 1].date;
 
@@ -317,13 +350,19 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [sortField, setSortField] = useState('covenantDate');
+  const [sortField, setSortField] = useState('risk');
   const [exportMsg, setExportMsg] = useState('');
   const [uploadStatus, setUploadStatus] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
   const [expandedFund, setExpandedFund] = useState(false);
-  const [expandedMath, setExpandedMath] = useState(new Set());
   const [expandedHistory, setExpandedHistory] = useState(new Set()); // property IDs with history open
+  // Console layout UI state: selected list row + popovers/overlays
+  const [selectedId, setSelectedId] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'fail' | 'thin'
+  const [listMenuOpen, setListMenuOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [refiOpen, setRefiOpen] = useState(false);
+  const [uploadPanelOpen, setUploadPanelOpen] = useState(false);
   const [propertyEvents, setPropertyEvents] = useState({});           // { propertyId: [events] }
   const [whatIfNOI, setWhatIfNOI] = useState({});                     // { rowId: overrideNOI string }
   const [newComment, setNewComment] = useState({});                    // { propertyId: text }
@@ -474,8 +513,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     return properties.map(p => calcRow(p, scenarioOn ? scenario : null)).sort((a, b) => {
       if (sortField === 'covenantDate') return new Date(a.covenantDate) - new Date(b.covenantDate);
       if (sortField === 'property') return a.property.localeCompare(b.property);
+      if (sortField === 'dscr') return a.currentVal - b.currentVal;
       if (sortField === 'satisfied') return a.satisfied - b.satisfied;
-      return 0;
+      // 'risk' — worst first (FAIL → WAIVED → THIN → PASS), soonest test date breaking ties
+      return (STATUS_ORDER[covenantStatus(a)] - STATUS_ORDER[covenantStatus(b)])
+        || (new Date(a.covenantDate) - new Date(b.covenantDate));
     });
   }, [properties, sortField, scenario, scenarioOn]);
 
@@ -503,6 +545,30 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     failing: activeRows.filter(r => !r.satisfied).length,
     totalPaydown: activeRows.reduce((s, r) => s + r.paydown, 0),
   }), [activeRows]);
+
+  // FAIL-status count (hidden tests excluded) reported up to App for the
+  // sidebar status dot + badge.
+  const failingCount = useMemo(() => activeRows.filter(r => covenantStatus(r) === 'FAIL').length, [activeRows]);
+  useEffect(() => {
+    if (typeof onFailingCount === 'function') onFailingCount(failingCount);
+  }, [failingCount, onFailingCount]);
+
+  // List rows after the status chips filter; selection falls back to the first
+  // visible row when the selected one is filtered/hidden away.
+  const listRows = useMemo(() => {
+    if (statusFilter === 'fail') return visibleRows.filter(r => { const s = covenantStatus(r); return s === 'FAIL' || s === 'WAIVED'; });
+    if (statusFilter === 'thin') return visibleRows.filter(r => covenantStatus(r) === 'THIN');
+    return visibleRows;
+  }, [visibleRows, statusFilter]);
+  const sel = listRows.find(r => r.id === selectedId) || listRows[0] || visibleRows[0] || null;
+
+  // Prior-test snapshots power the detail pane's "prior" line, Doc View and the
+  // PDF export column — prefetch events for rows we haven't loaded yet whenever
+  // the Prior Test column is enabled (same lazy load the old table performed).
+  useEffect(() => {
+    if (!visibleCols.priorResult) return;
+    activeRows.forEach(r => { if (!propertyEvents[r.id]) fetchEvents(r.id); });
+  }, [activeRows, visibleCols.priorResult]);
 
   async function handleFileUpload(e) {
     const file = e.target.files[0];
@@ -1272,1449 +1338,1330 @@ Req: ${formatCurrency(r.requiredNOI)}`,
   const fmtDate = d => { try { return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return d; } };
   const daysUntil = d => { try { return Math.ceil((new Date(d + 'T00:00:00') - new Date()) / 86400000); } catch { return null; } };
 
+  // ── Debt-fund refi sizing (same math the old Debt Fund Paydown column ran) ──
+  // Sizes a refi loan for a row from the dfMode assumptions: DY mode compares
+  // As-Is (T1 at test date) vs Stabilized (first month >92% occ) and the more
+  // binding (higher paydown) constraint wins; DSCR mode sizes off SOFR+spread
+  // with I/O or amortizing debt service.
+  function computeDebtFundSizing(r) {
+    const loan = r.effectiveLoan || r.loanAmount;
+    const dfRate = getSofr(r.covenantDate) + parseFloat(dfSpread) / 100;
+
+    function calcMaxLoan(noi, dyReq) {
+      if (!noi || noi <= 0) return 0;
+      if (dfMode === 'dy') return noi / dyReq;
+      const dfDSCRVal = parseFloat(dfDSCR);
+      const adsPerDollar = dfIO ? dfRate : (() => {
+        const mRate = dfRate / 12, n = parseInt(dfAmort) * 12;
+        return (mRate * Math.pow(1 + mRate, n)) / (Math.pow(1 + mRate, n) - 1) * 12;
+      })();
+      return noi / (dfDSCRVal * adsPerDollar);
+    }
+
+    // Column A — As-Is: T1 NOI at test date
+    const noiAsIs = r.noiT1 != null ? r.noiT1 : r.noi;
+    const dyAsIsReq = parseFloat(dfDYAsIs) / 100;
+    const maxAsIs = calcMaxLoan(noiAsIs, dyAsIsReq);
+    const paydownAsIs = Math.max(0, loan - maxAsIs);
+
+    // Column B — Stabilized: first month >92% ending occupancy, annualized.
+    // If no month crosses 92%, fall back to As-Is NOI *and* As-Is DY threshold.
+    const noiStab = r.noiStabilized;
+    const stabMonth = r.noiStabilizedMonth;
+    const stabFallback = !noiStab;
+    const noiStabForCalc = stabFallback ? noiAsIs : noiStab;
+    const dyStabReq = stabFallback ? dyAsIsReq : parseFloat(dfDYStab) / 100;
+    const maxStab = calcMaxLoan(noiStabForCalc, dyStabReq);
+    const paydownStab = Math.max(0, loan - maxStab);
+
+    // Winner = higher paydown (more binding constraint)
+    const isTBD = r.paydown >= loan * 0.999;
+    const winnerIsAsIs = paydownAsIs >= paydownStab;
+
+    const asIsLabel = `${dfDYAsIs}% · T1 @ test date`;
+    const stabLabel = stabFallback
+      ? `${dfDYAsIs}% · no month >92% — as-is DY`
+      : `${dfDYStab}% · ${stabMonth}`;
+
+    return {
+      loan, isTBD,
+      paydown: winnerIsAsIs ? paydownAsIs : paydownStab,
+      maxLoan: winnerIsAsIs ? maxAsIs : maxStab,
+      noi: winnerIsAsIs ? noiAsIs : noiStabForCalc,
+      label: dfMode === 'dy'
+        ? (winnerIsAsIs ? asIsLabel : stabLabel)
+        : `${dfDSCR}x DSCR · SOFR +${dfSpread}% · ${dfIO ? 'I/O' : `${dfAmort}-yr`}`,
+    };
+  }
+
   const inputStyle = { width: '100%', padding: '0.4rem 0.6rem', fontSize: '0.8rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit' };
   const labelStyle = { fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block' };
 
+  // ── Console-layout derived values ─────────────────────────────────────────
+  const chipCounts = {
+    all: visibleRows.length,
+    fail: visibleRows.filter(r => { const s = covenantStatus(r); return s === 'FAIL' || s === 'WAIVED'; }).length,
+    thin: visibleRows.filter(r => covenantStatus(r) === 'THIN').length,
+  };
+  const futureDates = activeRows.map(r => r.covenantDate).filter(d => (daysUntil(d) ?? -1) >= 0).sort();
+  const allTestDates = activeRows.map(r => r.covenantDate).sort();
+  const nextTestDate = futureDates[0] || allTestDates[0] || null;
+
+  const selStatus = sel ? covenantStatus(sel) : null;
+  const selMeta = selStatus ? STATUS_META[selStatus] : null;
+  const selIsFund = sel ? (sel.isFund || sel.property === '2022 Fund') : false;
+  const selFundProps = (sel && sel.fundProperties) || [];
+  const selDays = sel ? daysUntil(sel.covenantDate) : null;
+  const selDF = sel ? computeDebtFundSizing(sel) : null;
+  const selEvents = sel ? (propertyEvents[sel.id] || null) : null;
+  const selPrior = findPriorTest(selEvents);
+
+  const fmtVal = (r, digits = 2) => r.covenantType === 'dscr' ? `${r.currentVal.toFixed(digits)}x` : `${r.currentVal.toFixed(digits)}%`;
+  const fmtReq = (r) => r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x` : `${r.covenantReq.toFixed(2)}%`;
+  const prongLabel = (c) =>
+    c.label === 'SOFR' ? `1-Mo SOFR + ${sel.spread}%`
+      : c.label === '10 Year' ? `10-Yr UST + ${sel.spread10y}%`
+      : `Sizing floor ${sel.sizingRate}%`;
+
+  // Same display rules the old Paydown column used (waived / override / TBD)
+  function paydownCardContent(r) {
+    const disp = r.paydownDisplay;
+    if (r.waived) return { text: 'Waived', color: 'var(--pass)', italic: true };
+    if (disp === 'TBD') return { text: 'TBD', color: 'var(--fail)' };
+    if (disp === 'dash') return { text: '—', color: 'var(--faint)' };
+    if (r.paydown > 0) {
+      if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999) return { text: 'TBD', color: 'var(--fail)' };
+      return { text: formatCurrency(r.paydown), color: 'var(--fail)' };
+    }
+    return { text: 'None', color: 'var(--pass)' };
+  }
+  // Same display rules the old Debt Fund Paydown column used
+  function dfLineText(r, df) {
+    const disp = r.paydownDisplay;
+    if (disp === 'TBD' || df.isTBD) return 'TBD';
+    if (disp === 'dash') return '—';
+    if (!df.noi || df.noi <= 0) return 'No NOI';
+    if (df.paydown >= df.loan * 0.999) return 'TBD';
+    if (df.paydown <= 0) return 'None';
+    return formatCurrency(df.paydown);
+  }
+
+  function toggleSelHistory() {
+    if (!sel) return;
+    if (!expandedHistory.has(sel.id)) fetchEvents(sel.id);
+    setExpandedHistory(s => { const n = new Set(s); if (n.has(sel.id)) { n.delete(sel.id); } else { n.add(sel.id); } return n; });
+  }
+
+  const paneCard = { background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 9 };
+  const smallInput = { width: 78, padding: '5px 8px', fontSize: 12, fontFamily: 'var(--font-mono)', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)', textAlign: 'center' };
+  const dateColor = selDays !== null && selDays < 0 ? 'var(--fail)' : selDays !== null && selDays <= 30 ? 'var(--warn-text)' : 'var(--muted)';
+
   return (
-    <div>
+    <div style={{ flex: 1, display: 'flex', minWidth: 0, position: 'relative', background: 'var(--panel3)' }}>
       {/* ── Executive Doc View overlay ── */}
       {docView && (
         <DocView rows={activeRows} propertyEvents={propertyEvents} lastUpdated={lastUpdated} onClose={() => setDocView(false)} />
       )}
 
-      {/* ── DB Loading / Error states ── */}
+      {/* ── DB Loading state ── */}
       {dbLoading && (
-        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)', fontSize: '0.85rem' }}>
-          <div className="spin" style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>⟳</div>
-          Loading properties from database...
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: '0.85rem' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div className="spin" style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>⟳</div>
+            Loading properties from database...
+          </div>
         </div>
       )}
-      {dbError && (
-        <div style={{ padding: '1rem', marginBottom: '1rem', background: 'color-mix(in srgb, var(--fail) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fail) 25%, transparent)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.78rem', color: 'var(--fail)' }}>⚠ {dbError}</span>
-          <button onClick={loadProperties} className="btn btn-sm btn-danger">Retry</button>
-        </div>
-      )}
+
       {!dbLoading && (
-      <div>
-      {/* ── Dashboard header + prominent Doc View ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
-        <div style={{ fontSize: '0.7rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
-          Covenant Compliance Dashboard
-        </div>
-        <button onClick={openDocView} title="View the dashboard styled like the executive Excel doc" className="btn btn-primary" style={{ padding: '7px 18px', fontSize: '0.78rem' }}>
-          <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>▦</span> Open Doc View
-        </button>
-      </div>
-      {/* ── Scenario Analysis (what-if shocks over the whole table) ── */}
-      <ScenarioBar scenario={scenario} setScenario={setScenario} baseSummary={baseSummary} />
-      {/* ── Summary Cards ── */}
-      <div className="covenant-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
-          {[
-            { label: 'Total Properties', value: summary.total, color: 'var(--text)', sub: 'active tests tracked' },
-            { label: 'Passing', value: summary.passing, color: summary.passing > 0 ? 'var(--pass)' : 'var(--text)', sub: 'meeting covenant' },
-            { label: 'Failing', value: summary.failing, color: summary.failing > 0 ? 'var(--fail)' : 'var(--text)', sub: 'below requirement' },
-          ].map(c => (
-            <div key={c.label} className="card" style={{ padding: '1rem 1.25rem' }}>
-              <div style={labelStyle}>{c.label}</div>
-              <div className="metric" style={{ color: c.color, lineHeight: 1.15 }}>{c.value}</div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--faint2)', marginTop: '0.25rem' }}>{c.sub}</div>
-            </div>
-          ))}
-          <div className="card" style={{ padding: '1rem 1.25rem', cursor: 'pointer', userSelect: 'none' }} onClick={() => setShowPaydown(v => !v)} title={showPaydown ? 'Click to hide' : 'Click to reveal'}>
-            <div style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              Potential Maximum Paydown
-              <span style={{ color: showPaydown ? 'var(--accent-strong)' : 'var(--faint)', display: 'inline-flex' }}>
-                {showPaydown ? <EyeIcon size={13} /> : <EyeOffIcon size={13} />}
-              </span>
-            </div>
-            {showPaydown
-              ? <div className="metric" style={{ color: 'var(--accent-strong)', lineHeight: 1.15 }}>{formatCurrency(summary.totalPaydown)}</div>
-              : <div style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--faint)', letterSpacing: '0.2em', lineHeight: 1.7 }}>••••••••</div>
-            }
-            {showPaydown && <div style={{ fontSize: '0.7rem', color: 'var(--faint2)', marginTop: '0.25rem' }}>sum across failing tests</div>}
-          </div>
-      </div>
-
-      {/* ── Last Updated Banner ── */}
-      {lastUpdated && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'color-mix(in srgb, var(--pass) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--pass) 20%, transparent)', borderRadius: 4 }}>
-          <span style={{ fontSize: '0.7rem', color: 'var(--pass)' }}>✓</span>
-          <span style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--pass) 65%, var(--muted))' }}>NOI last updated from forecast file:</span>
-          <span style={{ fontSize: '0.72rem', color: 'var(--pass)', fontWeight: 600 }}>
-            {lastUpdated.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} at {lastUpdated.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-          </span>
-          {forecastMonth && (
-            <>
-              <span style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--pass) 40%, transparent)' }}>·</span>
-              <span style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--pass) 65%, var(--muted))' }}>Using</span>
-              <span style={{ fontSize: '0.72rem', color: 'var(--pass)', fontWeight: 600 }}>{forecastMonth} reforecast</span>
-            </>
-          )}
-        </div>
-      )}
-      {!lastUpdated && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', padding: '0.5rem 0.85rem', background: 'color-mix(in srgb, var(--fail) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--fail) 15%, transparent)', borderRadius: 4 }}>
-          <span style={{ fontSize: '0.7rem', color: 'var(--fail)' }}>⚠</span>
-          <span style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--fail) 55%, var(--muted))' }}>NOI not yet updated this session —</span>
-          <span style={{ fontSize: '0.72rem', color: 'var(--fail)' }}>upload a forecast file to refresh figures</span>
-        </div>
-      )}
-      {/* ── Debt Fund Settings Panel ── */}
-      <div className="card" style={{ marginBottom: '1rem', borderColor: 'var(--border)', borderLeft: '3px solid var(--text2)', padding: '0.85rem 1.1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ fontSize: '0.62rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            Debt Fund Assumptions
-          </div>
-
-          {/* DSCR / DY mode toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Size by</span>
-            <div className="seg">
-              {['DSCR', 'DY'].map(opt => (
-                <button key={opt} className={dfMode === opt.toLowerCase() ? 'on' : ''} onClick={() => setDfMode(opt.toLowerCase())}>{opt}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* DSCR input — shown in DSCR mode */}
-          {dfMode === 'dscr' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Min DSCR</span>
-              <input
-                type="number" step="0.01" value={dfDSCRInput}
-                onChange={e => setDfDSCRInput(e.target.value)}
-                onBlur={() => { const v = parseFloat(dfDSCRInput); if (!isNaN(v) && v > 0) setDfDSCR(String(v)); }}
-                style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
-              />
-              <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>x</span>
-            </div>
-          )}
-
-          {/* DY inputs — shown in DY mode: two separate blanks */}
-          {dfMode === 'dy' && (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>As-Is DY (T1 at test date)</span>
-                <input
-                  type="number" step="0.01" value={dfDYAsIsInput}
-                  onChange={e => setDfDYAsIsInput(e.target.value)}
-                  onBlur={() => { const v = parseFloat(dfDYAsIsInput); if (!isNaN(v) && v > 0) setDfDYAsIs(String(v)); }}
-                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
-                />
-                <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>%</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Stabilized DY (first mo. &gt;92% occ)</span>
-                <input
-                  type="number" step="0.01" value={dfDYStabInput}
-                  onChange={e => setDfDYStabInput(e.target.value)}
-                  onBlur={() => { const v = parseFloat(dfDYStabInput); if (!isNaN(v) && v > 0) setDfDYStab(String(v)); }}
-                  style={{ width: 65, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
-                />
-                <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>%</span>
-              </div>
-            </>
-          )}
-
-          {dfMode === 'dscr' && <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', color: 'var(--muted)', whiteSpace: 'nowrap' }}>Rate: SOFR +</span>
-            <input
-              type="number" step="0.01" value={dfSpreadInput}
-              onChange={e => setDfSpreadInput(e.target.value)}
-              onBlur={() => { const v = parseFloat(dfSpreadInput); if (!isNaN(v) && v >= 0) setDfSpread(String(v)); }}
-              style={{ width: 70, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
-            />
-            <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>%</span>
-          </div>}
-
-          {/* I/O Toggle — only relevant in DSCR mode */}
-          {dfMode === 'dscr' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Amortization</span>
-              <div className="seg">
-                {['I/O', 'Amort'].map(opt => (
-                  <button key={opt} className={(opt === 'I/O' ? dfIO : !dfIO) ? 'on' : ''} onClick={() => setDfIO(opt === 'I/O')}>{opt}</button>
-                ))}
-              </div>
-              {!dfIO && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  <input
-                    type="number" step="1" min="1" max="40" value={dfAmortInput}
-                    onChange={e => setDfAmortInput(e.target.value)}
-                    onBlur={() => { const v = parseInt(dfAmortInput); if (!isNaN(v) && v > 0) setDfAmort(String(v)); }}
-                    style={{ width: 55, padding: '3px 6px', fontSize: '0.78rem', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'inherit', textAlign: 'center' }}
-                  />
-                  <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>yr</span>
-                </div>
-              )}
-            </div>
-          )}
-
-        </div>
-      </div>
-
-      {/* ── Toolbar ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Sort by</span>
-          {[['covenantDate','Date'],['property','Property'],['satisfied','Status']].map(([f,l]) => (
-            <button key={f} onClick={() => setSortField(f)} className={`chip ${sortField === f ? 'chip-active' : ''}`}>{l}</button>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* Forecast month label input */}
-          {pinUnlocked && (
-            <input
-              type="text"
-              value={forecastMonthInput}
-              onChange={e => setForecastMonthInput(e.target.value)}
-              placeholder="e.g. February 2026"
-              style={{
-                padding: '4px 8px', borderRadius: 4, fontSize: '0.72rem', fontFamily: 'inherit',
-                background: 'var(--panel2)', border: '1px solid var(--border)', color: 'var(--text)',
-                width: 140, outline: 'none',
-              }}
+        <>
+          {/* Click-away backdrop for the popover menus */}
+          {(showExportMenu || showColPicker || listMenuOpen || actionsOpen) && (
+            <div
+              style={{ position: 'fixed', inset: 0, zIndex: 150 }}
+              onClick={() => { setShowExportMenu(false); setShowColPicker(false); setListMenuOpen(false); setActionsOpen(false); }}
             />
           )}
-          {/* File Upload */}
-          {pinUnlocked ? (
-            <label className="btn btn-sm">
-              ↑ Upload Forecast
-              <input type="file" accept=".xlsx" onChange={handleFileUpload} style={{ display: 'none' }} />
-            </label>
-          ) : (
-            <button onClick={() => requirePin(() => {})} className="btn btn-sm btn-locked">
-              <LockIcon size={11} /> Upload Forecast
-            </button>
-          )}
-          {exportMsg && <span style={{ fontSize: '0.7rem', color: 'var(--pass)' }}>{exportMsg}</span>}
-          {uploadStatus && !showUploadResults && <span style={{ fontSize: '0.7rem', color: uploadStatus.startsWith('✓') ? 'var(--pass)' : 'var(--text2)' }}>{uploadStatus}</span>}
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowExportMenu(v => !v)} className="btn btn-sm" style={showExportMenu ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>↓ Export ▾</button>
-            {showExportMenu && (
-              <div className="menu" style={{ minWidth: 210 }}>
-                {[
-                  ['Excel', () => exportXLSX(), "Drops straight into the workbook's Covenant Dashboard Export tab"],
-                  ['CSV', () => exportCSV(), ''],
-                  ['PDF', () => exportPDF(), ''],
-                ].map(([label, fn, tip]) => (
-                  <div key={label} title={tip} className="menu-item" onClick={() => { fn(); setShowExportMenu(false); }}>
-                    <span style={{ opacity: 0.6 }}>↓</span>{label}
-                  </div>
-                ))}
-                {reportTemplates.length > 0 && <div className="menu-heading">Report Templates (PDF)</div>}
-                {reportTemplates.map((t, i) => (
-                  <div key={t.name} className="menu-item" title={`${t.title || t.name}${t.onlyFailing ? ' · failing tests only' : ''}`}
-                    onClick={() => { exportPDF(t); setShowExportMenu(false); }}>
-                    <span style={{ opacity: 0.6 }}>▦</span>
-                    <span style={{ flex: 1 }}>{t.name}{t.onlyFailing ? ' ⚠' : ''}</span>
-                    <span
-                      title="Delete template"
-                      onClick={e => { e.stopPropagation(); const next = reportTemplates.filter((_, j) => j !== i); setReportTemplates(next); saveSetting('reportTemplates', next); }}
-                      style={{ color: 'var(--faint)', padding: '0 2px' }}
-                    >✕</span>
-                  </div>
-                ))}
-                <div className="menu-item" title="Snapshot the current column picker as a named PDF report layout"
-                  onClick={() => { setTemplateDraft({ name: '', title: '', onlyFailing: false }); setShowTemplateSave(true); setShowExportMenu(false); }}>
-                  <span style={{ opacity: 0.6 }}>＋</span>Save view as template…
-                </div>
-              </div>
-            )}
-            {showTemplateSave && (
-              <div className="menu" style={{ minWidth: 250, padding: '0.6rem 0.8rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                <div style={{ fontSize: '0.66rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>New report template</div>
-                <input placeholder="Template name (e.g. Exec Summary)" value={templateDraft.name} autoFocus
-                  onChange={e => setTemplateDraft(d => ({ ...d, name: e.target.value }))} style={inputStyle} />
-                <input placeholder="Report title (optional)" value={templateDraft.title}
-                  onChange={e => setTemplateDraft(d => ({ ...d, title: e.target.value }))} style={inputStyle} />
-                <label style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', gap: '0.4rem', alignItems: 'center', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={templateDraft.onlyFailing} onChange={e => setTemplateDraft(d => ({ ...d, onlyFailing: e.target.checked }))} />
-                  Failing tests only
-                </label>
-                <div style={{ fontSize: '0.62rem', color: 'var(--faint)' }}>Captures the columns currently checked in ⊞ Columns.</div>
-                <div style={{ display: 'flex', gap: '0.4rem' }}>
-                  <button className="btn btn-sm" disabled={!templateDraft.name.trim()} onClick={() => {
-                    const next = [
-                      ...reportTemplates.filter(t => t.name !== templateDraft.name.trim()),
-                      { name: templateDraft.name.trim(), title: templateDraft.title.trim() || null, onlyFailing: templateDraft.onlyFailing, cols: { ...visibleCols } },
-                    ];
-                    setReportTemplates(next);
-                    saveSetting('reportTemplates', next);
-                    setShowTemplateSave(false);
-                  }}>Save</button>
-                  <button className="btn btn-sm" onClick={() => setShowTemplateSave(false)}>Cancel</button>
-                </div>
-              </div>
-            )}
-          </div>
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setShowColPicker(v => !v)} className="btn btn-sm" style={showColPicker ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>⊞ Columns</button>
-            {showColPicker && (
-              <div className="menu" style={{ minWidth: 190, padding: '0.35rem 0 0.5rem' }}>
-                <div className="menu-heading">Toggle Columns</div>
-                {ALL_COLS.map(c => (
-                  <div key={c.key} onClick={() => toggleCol(c.key)} className="menu-item" style={{ padding: '0.32rem 0.95rem' }}>
-                    <div style={{
-                      width: 14, height: 14, borderRadius: 4, flexShrink: 0,
-                      background: visibleCols[c.key] ? 'var(--accent)' : 'transparent',
-                      border: `1px solid ${visibleCols[c.key] ? 'var(--accent)' : 'var(--border2)'}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: '#fff', fontWeight: 700 }}>✓</span>}
+
+          {/* ══ Left list column ══ */}
+          <div style={{ width: 356, flex: 'none', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
+            <div style={{ flex: 'none', padding: '18px 22px 14px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 19, color: 'var(--text)' }}>Covenant Tracker</div>
+                <div style={{ position: 'relative' }}>
+                  <button className="tt-ico" title="Sort and columns" onClick={() => { setListMenuOpen(v => !v); setShowColPicker(false); }}>⋯</button>
+                  {listMenuOpen && (
+                    <div className="menu" style={{ width: 196, zIndex: 200 }}>
+                      <div className="menu-heading" style={{ border: 'none', marginBottom: 0 }}>Sort by</div>
+                      {[['risk', 'Risk (worst first)'], ['property', 'Property name'], ['dscr', 'DSCR ascending']].map(([key, label]) => (
+                        <div
+                          key={key}
+                          className="menu-item"
+                          style={{ justifyContent: 'space-between', color: sortField === key ? 'var(--text)' : 'var(--text2)' }}
+                          onClick={() => { setSortField(key); setListMenuOpen(false); }}
+                        >
+                          <span>{label}</span>
+                          <span style={{ color: 'var(--pass)' }}>{sortField === key ? '✓' : ''}</span>
+                        </div>
+                      ))}
+                      <div style={{ borderTop: '1px solid var(--border)', margin: '5px 0' }} />
+                      <div className="menu-item" onClick={() => { setListMenuOpen(false); setShowColPicker(true); }}>▤ Columns…</div>
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: visibleCols[c.key] ? 'var(--text)' : 'var(--faint2)' }}>{c.label}</span>
-                  </div>
-                ))}
+                  )}
+                  {showColPicker && (
+                    <div className="menu" style={{ width: 212, zIndex: 200, padding: '0.55rem 0 0.4rem' }}>
+                      <div className="menu-heading">Columns · {ALL_COLS.length}</div>
+                      <div style={{ maxHeight: 250, overflow: 'auto' }}>
+                        {ALL_COLS.map(c => (
+                          <div key={c.key} onClick={() => toggleCol(c.key)} className="menu-item" style={{ padding: '0.32rem 0.95rem' }}>
+                            <div style={{
+                              width: 15, height: 15, borderRadius: 4, flexShrink: 0,
+                              background: visibleCols[c.key] ? 'var(--pass)' : 'transparent',
+                              border: `1.5px solid ${visibleCols[c.key] ? 'var(--pass)' : 'var(--border2)'}`,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              {visibleCols[c.key] && <span style={{ fontSize: '0.6rem', color: '#fff', fontWeight: 700 }}>✓</span>}
+                            </div>
+                            <span style={{ fontSize: 11.5, color: visibleCols[c.key] ? 'var(--text)' : 'var(--faint2)' }}>{c.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-          {hiddenCount > 0 && (
-            <button onClick={() => setShowHidden(v => !v)} title="Hidden tests are kept in the database but excluded from the dashboard, summary and exports" className="btn btn-sm" style={showHidden ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>
-              {showHidden ? <EyeOffIcon size={12} /> : <EyeIcon size={12} />} {showHidden ? 'Hide Hidden' : `Show Hidden (${hiddenCount})`}
-            </button>
-          )}
-          <button onClick={() => requirePin(() => { setShowForm(!showForm); setEditId(null); setForm(EMPTY_FORM); })}
-            className={`btn btn-sm ${showForm ? 'btn-danger' : `btn-tinted ${pinUnlocked ? '' : 'btn-locked'}`}`}>
-            {showForm ? '✕ Cancel' : pinUnlocked ? '+ Add Property' : <><LockIcon size={11} /> Add Property</>}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Upload Results Review ── */}
-      {showUploadResults && (
-        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid var(--text2)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ fontSize: '0.7rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
-              {uploadMode === 'prior' ? 'Upload Preview — Set as Prior Test' : 'Upload Preview — Review NOI Updates'}
-            </div>
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-              <label
-                title="Update current NOI: overwrite live figures with this forecast (the normal monthly update). Set as Prior Test only: record this forecast as the last test result baseline without changing current NOI — use it to backfill an earlier forecast for the comparison column."
-                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted)' }}
-              >
-                <select value={uploadMode} onChange={e => setUploadMode(e.target.value)} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', padding: '4px 8px', fontSize: '0.7rem', fontFamily: 'inherit', cursor: 'pointer' }}>
-                  <option value="current">Update current NOI</option>
-                  <option value="prior">Set as Prior Test only</option>
-                </select>
-              </label>
-              {uploadMode === 'current' && (
-                <label
-                  title="Checked: this upload is the official monthly report and becomes the baseline for the Prior Test comparison. Uncheck for a small interim update so it does not overwrite last month's result."
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: monthlyUpload ? 'var(--accent)' : 'var(--muted)' }}
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)', marginTop: 6, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                {nextTestDate ? isoToUSDate(nextTestDate) : '—'} · {failingCount} failing ·
+                <span
+                  onClick={() => setShowPaydown(v => !v)}
+                  title={showPaydown ? 'Click to hide' : 'Click to reveal the potential maximum paydown across failing tests'}
+                  style={{ cursor: 'pointer', color: showPaydown ? 'var(--fail)' : 'var(--muted)', borderBottom: '1px dotted var(--faint)', userSelect: 'none' }}
                 >
-                  <input type="checkbox" checked={monthlyUpload} onChange={e => setMonthlyUpload(e.target.checked)} style={{ accentColor: 'var(--accent)', cursor: 'pointer' }} />
-                  Monthly baseline update
-                </label>
+                  {showPaydown ? `${formatCurrency(summary.totalPaydown)} to cure` : 'reveal max paydown'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 7, marginTop: 13, flexWrap: 'wrap' }}>
+                {[['all', `All ${chipCounts.all}`], ['fail', `Failing ${chipCounts.fail}`], ['thin', `Thin ${chipCounts.thin}`]].map(([key, label]) => (
+                  <button key={key} className={`chip ${statusFilter === key ? 'chip-active' : ''}`} onClick={() => setStatusFilter(key)}>{label}</button>
+                ))}
+                {pinUnlocked && hiddenCount > 0 && (
+                  <button
+                    className={`chip ${showHidden ? 'chip-active' : ''}`}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                    title="Hidden tests are kept in the database but excluded from the dashboard, summary and exports"
+                    onClick={() => setShowHidden(v => !v)}
+                  >
+                    {showHidden ? <EyeOffIcon size={11} /> : <EyeIcon size={11} />} {showHidden ? 'Hide hidden' : `Show hidden (${hiddenCount})`}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* List rows */}
+            <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+              {listRows.map(r => {
+                const st = covenantStatus(r);
+                const m = STATUS_META[st];
+                const isSel = sel && r.id === sel.id;
+                const fillPct = Math.min(100, Math.round((r.currentVal / (r.covenantReq * 1.6)) * 100));
+                return (
+                  <div
+                    key={r.id}
+                    onClick={() => setSelectedId(r.id)}
+                    style={{
+                      padding: '13px 22px 13px 19px', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                      background: isSel ? 'var(--panel2)' : 'transparent',
+                      borderLeft: `3px solid ${isSel ? 'var(--text)' : 'transparent'}`,
+                      opacity: r.hidden ? 0.42 : 1,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.property}</span>
+                      <span className={`pill ${m.cls}`}>{m.label}</span>
+                      {pinUnlocked && (
+                        <span
+                          onClick={e => { e.stopPropagation(); toggleHidden(r.id, r.hidden); }}
+                          title={r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)'}
+                          style={{ cursor: 'pointer', fontSize: 12, color: r.hidden ? 'var(--pass)' : 'var(--faint)', userSelect: 'none' }}
+                        >{r.hidden ? '↩' : '⊘'}</span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 9 }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14, color: m.color, minWidth: 46, fontVariantNumeric: 'tabular-nums' }}>{fmtVal(r)}</span>
+                      <div style={{ position: 'relative', flex: 1, height: 5, background: 'var(--border)', borderRadius: 3 }}>
+                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${fillPct}%`, background: m.fill, borderRadius: 3 }} />
+                        <div style={{ position: 'absolute', left: '62.5%', top: -1.5, bottom: -1.5, width: 1.5, background: 'var(--text)' }} />
+                      </div>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.lender}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              {rows.length === 0 && (
+                <div style={{ padding: '2.5rem 22px', color: 'var(--faint)', fontSize: '0.8rem', textAlign: 'center' }}>
+                  No properties yet{pinUnlocked ? ' — click "+ Add property" below' : ' — unlock editing to add one'}
+                </div>
               )}
-              <button onClick={() => setShowUploadResults(false)} className="btn btn-sm btn-ghost">Dismiss</button>
-              <button onClick={() => uploadMode === 'prior' ? applyAsPriorTest() : applyUploadResults()} className="btn btn-sm btn-primary">{uploadMode === 'prior' ? 'Set as Prior Test' : 'Apply All Updates'}</button>
+              {rows.length > 0 && listRows.length === 0 && (
+                <div style={{ padding: '2.5rem 22px', color: 'var(--faint)', fontSize: '0.8rem', textAlign: 'center' }}>
+                  {visibleRows.length === 0 ? 'All tests are hidden — use "Show hidden" to view them.' : 'No tests match this filter.'}
+                </div>
+              )}
+              {pinUnlocked && (
+                <div
+                  onClick={() => requirePin(() => { setEditId(null); setForm(EMPTY_FORM); setShowForm(true); })}
+                  style={{ cursor: 'pointer', padding: '14px 22px', fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12, color: 'var(--accent)' }}
+                >+ Add property</div>
+              )}
+            </div>
+
+            {/* NOI freshness footer */}
+            <div style={{ flex: 'none', padding: '10px 22px', borderTop: '1px solid var(--border)', fontFamily: 'var(--font-mono)', fontSize: 9.5, lineHeight: 1.6, color: lastUpdated ? 'var(--muted)' : 'var(--warn-text)' }}>
+              {lastUpdated
+                ? <>✓ NOI updated {lastUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}{forecastMonth ? <> · {forecastMonth} reforecast</> : null}</>
+                : <>⚠ NOI not yet updated — upload a forecast file to refresh figures</>}
             </div>
           </div>
-          {uploadMode === 'prior' && (
-            <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '0.85rem', padding: '0.5rem 0.65rem', background: 'var(--panel)', borderRadius: 4, borderLeft: '3px solid var(--accent)' }}>
-              Records this forecast as the <strong style={{ color: 'var(--text2)' }}>Prior Test</strong> result{(forecastMonthInput.trim() || forecastMonth) ? <> dated <strong style={{ color: 'var(--text2)' }}>{forecastMonthInput.trim() || forecastMonth}</strong></> : null}. Current live NOI figures are left unchanged.
-            </div>
-          )}
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Property','Status','Matched Sheet','T-Periods','Old NOI','New NOI','Change'].map(h => (
-                  <th key={h} style={{ padding: '0.4rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {uploadResults.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--bg)' }}>
-                  <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text)', fontSize: '0.82rem' }}>{r.property}</td>
-                  <td style={{ padding: '0.5rem 0.75rem' }}>
-                    <span style={{
-                      padding: '2px 8px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 600,
-                      background: r.status === 'matched' ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)',
-                      color: r.status === 'matched' ? 'var(--pass)' : 'var(--fail)',
-                    }}>
-                      {r.status === 'matched' ? `✓ Matched (${Math.round(r.score*100)}%)` : r.status === 'no_match' ? '✗ No match' : '⚠ Insufficient data'}
-                    </span>
-                    {(r.matchWarning || (r.parseWarnings && r.parseWarnings.length > 0)) && (
-                      <div style={{ marginTop: '0.3rem', fontSize: '0.62rem', color: 'var(--warn)', maxWidth: 260, lineHeight: 1.45 }}>
-                        {r.matchWarning && <div>⚠ {r.matchWarning}</div>}
-                        {r.parseWarnings && r.parseWarnings.length > 0 && (
-                          <div title={r.parseWarnings.join('\n')}>
-                            ⚠ {r.parseWarnings.length} cell{r.parseWarnings.length > 1 ? 's' : ''} could not be parsed (treated as $0): {r.parseWarnings.slice(0, 2).join('; ')}{r.parseWarnings.length > 2 ? ' …' : ''}
+
+          {/* ══ Right detail pane ══ */}
+          <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--panel3)' }}>
+            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              {dbError && (
+                <div style={{ margin: '14px 26px 0', padding: '0.7rem 0.9rem', background: 'color-mix(in srgb, var(--fail) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fail) 25%, transparent)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--fail)' }}>⚠ {dbError}</span>
+                  <button onClick={loadProperties} className="btn btn-sm btn-danger">Retry</button>
+                </div>
+              )}
+
+              {!sel && (
+                <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--faint)', fontSize: '0.85rem' }}>
+                  Select a covenant test from the list to see its detail.
+                </div>
+              )}
+
+              {sel && (
+                <>
+                  {/* Header */}
+                  <div style={{ padding: '20px 26px 15px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 21, color: 'var(--text)' }}>{sel.property}</div>
+                        {col('testType') && <span className={`pill ${sel.testType === 'Maturity' ? 'yellow' : 'blue'}`}>{sel.testType || 'Covenant'}</span>}
+                        {sel.hidden && <span className="pill" style={{ background: 'color-mix(in srgb, var(--muted) 15%, transparent)', color: 'var(--muted)' }}>HIDDEN</span>}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>
+                        {sel.lender} · {formatCurrency(sel.loanAmount)} · Test {fmtDate(sel.covenantDate)}
+                        {selDays !== null && <span style={{ color: dateColor }}> ({selDays < 0 ? `${Math.abs(selDays)}d ago` : `${selDays}d away`})</span>}
+                        {' · '}{sel.variableLoan ? 'Variable balance' : sel.amort === 0 ? 'I/O' : `${sel.amort}-yr amort`}
+                        {col('noiPeriods') && <> · T{sel.incomeMonths} Inc / T{sel.expenseMonths} Exp</>}
+                        {sel.maturityDate ? <> · Mat {fmtDate(sel.maturityDate)}</> : null}
+                      </div>
+                      {sel.note && <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--warn-text)', marginTop: 5 }}>{sel.note}</div>}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {/* Export menu (incl. PDF report templates) */}
+                      <div style={{ position: 'relative' }}>
+                        <button onClick={() => setShowExportMenu(v => !v)} className="tt-btn" style={showExportMenu ? { color: 'var(--text)' } : undefined}>⤓ Export ▾</button>
+                        {showExportMenu && (
+                          <div className="menu" style={{ minWidth: 210 }}>
+                            {[
+                              ['Excel', () => exportXLSX(), "Drops straight into the workbook's Covenant Dashboard Export tab"],
+                              ['CSV', () => exportCSV(), ''],
+                              ['PDF', () => exportPDF(), ''],
+                            ].map(([label, fn, tip]) => (
+                              <div key={label} title={tip} className="menu-item" onClick={() => { fn(); setShowExportMenu(false); }}>
+                                <span style={{ opacity: 0.6 }}>⤓</span>{label}
+                              </div>
+                            ))}
+                            {reportTemplates.length > 0 && <div className="menu-heading">Report Templates (PDF)</div>}
+                            {reportTemplates.map((t, i) => (
+                              <div key={t.name} className="menu-item" title={`${t.title || t.name}${t.onlyFailing ? ' · failing tests only' : ''}`}
+                                onClick={() => { exportPDF(t); setShowExportMenu(false); }}>
+                                <span style={{ opacity: 0.6 }}>▤</span>
+                                <span style={{ flex: 1 }}>{t.name}{t.onlyFailing ? ' ⚠' : ''}</span>
+                                <span
+                                  title="Delete template"
+                                  onClick={e => { e.stopPropagation(); const next = reportTemplates.filter((_, j) => j !== i); setReportTemplates(next); saveSetting('reportTemplates', next); }}
+                                  style={{ color: 'var(--faint)', padding: '0 2px' }}
+                                >✕</span>
+                              </div>
+                            ))}
+                            <div className="menu-item" title="Snapshot the current column picker as a named PDF report layout"
+                              onClick={() => { setTemplateDraft({ name: '', title: '', onlyFailing: false }); setShowTemplateSave(true); setShowExportMenu(false); }}>
+                              <span style={{ opacity: 0.6 }}>＋</span>Save view as template…
+                            </div>
+                          </div>
+                        )}
+                        {showTemplateSave && (
+                          <div className="menu" style={{ minWidth: 250, padding: '0.6rem 0.8rem', display: 'flex', flexDirection: 'column', gap: '0.45rem', zIndex: 210 }}>
+                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>New report template</div>
+                            <input placeholder="Template name (e.g. Exec Summary)" value={templateDraft.name} autoFocus
+                              onChange={e => setTemplateDraft(d => ({ ...d, name: e.target.value }))} style={inputStyle} />
+                            <input placeholder="Report title (optional)" value={templateDraft.title}
+                              onChange={e => setTemplateDraft(d => ({ ...d, title: e.target.value }))} style={inputStyle} />
+                            <label style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', gap: '0.4rem', alignItems: 'center', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={templateDraft.onlyFailing} onChange={e => setTemplateDraft(d => ({ ...d, onlyFailing: e.target.checked }))} />
+                              Failing tests only
+                            </label>
+                            <div style={{ fontSize: '0.62rem', color: 'var(--faint)' }}>Captures the columns currently checked in ▤ Columns.</div>
+                            <div style={{ display: 'flex', gap: '0.4rem' }}>
+                              <button className="btn btn-sm" disabled={!templateDraft.name.trim()} onClick={() => {
+                                const next = [
+                                  ...reportTemplates.filter(t => t.name !== templateDraft.name.trim()),
+                                  { name: templateDraft.name.trim(), title: templateDraft.title.trim() || null, onlyFailing: templateDraft.onlyFailing, cols: { ...visibleCols } },
+                                ];
+                                setReportTemplates(next);
+                                saveSetting('reportTemplates', next);
+                                setShowTemplateSave(false);
+                              }}>Save</button>
+                              <button className="btn btn-sm" onClick={() => setShowTemplateSave(false)}>Cancel</button>
+                            </div>
                           </div>
                         )}
                       </div>
-                    )}
-                  </td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: 'var(--muted)', maxWidth: 200 }}>
-                    {r.matchedSheet ? r.matchedSheet.replace(/^Budget Analysis - /, '').replace(/ - \d{4}.*$/, '') : '—'}
-                  </td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: 'var(--muted)' }}>
-                    {r.incomeMonths ? `T${r.incomeMonths} Inc / T${r.expenseMonths} Exp` : '—'}
-                  </td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: 'var(--muted)' }}>{r.oldNOI != null ? formatCurrency(r.oldNOI) : '—'}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: r.newNOI != null ? 'var(--pass)' : 'var(--muted)', fontWeight: 600 }}>{r.newNOI != null ? formatCurrency(r.newNOI) : '—'}</td>
-                  <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem' }}>
-                    {r.oldNOI != null && r.newNOI != null ? (() => {
-                      const delta = r.newNOI - r.oldNOI;
-                      return <span style={{ color: delta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>{delta >= 0 ? '+' : ''}{formatCurrency(delta)}</span>;
-                    })() : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
 
-      {/* ── Add / Edit Form ── */}
-      {showForm && (
-        <div className="card" style={{ marginBottom: '1.5rem', borderLeft: '3px solid var(--accent)' }}>
-          <div style={{ fontSize: '0.7rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '1rem', fontWeight: 600 }}>
-            {editId !== null ? 'Edit Property' : 'Add New Property'}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            {[
-              { label: 'Property Name', key: 'property', type: 'text', placeholder: 'e.g. Ellenton' },
-              { label: 'Lender', key: 'lender', type: 'text', placeholder: 'e.g. UMB' },
-              { label: 'Loan Amount ($)', key: 'loanAmount', type: 'number', placeholder: '62332714' },
-              { label: 'Annual NOI ($)', key: 'noi', type: 'number', placeholder: '3579240' },
-            ].map(({ label, key, type, placeholder }) => (
-              <div key={key}>
-                <label style={labelStyle}>{label}</label>
-                <input type={type} value={form[key]} placeholder={placeholder}
-                  onChange={e => setF(key, e.target.value)} style={inputStyle} />
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
-            <div>
-              <label style={labelStyle}>SOFR Spread (%)</label>
-              <input type="number" value={form.spread} step="0.05" min="0" max="10" onChange={e => setF('spread', e.target.value)} style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>10yr Spread (%)</label>
-              <input type="number" value={form.spread10y ?? ''} step="0.05" min="0" max="10" placeholder="optional" onChange={e => setF('spread10y', e.target.value)} style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Sizing / Floor Rate (%)</label>
-              <input type="number" value={form.sizingRate ?? ''} step="0.05" min="0" max="20" placeholder="optional" onChange={e => setF('sizingRate', e.target.value)} style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Test Type</label>
-              <select value={form.testType || 'Covenant'} onChange={e => setF('testType', e.target.value)} style={inputStyle}>
-                <option value="Covenant">Covenant</option>
-                <option value="Maturity">Maturity</option>
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Amortization</label>
-              <select value={form.amort} onChange={e => setF('amort', e.target.value)} style={inputStyle}>
-                <option value="30">30 Year</option>
-                <option value="35">35 Year</option>
-                <option value="0">I/O</option>
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Covenant Type</label>
-              <select value={form.covenantType} onChange={e => setF('covenantType', e.target.value)} style={inputStyle}>
-                <option value="dscr">DSCR</option>
-                <option value="dy">Debt Yield</option>
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>{form.covenantType === 'dscr' ? 'Required DSCR (x)' : 'Required DY (%)'}</label>
-              <input type="number" value={form.covenantReq} step={form.covenantType === 'dscr' ? '0.05' : '0.25'} min="0" onChange={e => setF('covenantReq', e.target.value)} style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Income Months (T#)</label>
-              <select value={form.incomeMonths} onChange={e => setF('incomeMonths', e.target.value)} style={inputStyle}>
-                <option value="1">T1</option>
-                <option value="3">T3</option>
-                <option value="12">T12</option>
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Expense Months (T#)</label>
-              <select value={form.expenseMonths} onChange={e => setF('expenseMonths', e.target.value)} style={inputStyle}>
-                <option value="1">T1</option>
-                <option value="3">T3</option>
-                <option value="12">T12</option>
-              </select>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-            <div>
-              <label style={labelStyle}>Covenant Test Date (SOFR lookup + NOI trailing period)</label>
-              <input type="date" value={form.covenantDate} min={SOFR_MIN} max={SOFR_MAX} onChange={e => setF('covenantDate', e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
-              {form.covenantDate && <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
-                SOFR: <strong style={{ color: 'var(--text2)' }}>{(getSofr(form.covenantDate)*100).toFixed(4)}%</strong>
-                &nbsp;· All-in: <strong style={{ color: 'var(--accent)' }}>{((getSofr(form.covenantDate) + parseFloat(form.spread||0)/100)*100).toFixed(4)}%</strong>
-              </div>}
-            </div>
-            <div>
-              <label style={labelStyle}>Loan Maturity Date</label>
-              <input type="date" value={form.maturityDate} onChange={e => setF('maturityDate', e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} />
-            </div>
-          </div>
-          {/* ── Variable Loan Balance Toggle ── */}
-          <div style={{ marginBottom: '1rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
-              <div
-                onClick={() => setF('variableLoan', !form.variableLoan)}
-                style={{ width: 36, height: 20, borderRadius: 10, background: form.variableLoan ? 'var(--accent)' : 'var(--border)', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
-                <div style={{ position: 'absolute', top: 3, left: form.variableLoan ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: 'var(--text)', transition: 'left 0.2s' }} />
-              </div>
-              <span style={{ fontSize: '0.68rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: form.variableLoan ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>Variable Loan Balance</span>
-            </label>
-          </div>
+                      <button className="tt-btn" style={{ color: 'var(--text)' }} onClick={openDocView} title="View the dashboard styled like the executive Excel doc">▤ Doc View</button>
 
-          {/* ── Covenant Waived Toggle ── */}
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
-              <div
-                onClick={() => setF('waived', !form.waived)}
-                style={{ width: 36, height: 20, borderRadius: 10, background: form.waived ? 'var(--pass)' : 'var(--border)', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
-                <div style={{ position: 'absolute', top: 3, left: form.waived ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: 'var(--text)', transition: 'left 0.2s' }} />
-              </div>
-              <span style={{ fontSize: '0.68rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: form.waived ? 'var(--pass)' : 'var(--muted)', fontWeight: 600 }}>Covenant Waived</span>
-            </label>
-            <div style={{ fontSize: '0.66rem', color: 'var(--faint2)', marginTop: '0.3rem' }}>Lender has waived this test — shows WAIVED instead of FAIL on the dashboard and Doc View.</div>
-          </div>
-
-          {form.variableLoan && (
-            <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--accent)' }}>
-              {/* Commitment field — replaces loan amount display */}
-              <div style={{ marginBottom: '0.85rem' }}>
-                <label style={labelStyle}>Loan Commitment (Total Facility, $)</label>
-                <input
-                  type="number"
-                  value={form.loanCommitment ?? ''}
-                  placeholder="e.g. 548500000"
-                  onChange={e => setF('loanCommitment', e.target.value)}
-                  style={inputStyle}
-                />
-                <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: '0.25rem' }}>
-                  The total facility size. The drawn balance schedule below drives the DSCR calculation.
-                </div>
-              </div>
-
-              {/* 12-row schedule */}
-              <div style={{ fontSize: '0.58rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Loan Balance Schedule (12 months)</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
-                {(form.loanSchedule || []).map((entry, i) => (
-                  <div key={i} style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
-                    <input
-                      type="month"
-                      value={entry.month || ''}
-                      onChange={e => {
-                        const s = [...form.loanSchedule];
-                        s[i] = { ...s[i], month: e.target.value };
-                        setF('loanSchedule', s);
-                      }}
-                      style={{ ...inputStyle, colorScheme: 'dark', flex: '0 0 130px', fontSize: '0.7rem', padding: '4px 6px' }}
-                    />
-                    <input
-                      type="number"
-                      value={entry.balance || ''}
-                      placeholder="Balance $"
-                      onChange={e => {
-                        const s = [...form.loanSchedule];
-                        s[i] = { ...s[i], balance: e.target.value };
-                        setF('loanSchedule', s);
-                      }}
-                      style={{ ...inputStyle, flex: 1, fontSize: '0.7rem', padding: '4px 6px' }}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: '0.5rem' }}>
-                Enter months in any order. The 3 months immediately before the test month will be used for T-3 interest calculation (matching the trailing NOI window).
-              </div>
-            </div>
-          )}
-
-          {/* ── NOI Adjustments (Fund only) ── */}
-          {form.variableLoan && (() => {
-            const nInc = parseInt(form.incomeMonths) || 1;
-            const nExp = parseInt(form.expenseMonths) || 1;
-            // Helper: get month label for slot idx (0 = most recent before test date)
-            const monthLabel = (idx) => {
-              if (!form.covenantDate) return `Month ${idx + 1}`;
-              const base = new Date(form.covenantDate + 'T00:00:00');
-              const year = base.getFullYear();
-              const month = base.getMonth(); // 0-based month of test date
-              // idx 0 = one month before test date, idx 1 = two months before, etc.
-              const totalMonths = year * 12 + month - 1 - idx;
-              const y = Math.floor(totalMonths / 12);
-              const m = totalMonths % 12;
-              return new Date(y, m, 1).toLocaleString('default', { month: 'short', year: 'numeric' });
-            };
-            const setAETM = (idx, val) => {
-              const arr = [...(form.actualEarlyTermMonths || [])];
-              while (arr.length <= idx) arr.push('');
-              arr[idx] = val;
-              setF('actualEarlyTermMonths', arr);
-            };
-            const setOTEM = (idx, val) => {
-              const arr = [...(form.oneTimeExpenseMonths || [])];
-              while (arr.length <= idx) arr.push('');
-              arr[idx] = val;
-              setF('oneTimeExpenseMonths', arr);
-            };
-            return (
-              <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--pass)' }}>
-                <div style={{ fontSize: '0.58rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--pass)', marginBottom: '0.75rem', fontWeight: 600 }}>NOI Adjustments</div>
-
-                {/* Section: Less Actual Early Term — one per income month */}
-                <div style={{ marginBottom: '0.85rem' }}>
-                  <div style={{ fontSize: '0.62rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
-                    Less: Actual Early Term Income — per trailing income month ($)
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${nInc}, 1fr)`, gap: '0.5rem' }}>
-                    {Array.from({ length: nInc }, (_, idx) => (
-                      <div key={idx}>
-                        <label style={{ ...labelStyle, color: 'var(--faint2)' }}>{monthLabel(idx)}</label>
-                        <input type="number" min="0"
-                          value={(form.actualEarlyTermMonths || [])[idx] ?? ''}
-                          placeholder="0"
-                          onChange={e => setAETM(idx, e.target.value)}
-                          style={inputStyle} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Section: Less One-Time Expenses — one per expense month */}
-                <div style={{ marginBottom: '0.85rem' }}>
-                  <div style={{ fontSize: '0.62rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
-                    Less: One-Time Expenses — per trailing expense month ($)
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${nExp}, 1fr)`, gap: '0.5rem' }}>
-                    {Array.from({ length: nExp }, (_, idx) => (
-                      <div key={idx}>
-                        <label style={{ ...labelStyle, color: 'var(--faint2)' }}>{monthLabel(idx)}</label>
-                        <input type="number" min="0"
-                          value={(form.oneTimeExpenseMonths || [])[idx] ?? ''}
-                          placeholder="0"
-                          onChange={e => setOTEM(idx, e.target.value)}
-                          style={inputStyle} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Fixed fields */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
-                  <div>
-                    <label style={labelStyle}>Add: Standardized Early Term (monthly $)</label>
-                    <input type="number" value={form.stdEarlyTerm ?? ''} placeholder="e.g. 40250" min="0"
-                      onChange={e => setF('stdEarlyTerm', e.target.value)} style={inputStyle} />
-                    <div style={{ fontSize: '0.6rem', color: 'var(--faint)', marginTop: '0.2rem' }}>T-12 normalized avg — added back to adj income avg</div>
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Add: Replacement Reserves (monthly $)</label>
-                    <input type="number" value={form.replacementReserves ?? ''} placeholder="e.g. 52979" min="0"
-                      onChange={e => setF('replacementReserves', e.target.value)} style={inputStyle} />
-                    <div style={{ fontSize: '0.6rem', color: 'var(--faint)', marginTop: '0.2rem' }}>Fixed monthly reserve — added to adj expense avg</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={labelStyle}>Note (optional)</label>
-            <input type="text" value={form.note || ''} placeholder="e.g. NOI: T1 Dec 2026 annualized"
-              onChange={e => setF('note', e.target.value)} style={inputStyle} />
-          </div>
-          <button onClick={saveForm} className="btn btn-primary" style={{ padding: '6px 20px', fontSize: '0.8rem' }}>
-            {editId !== null ? 'Save Changes' : 'Add Property'}
-          </button>
-        </div>
-      )}
-
-      {/* ── Main Table ── */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }} onClick={() => { if (showColPicker) setShowColPicker(false); if (showExportMenu) setShowExportMenu(false); }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
-            <thead>
-              <tr style={{ background: 'var(--panel2)', borderBottom: '2px solid var(--border)' }}>
-                {/* Test Date — always visible, far left */}
-                <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Test Date</th>
-                {col('testType')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Type</th>}
-                {col('property')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Property / Lender</th>}
-                {col('covenant')   && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Requirement</th>}
-                {col('noiPeriods') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>NOI Periods</th>}
-                {col('rate')       && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Rate</th>}
-                {col('result')     && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Our Calc → Req</th>}
-                {col('priorResult') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Prior Test</th>}
-                {col('noi')        && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Annual NOI</th>}
-                {col('noiVariance')&& <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>NOI Variance</th>}
-                {col('paydown')    && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>Paydown</th>}
-                {col('dfPaydown') && <th style={{ padding: '0.65rem 0.75rem', textAlign: 'left', fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600, whiteSpace: 'nowrap' }}>Debt Fund Paydown ({dfMode === 'dy' ? `${dfDYAsIs}% as-is / ${dfDYStab}% stab` : `${dfDSCR}x DSCR`})</th>}
-                <th style={{ padding: '0.65rem 0.4rem' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((r, i) => {
-                const days = daysUntil(r.covenantDate);
-                const isUrgent = days !== null && days <= 30 && days >= 0;
-                const isPast = days !== null && days < 0;
-                const metColor = r.satisfied ? 'var(--pass)' : 'var(--fail)';
-                const dateColor = isUrgent ? 'var(--warn)' : isPast ? 'var(--fail)' : 'var(--text2)';
-                const delta = r.currentVal - r.covenantReq;
-                const isFundRow = r.isFund || r.property === '2022 Fund';
-                const fundProps = r.fundProperties || [];
-                return (
-                  <React.Fragment key={r.id}>
-                  <tr style={{ background: i % 2 === 0 ? 'transparent' : 'var(--panel2)', borderBottom: isFundRow && expandedFund ? 'none' : '1px solid var(--bg)', opacity: r.hidden ? 0.5 : 1 }}>
-
-                    {/* ── Test Date — always first ── */}
-                    <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap', borderRight: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: dateColor }}>
-                        {isUrgent ? '⚠ ' : isPast ? '✗ ' : ''}{fmtDate(r.covenantDate)}
-                      </div>
-                      {r.hidden && <div style={{ display: 'inline-block', marginTop: '0.25rem', padding: '1px 6px', borderRadius: 4, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.04em', background: 'color-mix(in srgb, var(--muted) 15%, transparent)', color: 'var(--muted)' }}>HIDDEN</div>}
-                      {days !== null && (
-                        <div style={{ fontSize: '0.65rem', color: isUrgent ? 'var(--warn)' : isPast ? 'color-mix(in srgb, var(--fail) 33%, transparent)' : 'var(--faint)' }}>
-                          {isPast ? `${Math.abs(days)}d ago` : `${days}d away`}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* ── Type ── */}
-                    {col('testType') && (
-                      <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap' }}>
-                        <span style={{
-                          display: 'inline-block', padding: '2px 10px', borderRadius: 4,
-                          fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
-                          background: r.testType === 'Maturity' ? 'color-mix(in srgb, var(--highlight) 13%, transparent)' : 'color-mix(in srgb, var(--accent) 12%, transparent)',
-                          color: r.testType === 'Maturity' ? 'var(--highlight)' : 'var(--accent-strong)',
-                          border: r.testType === 'Maturity' ? '1px solid color-mix(in srgb, var(--highlight) 25%, transparent)' : '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
-                        }}>{r.testType || 'Covenant'}</span>
-                      </td>
-                    )}
-
-                    {/* ── Property / Lender ── */}
-                    {col('property') && (
-                      <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                          {isFundRow && (
-                            <button onClick={() => setExpandedFund(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: '0.7rem', padding: '0 2px', lineHeight: 1 }} title="Expand properties">
-                              {expandedFund ? '▼' : '▶'}
-                            </button>
-                          )}
-                          <div style={{ fontWeight: 700, color: 'var(--text)', fontSize: '0.85rem' }}>{r.property}</div>
-                        </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.lender}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--faint)', marginLeft: isFundRow ? '1.1rem' : 0 }}>{formatCurrency(r.loanAmount)}</div>
-                        {r.note && <div style={{ fontSize: '0.63rem', color: 'var(--warn)', marginTop: '0.2rem', marginLeft: isFundRow ? '1.1rem' : 0 }}>{r.note}</div>}
-                      </td>
-                    )}
-
-                    {/* ── Requirement + Pass/Fail ── */}
-                    {col('covenant') && (
-                      <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--text2)', fontWeight: 600 }}>
-                          {r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x DSCR` : `${r.covenantReq.toFixed(2)}% DY`}
-                        </div>
-                        <span style={{ display: 'inline-block', marginTop: '0.25rem', padding: '2px 8px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 700, background: r.waived ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : r.satisfied ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)', color: r.waived ? 'var(--pass)' : r.satisfied ? 'var(--pass)' : 'var(--fail)', fontStyle: r.waived ? 'italic' : 'normal' }}>
-                          {r.waived ? '◐ WAIVED' : r.satisfied ? '✓ PASS' : '✗ FAIL'}
-                        </span>
-                      </td>
-                    )}
-
-                    {/* ── NOI Periods ── */}
-                    {col('noiPeriods') && (
-                      <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Inc: <strong style={{ color: 'var(--text2)' }}>T{r.incomeMonths}</strong></div>
-                        <div style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Exp: <strong style={{ color: 'var(--text2)' }}>T{r.expenseMonths}</strong></div>
-                      </td>
-                    )}
-
-                    {/* ── Rate ── */}
-                    {col('rate') && (
-                      <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600 }}>{(r.rate*100).toFixed(3)}%</div>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>
-                          {r.rateWinner
-                            ? (r.rateWinner.label === 'SOFR'        ? `SOFR +${r.spread}%`
-                              : r.rateWinner.label === '10 Year'    ? `10yr +${r.spread10y}%`
-                              : `Sizing: ${r.sizingRate}%`)
-                            : `${(r.sofr*100).toFixed(3)}% + ${r.spread}%`}
-                        </div>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>{r.amort === 0 ? 'I/O' : `${r.amort}yr`}</div>
-                      </td>
-                    )}
-
-                    {/* ── Our Calc → Req (side by side comparison) ── */}
-                    {col('result') && (
-                      <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontSize: '1rem', fontWeight: 700, color: metColor }}>
-                            {r.covenantType === 'dscr' ? r.currentVal.toFixed(3)+'x' : r.currentVal.toFixed(2)+'%'}
-                          </span>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>vs</span>
-                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--muted)' }}>
-                            {r.covenantType === 'dscr' ? r.covenantReq.toFixed(2)+'x' : r.covenantReq.toFixed(2)+'%'}
-                          </span>
-                        </div>
-                        <span style={{ display: 'inline-block', marginTop: '0.2rem', padding: '1px 7px', borderRadius: 4, fontSize: '0.72rem', fontWeight: 600, background: delta >= 0 ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: delta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
-                          {delta >= 0 ? '+' : ''}{r.covenantType === 'dscr' ? delta.toFixed(3)+'x' : delta.toFixed(2)+'%'}
-                        </span>
-                      </td>
-                    )}
-
-                    {/* ── Prior Test ── */}
-                    {col('priorResult') && (() => {
-                      // Find most recent snapshot from propertyEvents (already loaded if history is open)
-                      // Otherwise try to pull from events cache; show placeholder if not loaded
-                      const events = propertyEvents[r.id];
-                      const prior = findPriorTest(events);
-                      if (!events) {
-                        // Lazy-load if column is visible but history panel hasn't been opened
-                        if (!propertyEvents[r.id]) fetchEvents(r.id);
-                      }
-                      if (!prior) return (
-                        <td style={{ padding: '0.65rem 0.75rem' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--border)' }}>—</span>
-                        </td>
-                      );
-                      const priorVal = parseFloat(prior.result);
-                      const priorReq = parseFloat(prior.covenant_req);
-                      const priorDelta = priorVal - priorReq;
-                      const priorPass = prior.satisfied;
-                      const priorDate = new Date(prior.created_at);
-                      const priorLabel = priorDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
-                      const trend = priorVal !== 0 ? r.currentVal - priorVal : null;
-                      return (
-                        <td style={{ padding: '0.65rem 0.75rem', whiteSpace: 'nowrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: priorPass ? 'var(--pass)' : 'var(--fail)' }}>
-                              {r.covenantType === 'dscr' ? priorVal.toFixed(3)+'x' : priorVal.toFixed(2)+'%'}
-                            </span>
-                            {trend !== null && (
-                              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: trend >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
-                                {trend >= 0 ? '▲' : '▼'}{r.covenantType === 'dscr' ? Math.abs(trend).toFixed(3)+'x' : Math.abs(trend).toFixed(2)+'%'}
-                              </span>
+                      {/* Actions menu */}
+                      <div style={{ position: 'relative' }}>
+                        <button className="tt-btn" onClick={() => setActionsOpen(v => !v)} style={actionsOpen ? { color: 'var(--text)' } : undefined}>⋯ Actions</button>
+                        {actionsOpen && (
+                          <div className="menu" style={{ minWidth: 218 }}>
+                            <div
+                              className="menu-item"
+                              onClick={() => { setActionsOpen(false); if (pinUnlocked) { setUploadPanelOpen(true); } else { requirePin(() => setUploadPanelOpen(true)); } }}
+                            >
+                              <span style={{ opacity: 0.6 }}>↑</span> Upload Forecast {!pinUnlocked && <LockIcon size={10} />}
+                            </div>
+                            {pinUnlocked ? (
+                              <label className="menu-item" style={{ cursor: 'pointer' }} title="Upload the weekly Chatham forward-curve workbook">
+                                <span style={{ opacity: 0.6 }}>↑</span> Update Curve
+                                <input
+                                  type="file" accept=".xlsx,.xls,.csv,.txt" style={{ display: 'none' }}
+                                  onChange={e => { setActionsOpen(false); if (typeof onCurveFile === 'function') onCurveFile(e); }}
+                                />
+                              </label>
+                            ) : (
+                              <div className="menu-item" onClick={() => { setActionsOpen(false); requirePin(() => {}); }}>
+                                <span style={{ opacity: 0.6 }}>↑</span> Update Curve <LockIcon size={10} />
+                              </div>
+                            )}
+                            <div className="menu-item" onClick={() => { setActionsOpen(false); toggleSelHistory(); }}>
+                              <span style={{ opacity: 0.7, display: 'inline-flex' }}><ClockIcon size={12} /></span> History &amp; Prior Test
+                              {expandedHistory.has(sel.id) && <span style={{ marginLeft: 'auto', color: 'var(--pass)' }}>✓</span>}
+                            </div>
+                            <div className="menu-item" onClick={() => { setActionsOpen(false); setRefiOpen(true); }}>
+                              <span style={{ opacity: 0.6 }}>◇</span> Refi sizing
+                            </div>
+                            {pinUnlocked && (
+                              <>
+                                <div style={{ borderTop: '1px solid var(--border)', margin: '5px 0' }} />
+                                <div className="menu-item" onClick={() => { setActionsOpen(false); startEdit(sel); }}>
+                                  <span style={{ opacity: 0.7, display: 'inline-flex' }}><PencilIcon size={12} /></span> Edit property
+                                </div>
+                                <div className="menu-item" onClick={() => { setActionsOpen(false); toggleHidden(sel.id, sel.hidden); }}>
+                                  <span style={{ opacity: 0.6 }}>{sel.hidden ? '↩' : '⊘'}</span> {sel.hidden ? 'Restore test' : 'Hide test'}
+                                </div>
+                                <div className="menu-item" style={{ color: 'var(--fail)' }} onClick={() => { setActionsOpen(false); if (window.confirm(`Delete ${sel.property}?`)) deleteRow(sel.id); }}>
+                                  <span>✕</span> Delete property
+                                </div>
+                              </>
                             )}
                           </div>
-                          <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: '0.15rem' }}>{priorLabel}</div>
-                        </td>
-                      );
-                    })()}
+                        )}
+                      </div>
 
-                    {/* ── Annual NOI ── */}
-                    {col('noi') && (
-                      <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 600 }}>{formatCurrency(r.noi)}</div>
-                        <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>Req: {formatCurrency(r.requiredNOI)}</div>
-                      </td>
-                    )}
+                      <span className={`pill ${selMeta.cls}`} style={{ fontSize: 10.5, padding: '6px 11px', borderRadius: 5, letterSpacing: '.08em' }}>{selMeta.label}</span>
+                    </div>
+                  </div>
 
-                    {/* ── NOI Variance ── */}
-                    {col('noiVariance') && (
-                      <td style={{ padding: '0.65rem 0.75rem' }}>
-                        <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, background: r.noiVariance >= 0 ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: r.noiVariance >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
-                          {r.noiVariance >= 0 ? '+' : ''}{formatCurrency(r.noiVariance)}
-                        </span>
-                      </td>
-                    )}
+                  {/* Scenario Analysis (what-if shocks over the whole portfolio) */}
+                  <div style={{ padding: '14px 26px 0' }}>
+                    <ScenarioBar scenario={scenario} setScenario={setScenario} baseSummary={baseSummary} />
+                  </div>
 
-                    {/* ── Paydown ── */}
-                    {col('paydown') && (() => {
-                      const disp = r.paydownDisplay;
-                      const isOverridden = disp !== null && disp !== undefined;
-                      const overrideTip = isOverridden ? 'Click to cycle (overridden)' : 'Click to override display';
-                      function paydownContent() {
-                        if (r.waived) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--pass)', fontStyle: 'italic' }}>Waived</span>;
-                        if (disp === 'TBD') return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
-                        if (disp === 'dash') return <span style={{ fontSize: '0.85rem', color: 'var(--faint)' }}>—</span>;
-                        if (r.paydown > 0) {
-                          if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999)
-                            return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
-                          return <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent)' }}>{formatCurrency(r.paydown)}</div>;
-                        }
-                        return <span style={{ fontSize: '0.75rem', color: 'var(--pass)' }}>None</span>;
-                      }
-                      return (
-                        <td style={{ padding: '0.65rem 0.75rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span
-                              onClick={() => requirePin(() => togglePaydownDisplay(r.id, r.paydownDisplay ?? null))}
-                              style={{ cursor: 'pointer' }}
-                              title={overrideTip}
-                            >{paydownContent()}</span>
-                            {isOverridden && <span title="Display overridden — click value to cycle" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', flexShrink: 0 }} />}
-                          </div>
-                        </td>
-                      );
-                    })()}
-
-                    {(() => {
-                      const loan = r.effectiveLoan || r.loanAmount;
-                      const dfRate = getSofr(r.covenantDate) + parseFloat(dfSpread) / 100;
-
-                      function calcMaxLoan(noi, dyReq) {
-                        if (!noi || noi <= 0) return 0;
-                        if (dfMode === 'dy') return noi / dyReq;
-                        const dfDSCRVal = parseFloat(dfDSCR);
-                        const adsPerDollar = dfIO ? dfRate : (() => {
-                          const mRate = dfRate / 12, n = parseInt(dfAmort) * 12;
-                          return (mRate * Math.pow(1 + mRate, n)) / (Math.pow(1 + mRate, n) - 1) * 12;
-                        })();
-                        return noi / (dfDSCRVal * adsPerDollar);
-                      }
-
-                      // Column A — As-Is: T1 NOI at test date
-                      const noiAsIs = r.noiT1 != null ? r.noiT1 : r.noi;
-                      const dyAsIsReq = parseFloat(dfDYAsIs) / 100;
-                      const paydownAsIs = Math.max(0, loan - calcMaxLoan(noiAsIs, dyAsIsReq));
-
-                      // Column B — Stabilized: first month >92% ending occupancy, annualized
-                      // If no month crosses 92%, fall back to As-Is NOI *and* As-Is DY threshold
-                      const noiStab = r.noiStabilized;
-                      const stabMonth = r.noiStabilizedMonth;
-                      const stabFallback = !noiStab;
-                      const noiStabForCalc = stabFallback ? noiAsIs : noiStab;
-                      const dyStabReq = stabFallback ? dyAsIsReq : parseFloat(dfDYStab) / 100;
-                      const paydownStab = Math.max(0, loan - calcMaxLoan(noiStabForCalc, dyStabReq));
-
-                      // Winner = higher paydown (more binding constraint)
-                      const isTBD = r.paydown >= loan * 0.999;
-                      const winnerIsAsIs = paydownAsIs >= paydownStab;
-
-                      function renderCell(paydown, noi, sublabel) {
-                        // Check override first
-                        const disp = r.paydownDisplay;
-                        if (disp === 'TBD') return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
-                        if (disp === 'dash') return <span style={{ fontSize: '0.85rem', color: 'var(--faint)' }}>—</span>;
-                        if (isTBD) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
-                        if (!noi || noi <= 0) return <span style={{ fontSize: '0.75rem', color: 'var(--faint)' }}>No NOI</span>;
-                        if (paydown >= loan * 0.999) return <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--fail)' }}>TBD</span>;
-                        if (paydown <= 0) return <span style={{ fontSize: '0.75rem', color: 'var(--pass)' }}>None</span>;
+                  {/* Result cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, padding: '14px 26px 0' }}>
+                    <div style={{ ...paneCard, padding: 14 }}>
+                      <div className="label" style={{ marginBottom: 0, fontWeight: 500 }}>{sel.covenantType === 'dscr' ? 'DSCR' : 'Debt Yield'}</div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 7 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 26, color: selMeta.color, fontVariantNumeric: 'tabular-nums' }}>{fmtVal(sel)}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>/ {fmtReq(sel)}</span>
+                      </div>
+                      {col('priorResult') && selPrior && (() => {
+                        const pv = parseFloat(selPrior.result);
+                        const trend = sel.currentVal - pv;
                         return (
-                          <div>
-                            <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text2)' }}>{formatCurrency(paydown)}</div>
-                            <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: 1 }}>{sublabel}</div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, marginTop: 6, color: 'var(--muted)' }}>
+                            prior {sel.covenantType === 'dscr' ? `${pv.toFixed(3)}x` : `${pv.toFixed(2)}%`}{' '}
+                            <span style={{ color: trend >= 0 ? 'var(--pass)' : 'var(--fail)' }}>{trend >= 0 ? '▲' : '▼'}{Math.abs(trend).toFixed(3)}</span>
+                            {' · '}{new Date(selPrior.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
                           </div>
                         );
-                      }
-
-                      const asIsLabel = `${dfDYAsIs}% · T1 @ test date`;
-                      const stabLabel = stabFallback
-                        ? `${dfDYAsIs}% · no month >92% — as-is DY`
-                        : `${dfDYStab}% · ${stabMonth}`;
-
-                      // Pick the higher paydown as the binding constraint
-                      const paydownWinner = winnerIsAsIs ? paydownAsIs : paydownStab;
-                      const noiWinner     = winnerIsAsIs ? noiAsIs : noiStabForCalc;
-                      const labelWinner   = winnerIsAsIs ? asIsLabel : stabLabel;
-                      const isOverridden = r.paydownDisplay !== null && r.paydownDisplay !== undefined;
+                      })()}
+                    </div>
+                    {col('result') && (
+                      <div style={{ ...paneCard, padding: 14 }}>
+                        <div className="label" style={{ marginBottom: 0, fontWeight: 500 }}>{sel.covenantType === 'dscr' ? 'Debt Yield' : 'DSCR'}</div>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 7 }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 26, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
+                            {sel.covenantType === 'dscr'
+                              ? `${((sel.noi / (sel.effectiveLoan || sel.loanAmount)) * 100).toFixed(2)}%`
+                              : (sel.ads > 0 ? `${(sel.noi / sel.ads).toFixed(2)}x` : '—')}
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>/ —</span>
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, marginTop: 6, color: 'var(--faint2)' }}>no covenant on this metric</div>
+                      </div>
+                    )}
+                    {col('paydown') && (() => {
+                      const pc = paydownCardContent(sel);
+                      const isOverridden = sel.paydownDisplay !== null && sel.paydownDisplay !== undefined;
                       return (
-                        <>
-                          {col('dfPaydown') && (
-                            <td style={{ padding: '0.65rem 0.75rem' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                                <span
-                                  onClick={() => requirePin(() => togglePaydownDisplay(r.id, r.paydownDisplay ?? null))}
-                                  style={{ cursor: 'pointer' }}
-                                  title={isOverridden ? 'Click to cycle (overridden)' : 'Click to override display'}
-                                >{renderCell(paydownWinner, noiWinner, labelWinner)}</span>
-                                {isOverridden && <span title="Display overridden — click value to cycle" style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', flexShrink: 0 }} />}
-                              </div>
-                            </td>
+                        <div
+                          style={{ ...paneCard, padding: 14, cursor: 'pointer', userSelect: 'none' }}
+                          title={isOverridden ? 'Display overridden — click to cycle (calculated → TBD → —)' : 'Click to override the displayed value (calculated → TBD → —)'}
+                          onClick={() => requirePin(() => togglePaydownDisplay(sel.id, sel.paydownDisplay ?? null))}
+                        >
+                          <div className="label" style={{ marginBottom: 0, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5 }}>
+                            Paydown to cure
+                            {isOverridden && <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />}
+                          </div>
+                          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 26, color: pc.color, marginTop: 7, fontStyle: pc.italic ? 'italic' : 'normal', fontVariantNumeric: 'tabular-nums' }}>{pc.text}</div>
+                          {col('dfPaydown') && selDF && (
+                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, marginTop: 6, color: 'var(--muted)' }}>
+                              debt fund: <span style={{ color: 'var(--text2)', fontWeight: 600 }}>{dfLineText(sel, selDF)}</span>
+                              <div style={{ color: 'var(--faint2)', marginTop: 2 }}>{selDF.label}</div>
+                            </div>
                           )}
-                        </>
+                        </div>
                       );
                     })()}
+                  </div>
 
-                    {/* ── Actions ── */}
-                    <td style={{ padding: '0.65rem 0.4rem', whiteSpace: 'nowrap' }}>
-                      {pinUnlocked && (
-                        <>
-                          <button onClick={() => startEdit(r)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '0.75rem', padding: '2px 5px' }} title="Edit"><PencilIcon size={12} /></button>
-                          <button onClick={() => toggleHidden(r.id, r.hidden)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: r.hidden ? 'var(--pass)' : 'var(--muted)', fontSize: '0.78rem', padding: '2px 5px' }} title={r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)'}>{r.hidden ? '↩' : '⊘'}</button>
-                          <button onClick={() => { if (window.confirm(`Delete ${r.property}?`)) deleteRow(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'color-mix(in srgb, var(--fail) 27%, transparent)', fontSize: '0.75rem', padding: '2px 5px' }} title="Delete">✕</button>
-                        </>
-                      )}
-                      <button onClick={() => setExpandedMath(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', padding: '2px 5px', color: expandedMath.has(r.id) ? 'var(--accent)' : 'var(--faint)' }} title="Show calculation">∑</button>
-                      <button onClick={() => { setExpandedHistory(s => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; }); if (!expandedHistory.has(r.id)) fetchEvents(r.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', padding: '2px 5px', color: expandedHistory.has(r.id) ? 'var(--pass)' : 'var(--faint)' }} title="History &amp; notes"><ClockIcon size={12} /></button>
-                    </td>
-                  </tr>
+                  {/* 2022 Fund — expandable per-property strip */}
+                  {selIsFund && selFundProps.length > 0 && (
+                    <div style={{ ...paneCard, margin: '16px 26px 0', overflow: 'hidden' }}>
+                      <div
+                        onClick={() => setExpandedFund(v => !v)}
+                        style={{ cursor: 'pointer', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, background: 'var(--panel2)', userSelect: 'none' }}
+                      >
+                        <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 12, color: 'var(--text)' }}>
+                          {expandedFund ? '▾' : '▸'} {selFundProps.length} fund properties · DSCR vs {sel.covenantReq.toFixed(2)}x covenant
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--muted)' }}>Variable balance · T-3 rolling</span>
+                      </div>
+                      {expandedFund && selFundProps.map((fp, fi) => {
+                        const fpLoan = fp.allocatedLoan;
+                        // Parent's covenant-date rate — already the highest of all
+                        // three prongs, so a sub-row can't show a pass the
+                        // floor-based covenant math would fail.
+                        const fpADS = fpLoan ? calcADS(fpLoan, sel.rate, sel.amort) : null;
+                        const fpDSCR = fpADS && fpADS > 0 ? (fp.noi || 0) / fpADS : null;
+                        const fpPass = fpDSCR !== null ? fpDSCR >= sel.covenantReq : null;
+                        return (
+                          <div key={fi} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '9px 16px', borderTop: '1px solid var(--border)' }}>
+                            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--text)' }}>
+                              {fp.name}
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)', marginLeft: 8 }}>{fpLoan ? formatCurrency(fpLoan) : 'Loan TBD'}</span>
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, fontSize: 12, color: fpPass === null ? 'var(--faint)' : fpPass ? 'var(--pass)' : 'var(--fail)' }}>
+                                {fpDSCR !== null ? `${fpDSCR.toFixed(3)}x` : '—'}
+                              </span>
+                              <span className={`pill ${fpPass === null ? '' : fpPass ? 'green' : 'red'}`} style={{ fontSize: 8.5, padding: '2px 6px' }}>{fpPass === null ? '—' : fpPass ? 'PASS' : 'FAIL'}</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
-                  {/* ── Math transparency panel ── */}
-                  {expandedMath.has(r.id) && (() => {
-                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','priorResult','noi','noiVariance','paydown','dfPaydown'].filter(col).length + 2;
-                    const monthlyPayment = r.amort === 0 ? null : (r.loanAmount * (r.rate/12) * Math.pow(1+r.rate/12, r.amort*12)) / (Math.pow(1+r.rate/12, r.amort*12) - 1);
-                    const dyActual = (r.noi / (r.effectiveLoan || r.loanAmount)) * 100;
-                    return (
-                      <tr>
-                        <td colSpan={colCount} style={{ padding: 0, background: 'var(--bg)' }}>
-                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: 'var(--panel)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--accent)' }}>
-                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: '0.75rem', fontWeight: 600 }}>Calculation Breakdown — {r.property}</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.5rem 1.5rem' }}>
+                  {/* ── Math transparency — always visible ── */}
+                  <div style={{ padding: '8px 26px 28px' }}>
+                    <Eyebrow>Rate selection · highest of {(sel.rateCandidates || []).length === 3 ? 'three prongs' : `${(sel.rateCandidates || []).length || 1} prong${(sel.rateCandidates || []).length > 1 ? 's' : ''}`}</Eyebrow>
+                    <div style={{ ...paneCard, overflow: 'hidden' }}>
+                      {(sel.rateCandidates || [{ label: 'SOFR', rate: sel.rate, detail: `${(sel.sofr * 100).toFixed(3)}% + ${sel.spread}%` }]).map((c, i) => {
+                        const win = c.label === sel.rateWinner?.label;
+                        return (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--border)', background: win ? 'color-mix(in srgb, var(--pass) 7%, transparent)' : 'transparent' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', flex: 'none', display: 'inline-block', background: win ? 'var(--pass)' : 'var(--faint)' }} />
+                              <span style={{ fontFamily: 'var(--font-sans)', fontWeight: win ? 600 : 400, fontSize: 12.5, color: 'var(--text)' }}>{prongLabel(c)}</span>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)' }}>{c.detail}</span>
+                              {win && <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 8.5, letterSpacing: '.08em', padding: '2px 6px', borderRadius: 3, color: 'var(--pass)', background: 'color-mix(in srgb, var(--pass) 12%, transparent)' }}>GOVERNS</span>}
+                            </div>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: win ? 600 : 500, fontSize: 13, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{(c.rate * 100).toFixed(3)}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                              {/* Inputs */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginTop: 18, alignItems: 'start' }}>
+                      {/* NOI build-up */}
+                      <div>
+                        <Eyebrow style={{ margin: '0 0 10px' }}>NOI build-up{sel.noiDetail?.fallback ? ' — Dec fallback (2027 test date)' : ''}</Eyebrow>
+                        <div style={{ ...paneCard, padding: '4px 16px' }}>
+                          {sel.noiDetail ? (
+                            <>
+                              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--pass)', padding: '9px 0 2px' }}>Income (T{sel.incomeMonths})</div>
+                              {sel.noiDetail.incomeRows.map((row, i) => (
+                                <React.Fragment key={i}>
+                                  <LedgerRow label={row.label} value={formatCurrency(row.value)} />
+                                  {row.earlyTermAdj > 0 && <LedgerRow indent label="Less: actual early term" value={`(${formatCurrency(row.earlyTermAdj)})`} color="var(--fail)" />}
+                                  {row.earlyTermAdj > 0 && <LedgerRow indent label="Adj income" value={formatCurrency(row.adjValue)} color="var(--muted)" />}
+                                </React.Fragment>
+                              ))}
+                              {sel.noiDetail.incomeRows.length > 1 && (
+                                <LedgerRow label={sel.noiDetail.hasAdj ? 'Adj average' : 'Average'} value={formatCurrency(sel.noiDetail.avgIncome)} />
+                              )}
+                              <LedgerRow label={`× ${sel.noiDetail.annualizer} (annualized)`} value={formatCurrency(sel.noiDetail.avgIncome * sel.noiDetail.annualizer)} color="var(--pass)" />
+                              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--fail)', padding: '9px 0 2px' }}>Expenses (T{sel.expenseMonths})</div>
+                              {sel.noiDetail.expenseRows.map((row, i) => (
+                                <React.Fragment key={i}>
+                                  <LedgerRow label={row.label} value={`(${formatCurrency(row.value)})`} />
+                                  {row.oneTimeAdj > 0 && <LedgerRow indent label="Less: one-time expenses" value={`(${formatCurrency(row.oneTimeAdj)})`} color="var(--fail)" />}
+                                  {row.oneTimeAdj > 0 && <LedgerRow indent label="Adj expense" value={formatCurrency(row.adjValue)} color="var(--muted)" />}
+                                </React.Fragment>
+                              ))}
+                              {sel.noiDetail.expenseRows.length > 1 && (
+                                <LedgerRow label={sel.noiDetail.hasAdj ? 'Adj average' : 'Average'} value={formatCurrency(sel.noiDetail.avgExpense)} />
+                              )}
+                              <LedgerRow label={`× ${sel.noiDetail.annualizer} (annualized)`} value={`(${formatCurrency(sel.noiDetail.avgExpense * sel.noiDetail.annualizer)})`} color="var(--fail)" />
+                              {sel.noiDetail.hasAdj && (
+                                <>
+                                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--muted)', padding: '9px 0 2px' }}>NOI adjustments</div>
+                                  {sel.noiDetail.stdEarlyTerm !== 0 && <LedgerRow label="Add: std early term (avg monthly)" value={formatCurrency(sel.noiDetail.stdEarlyTerm)} color="var(--pass)" />}
+                                  {sel.noiDetail.replacementReserves !== 0 && <LedgerRow label="Add: replacement reserves (monthly)" value={formatCurrency(sel.noiDetail.replacementReserves)} color="var(--fail)" />}
+                                  <LedgerRow label="Adj avg monthly income" value={formatCurrency(sel.noiDetail.adjIncome)} />
+                                  <LedgerRow label="Adj avg monthly expense" value={formatCurrency(sel.noiDetail.adjExpense)} />
+                                </>
+                              )}
+                              <LedgerRow
+                                strong
+                                label={sel.noiDetail.hasAdj ? 'Adjusted annual NOI' : 'Net operating income'}
+                                value={formatCurrency(sel.noi)}
+                                eq={sel.noiDetail.hasAdj
+                                  ? `(${formatCurrency(sel.noiDetail.adjIncome)} − ${formatCurrency(sel.noiDetail.adjExpense)}) × 12`
+                                  : `${formatCurrency(sel.noiDetail.avgIncome * sel.noiDetail.annualizer)} − ${formatCurrency(sel.noiDetail.avgExpense * sel.noiDetail.annualizer)}`}
+                              />
+                            </>
+                          ) : (
+                            <>
+                              <LedgerRow strong label="Annual NOI (as entered)" value={formatCurrency(sel.noi)} />
+                              <div style={{ fontSize: '0.68rem', color: 'var(--faint)', padding: '9px 0' }}>NOI detail not available — upload a forecast file to populate the build-up.</div>
+                            </>
+                          )}
+                        </div>
+
+                        {/* What-if NOI */}
+                        <Eyebrow>What-if NOI</Eyebrow>
+                        <div style={{ ...paneCard, padding: '12px 16px' }}>
+                          {(() => {
+                            const wiRaw = whatIfNOI[sel.id];
+                            const wiNOI = wiRaw !== undefined && wiRaw !== '' ? parseFloat(wiRaw) : null;
+                            const wiVal = wiNOI !== null && !isNaN(wiNOI)
+                              ? (sel.covenantType === 'dscr' ? wiNOI / sel.ads : (wiNOI / (sel.effectiveLoan || sel.loanAmount)) * 100)
+                              : null;
+                            const wiSatisfied = wiVal !== null ? wiVal >= sel.covenantReq : null;
+                            const thresholdList = sel.covenantType === 'dscr'
+                              ? [{ label: '1.00x', req: 1.00 }, { label: '1.05x', req: 1.05 }, { label: '1.10x', req: 1.10 }, { label: '1.25x', req: 1.25 }]
+                              : [{ label: '7.00%', req: 7.00 }, { label: '7.50%', req: 7.50 }, { label: '8.00%', req: 8.00 }];
+                            return (
                               <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Inputs</div>
-                                {r.variableLoan && r.loanCommitment
-                                  ? <MathLine label="Commitment" value={formatCurrency(r.loanCommitment)} />
-                                  : <MathLine label="Loan Amount" value={formatCurrency(r.loanAmount)} />}
-                                {r.variableLoan && r.effectiveLoan && r.effectiveLoan !== r.loanAmount &&
-                                  <MathLine label="Drawn Balance (latest)" value={formatCurrency(r.effectiveLoan)} color="var(--accent)" />}
-                                <MathLine label="NOI" value={formatCurrency(r.noi)} />
-                                <MathLine label="Amortization" value={r.variableLoan ? 'I/O (variable balance)' : r.amort === 0 ? 'I/O' : `${r.amort} years`} />
-                              </div>
-
-                              {/* What-if NOI */}
-                              <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>What-if NOI</div>
-                                {(() => {
-                                  const wiRaw = whatIfNOI[r.id];
-                                  const wiNOI = wiRaw !== undefined && wiRaw !== '' ? parseFloat(wiRaw) : null;
-                                  const wiVal = wiNOI !== null && !isNaN(wiNOI)
-                                    ? (r.covenantType === 'dscr' ? wiNOI / r.ads : (wiNOI / (r.effectiveLoan || r.loanAmount)) * 100)
-                                    : null;
-                                  const wiSatisfied = wiVal !== null ? wiVal >= r.covenantReq : null;
-                                  const thresholds = r.covenantType === 'dscr'
-                                    ? [{ label: '1.00x', req: 1.00 }, { label: '1.05x', req: 1.05 }, { label: '1.10x', req: 1.10 }, { label: '1.25x', req: 1.25 }]
-                                    : [{ label: '7.00%', req: 7.00 }, { label: '7.50%', req: 7.50 }, { label: '8.00%', req: 8.00 }];
-                                  return (
-                                    <div>
-                                      <input
-                                        type="number"
-                                        value={wiRaw ?? ''}
-                                        placeholder={`Current: ${formatCurrency(r.noi)}`}
-                                        onChange={e => setWhatIfNOI(prev => ({ ...prev, [r.id]: e.target.value }))}
-                                        style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '4px 6px', fontSize: '0.75rem', fontFamily: 'inherit', marginBottom: '0.4rem', boxSizing: 'border-box' }}
-                                      />
-                                      {wiVal !== null && !isNaN(wiVal) && (
-                                        <div>
-                                          <MathLine
-                                            label={r.covenantType === 'dscr' ? 'What-if DSCR' : 'What-if DY'}
-                                            value={r.covenantType === 'dscr' ? `${wiVal.toFixed(4)}x` : `${wiVal.toFixed(4)}%`}
-                                            color={wiSatisfied ? 'var(--pass)' : 'var(--fail)'}
-                                          />
-                                          <div style={{ borderTop: '1px solid var(--panel3)', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
-                                            {thresholds.map(t => {
-                                              const noiNeeded = r.covenantType === 'dscr' ? t.req * r.ads : (t.req / 100) * (r.effectiveLoan || r.loanAmount);
-                                              const delta = wiNOI - noiNeeded;
-                                              return (
-                                                <MathLine key={t.label}
-                                                  label={`NOI for ${t.label}`}
-                                                  value={formatCurrency(noiNeeded)}
-                                                  eq={`${delta >= 0 ? '+' : ''}${formatCurrency(delta)}`}
-                                                  color={delta >= 0 ? 'var(--pass)' : 'var(--fail)'}
-                                                />
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
-                                      )}
-                                      {wiRaw !== undefined && wiRaw !== '' && (
-                                        <button onClick={() => setWhatIfNOI(prev => { const n = {...prev}; delete n[r.id]; return n; })}
-                                          style={{ fontSize: '0.6rem', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', marginTop: '0.2rem' }}>
-                                          ✕ Clear
-                                        </button>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-
-                              {/* Rate Prongs */}
-                              <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Rate Selection (highest wins)</div>
-                                {r.rateCandidates ? r.rateCandidates.map((c, i) => {
-                                  const isWinner = c.label === r.rateWinner?.label;
-                                  return (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                                      <span style={{ fontSize: '0.68rem', color: isWinner ? 'var(--accent)' : 'var(--muted)', whiteSpace: 'nowrap' }}>
-                                        {isWinner ? '▶ ' : '  '}{c.label}
-                                      </span>
-                                      <div style={{ textAlign: 'right' }}>
-                                        <span style={{ fontSize: '0.75rem', fontWeight: isWinner ? 700 : 400, color: isWinner ? 'var(--accent)' : 'var(--faint)' }}>{(c.rate*100).toFixed(4)}%</span>
-                                        <div style={{ fontSize: '0.6rem', color: 'var(--faint)' }}>{c.detail}</div>
-                                      </div>
-                                    </div>
-                                  );
-                                }) : (
-                                  <>
-                                    <MathLine label="SOFR (at test date)" value={`${(r.sofr * 100).toFixed(4)}%`} />
-                                    <MathLine label="Spread" value={`${r.spread}%`} />
-                                    <MathLine label="All-in Rate" value={`${(r.rate * 100).toFixed(4)}%`} eq="SOFR + Spread" />
-                                  </>
-                                )}
-                                <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
-                                  <MathLine label="Covenant Rate" value={`${(r.rate*100).toFixed(4)}%`} color="var(--accent)" />
-                                </div>
-                              </div>
-
-                              {/* Debt Service */}
-                              <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Debt Service</div>
-                                {r.variableLoan && r.variableLoanDetail ? (
-                                  <>
-                                    <div style={{ fontSize: '0.6rem', color: 'var(--accent)', marginBottom: '0.3rem', fontWeight: 600 }}>T-3 Rolling Interest</div>
-                                    {r.variableLoanDetail.months.map((m, i) => {
-                                      const label = m.date instanceof Date
-                                        ? m.date.toLocaleString('default', { month: 'short', year: 'numeric' })
-                                        : String(m.date).slice(0, 7);
+                                <input
+                                  type="number"
+                                  value={wiRaw ?? ''}
+                                  placeholder={`Current: ${formatCurrency(sel.noi)}`}
+                                  onChange={e => setWhatIfNOI(prev => ({ ...prev, [sel.id]: e.target.value }))}
+                                  style={{ width: '100%', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)', padding: '5px 8px', fontSize: 12, fontFamily: 'var(--font-mono)', marginBottom: '0.3rem', boxSizing: 'border-box' }}
+                                />
+                                {wiVal !== null && !isNaN(wiVal) && (
+                                  <div>
+                                    <LedgerRow
+                                      strong
+                                      label={sel.covenantType === 'dscr' ? 'What-if DSCR' : 'What-if DY'}
+                                      value={sel.covenantType === 'dscr' ? `${wiVal.toFixed(4)}x` : `${wiVal.toFixed(4)}%`}
+                                      color={wiSatisfied ? 'var(--pass)' : 'var(--fail)'}
+                                    />
+                                    {thresholdList.map(t => {
+                                      const noiNeeded = sel.covenantType === 'dscr' ? t.req * sel.ads : (t.req / 100) * (sel.effectiveLoan || sel.loanAmount);
+                                      const delta = wiNOI - noiNeeded;
                                       return (
-                                        <MathLine key={i} label={label}
-                                          value={formatCurrency(m.monthlyInterest)}
-                                          eq={`${formatCurrency(m.balance)} × ${(m.rate*100).toFixed(3)}% / 12`} />
+                                        <LedgerRow key={t.label}
+                                          label={`NOI for ${t.label}`}
+                                          value={formatCurrency(noiNeeded)}
+                                          eq={`${delta >= 0 ? '+' : ''}${formatCurrency(delta)}`}
+                                          color={delta >= 0 ? 'var(--pass)' : 'var(--fail)'}
+                                        />
                                       );
                                     })}
-                                    <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.3rem', paddingTop: '0.3rem' }}>
-                                      <MathLine label="Avg Monthly Interest" value={formatCurrency(r.variableLoanDetail.annualizedADS / 12)} eq="sum ÷ 3 months" />
-                                      <MathLine label="Annualized DS (× 12)" value={formatCurrency(r.variableLoanDetail.annualizedADS)} color="var(--accent)" />
-                                    </div>
-                                  </>
-                                ) : r.amort === 0 ? (
-                                  <>
-                                    <MathLine label="Annual DS (I/O)" value={formatCurrency(r.ads)} eq={`${formatCurrency(r.effectiveLoan || r.loanAmount)} × ${(r.rate*100).toFixed(4)}%`} />
-                                    <MathLine label="Monthly DS" value={formatCurrency(r.ads / 12)} />
-                                  </>
-                                ) : (
-                                  <>
-                                    <MathLine label="Monthly Payment" value={formatCurrency(monthlyPayment)} eq="Standard amortization formula" />
-                                    <MathLine label="Annual DS" value={formatCurrency(r.ads)} eq="Monthly × 12" />
-                                  </>
+                                  </div>
+                                )}
+                                {wiRaw !== undefined && wiRaw !== '' && (
+                                  <button onClick={() => setWhatIfNOI(prev => { const n = { ...prev }; delete n[sel.id]; return n; })}
+                                    style={{ fontSize: '0.62rem', color: 'var(--faint)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0 0', fontFamily: 'var(--font-mono)' }}>
+                                    ✕ Clear
+                                  </button>
                                 )}
                               </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
 
-                              {/* Covenant Result */}
-                              <div>
-                                <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'Debt Yield'}</div>
-                                {r.covenantType === 'dscr' ? (
-                                  <>
-                                    <MathLine label="DSCR" value={`${r.currentVal.toFixed(4)}x`} eq={`${formatCurrency(r.noi)} ÷ ${formatCurrency(r.ads)}`} />
-                                    <MathLine label="Requirement" value={`${r.covenantReq.toFixed(2)}x`} />
-                                    <MathLine label="Variance" value={`${r.currentVal >= r.covenantReq ? '+' : ''}${(r.currentVal - r.covenantReq).toFixed(4)}x`} color={r.currentVal >= r.covenantReq ? 'var(--pass)' : 'var(--fail)'} />
-                                    <MathLine label="Required NOI" value={formatCurrency(r.requiredNOI)} eq={`${r.covenantReq}x × ${formatCurrency(r.ads)}`} />
-                                  </>
-                                ) : (
-                                  <>
-                                    <MathLine label="Debt Yield" value={`${dyActual.toFixed(4)}%`} eq={`${formatCurrency(r.noi)} ÷ ${formatCurrency(r.loanAmount)}`} />
-                                    <MathLine label="Requirement" value={`${r.covenantReq.toFixed(2)}%`} />
-                                    <MathLine label="Variance" value={`${dyActual >= r.covenantReq ? '+' : ''}${(dyActual - r.covenantReq).toFixed(4)}%`} color={dyActual >= r.covenantReq ? 'var(--pass)' : 'var(--fail)'} />
-                                    <MathLine label="Required NOI" value={formatCurrency(r.requiredNOI)} eq={`${r.covenantReq}% × ${formatCurrency(r.loanAmount)}`} />
-                                  </>
-                                )}
-                              </div>
-
-                              {/* Paydown */}
-                              {!r.satisfied && (() => {
-                                // Same balance basis the paydown was solved against in calcRow:
-                                // drawn balance for variable loans, loan amount otherwise.
-                                const payBase = r.effectiveLoan || r.loanAmount;
-                                const isTBD = r.paydown >= payBase * 0.999;
-                                // New ADS under the same debt-service model that produced the
-                                // failing DSCR (T-3 linear for variable loans, calcADS otherwise).
-                                const newAds = r.variableLoanDetail
-                                  ? r.ads - r.paydown * r.variableLoanDetail.avgRate
-                                  : calcADS(payBase - r.paydown, r.rate, r.amort);
+                      {/* Debt service & result */}
+                      <div>
+                        <Eyebrow style={{ margin: '0 0 10px' }}>Debt service &amp; result</Eyebrow>
+                        <div style={{ ...paneCard, padding: '4px 16px' }}>
+                          {sel.variableLoan && sel.loanCommitment
+                            ? <LedgerRow label="Commitment" value={formatCurrency(sel.loanCommitment)} />
+                            : <LedgerRow label="Loan amount" value={formatCurrency(sel.loanAmount)} />}
+                          {sel.variableLoan && sel.effectiveLoan && sel.effectiveLoan !== sel.loanAmount && (
+                            <LedgerRow label="Drawn balance (latest)" value={formatCurrency(sel.effectiveLoan)} color="var(--accent)" />
+                          )}
+                          <LedgerRow label="All-in rate" value={`${(sel.rate * 100).toFixed(3)}%`} />
+                          <LedgerRow label="Amortization" value={sel.variableLoan ? 'I/O (variable balance)' : sel.amort === 0 ? 'I/O' : `${sel.amort} years`} />
+                          {sel.variableLoanDetail ? (
+                            <>
+                              {sel.variableLoanDetail.months.map((mm, i) => {
+                                const lbl = mm.date instanceof Date
+                                  ? mm.date.toLocaleString('default', { month: 'short', year: 'numeric' })
+                                  : String(mm.date).slice(0, 7);
                                 return (
-                                <div>
-                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Paydown to Clear</div>
-                                  <MathLine label="NOI Shortfall" value={formatCurrency(r.noiVariance)} color="var(--fail)" />
-                                  <MathLine label="Required Paydown" value={isTBD ? 'TBD' : formatCurrency(r.paydown)} color="var(--accent)" />
-                                  {!isTBD && <MathLine label="New Loan Balance" value={formatCurrency(payBase - r.paydown)} eq="after paydown" />}
-                                  {r.covenantType === 'dscr' && !isTBD && newAds > 0 && (
-                                    <MathLine label="Verify DSCR" value={`${(r.noi / newAds).toFixed(4)}x`} eq="NOI ÷ new ADS" color="var(--pass)" />
-                                  )}
-                                </div>
+                                  <LedgerRow key={i} indent label={lbl}
+                                    value={formatCurrency(mm.monthlyInterest)}
+                                    eq={`${formatCurrency(mm.balance)} × ${(mm.rate * 100).toFixed(3)}% / 12`} />
                                 );
-                              })()}
+                              })}
+                              <LedgerRow label="Annualized debt service (× 12)" value={formatCurrency(sel.variableLoanDetail.annualizedADS)} eq="avg monthly interest × 12" />
+                            </>
+                          ) : (
+                            <LedgerRow
+                              label={sel.amort === 0 ? 'Annual debt service (I/O)' : 'Annual debt service'}
+                              value={formatCurrency(sel.ads)}
+                              eq={sel.amort === 0
+                                ? `${formatCurrency(sel.effectiveLoan || sel.loanAmount)} × ${(sel.rate * 100).toFixed(4)}%`
+                                : 'monthly amortizing payment × 12'}
+                            />
+                          )}
+                          <LedgerRow
+                            strong
+                            label={sel.covenantType === 'dscr' ? 'DSCR' : 'Debt yield'}
+                            value={fmtVal(sel, 4)}
+                            eq={sel.covenantType === 'dscr'
+                              ? `${formatCurrency(sel.noi)} ÷ ${formatCurrency(sel.ads)}`
+                              : `${formatCurrency(sel.noi)} ÷ ${formatCurrency(sel.effectiveLoan || sel.loanAmount)}`}
+                            color={selMeta.color}
+                          />
+                          <LedgerRow label="Requirement" value={fmtReq(sel)} />
+                          <LedgerRow
+                            label="Variance"
+                            value={`${sel.currentVal >= sel.covenantReq ? '+' : ''}${(sel.currentVal - sel.covenantReq).toFixed(4)}${sel.covenantType === 'dscr' ? 'x' : '%'}`}
+                            color={sel.satisfied ? 'var(--pass)' : 'var(--fail)'}
+                          />
+                          <LedgerRow label="Required NOI" value={formatCurrency(sel.requiredNOI)} eq={sel.covenantType === 'dscr' ? `${sel.covenantReq}x × ${formatCurrency(sel.ads)}` : `${sel.covenantReq}% × ${formatCurrency(sel.effectiveLoan || sel.loanAmount)}`} />
+                          <LedgerRow
+                            label="NOI variance"
+                            value={`${sel.noiVariance >= 0 ? '+' : ''}${formatCurrency(sel.noiVariance)}`}
+                            color={sel.noiVariance >= 0 ? 'var(--pass)' : 'var(--fail)'}
+                          />
+                        </div>
 
-                              {/* NOI Calculation Detail */}
-                              {r.noiDetail && (
-                                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: '0.6rem', marginTop: '0.2rem' }}>
-                                  <div style={{ fontSize: '0.58rem', letterSpacing: '0.05em', color: 'var(--faint)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                                    NOI Build-up {r.noiDetail.fallback ? '— Dec fallback (2027 test date)' : ''}
-                                  </div>
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
-                                    {/* Income side */}
-                                    <div>
-                                      <div style={{ fontSize: '0.62rem', color: 'var(--pass)', fontWeight: 600, marginBottom: '0.3rem' }}>Income (T{r.incomeMonths})</div>
-                                      {r.noiDetail.incomeRows.map((row, i) => (
-                                        <div key={i}>
-                                          <MathLine label={row.label} value={formatCurrency(row.value)} />
-                                          {row.earlyTermAdj > 0 && (
-                                            <MathLine label="  Less: Actual Early Term" value={`(${formatCurrency(row.earlyTermAdj)})`} color="var(--fail)" />
-                                          )}
-                                          {row.earlyTermAdj > 0 && (
-                                            <MathLine label="  Adj Income" value={formatCurrency(row.adjValue)} color="var(--muted)" />
-                                          )}
-                                        </div>
-                                      ))}
-                                      {r.noiDetail.incomeRows.length > 1 && (
-                                        <MathLine label={r.noiDetail.hasAdj ? 'Adj Average' : 'Average'} value={formatCurrency(r.noiDetail.avgIncome)} color="var(--text2)" />
-                                      )}
-                                      <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgIncome * r.noiDetail.annualizer)} color="var(--pass)" />
-                                    </div>
-                                    {/* Expense side */}
-                                    <div>
-                                      <div style={{ fontSize: '0.62rem', color: 'var(--fail)', fontWeight: 600, marginBottom: '0.3rem' }}>Expenses (T{r.expenseMonths})</div>
-                                      {r.noiDetail.expenseRows.map((row, i) => (
-                                        <div key={i}>
-                                          <MathLine label={row.label} value={formatCurrency(row.value)} />
-                                          {row.oneTimeAdj > 0 && (
-                                            <MathLine label="  Less: One-Time Expenses" value={`(${formatCurrency(row.oneTimeAdj)})`} color="var(--fail)" />
-                                          )}
-                                          {row.oneTimeAdj > 0 && (
-                                            <MathLine label="  Adj Expense" value={formatCurrency(row.adjValue)} color="var(--muted)" />
-                                          )}
-                                        </div>
-                                      ))}
-                                      {r.noiDetail.expenseRows.length > 1 && (
-                                        <MathLine label={r.noiDetail.hasAdj ? 'Adj Average' : 'Average'} value={formatCurrency(r.noiDetail.avgExpense)} color="var(--text2)" />
-                                      )}
-                                      <MathLine label={`× ${r.noiDetail.annualizer} (annualized)`} value={formatCurrency(r.noiDetail.avgExpense * r.noiDetail.annualizer)} color="var(--fail)" />
-                                    </div>
-                                  </div>
-                                  {/* NOI Adjustments summary — fixed items */}
-                                  {r.noiDetail.hasAdj && (
-                                    <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', marginTop: '0.5rem', paddingTop: '0.5rem' }}>
-                                      <div style={{ fontSize: '0.62rem', color: 'var(--pass)', fontWeight: 600, marginBottom: '0.3rem' }}>NOI Adjustments</div>
-                                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 2rem' }}>
-                                        <div>
-                                          {/* Per-month early term already shown inline in incomeRows; show avg adj income */}
-                                          {r.noiDetail.stdEarlyTerm !== 0 && <MathLine label="Add: Std Early Term (avg monthly)" value={formatCurrency(r.noiDetail.stdEarlyTerm)} color="var(--pass)" />}
-                                          <MathLine label="Adj Avg Monthly Income" value={formatCurrency(r.noiDetail.adjIncome)} color="var(--text2)" />
-                                        </div>
-                                        <div>
-                                          {/* Per-month one-time already shown inline in expenseRows; show reserves */}
-                                          {r.noiDetail.replacementReserves !== 0 && <MathLine label="Add: Replacement Reserves (monthly)" value={formatCurrency(r.noiDetail.replacementReserves)} color="var(--fail)" />}
-                                          <MathLine label="Adj Avg Monthly Expense" value={formatCurrency(r.noiDetail.adjExpense)} color="var(--text2)" />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
+                        {/* Paydown to clear (failing tests) */}
+                        {!sel.satisfied && (() => {
+                          const payBase = sel.effectiveLoan || sel.loanAmount;
+                          const isTBD = sel.paydown >= payBase * 0.999;
+                          const newAds = sel.variableLoanDetail
+                            ? sel.ads - sel.paydown * sel.variableLoanDetail.avgRate
+                            : calcADS(payBase - sel.paydown, sel.rate, sel.amort);
+                          return (
+                            <>
+                              <Eyebrow>Paydown to clear</Eyebrow>
+                              <div style={{ ...paneCard, padding: '4px 16px' }}>
+                                <LedgerRow label="NOI shortfall" value={formatCurrency(sel.noiVariance)} color="var(--fail)" />
+                                <LedgerRow strong label="Required paydown" value={isTBD ? 'TBD' : formatCurrency(sel.paydown)} color="var(--fail)" />
+                                {!isTBD && <LedgerRow label="New loan balance" value={formatCurrency(payBase - sel.paydown)} eq="after paydown" />}
+                                {sel.covenantType === 'dscr' && !isTBD && newAds > 0 && (
+                                  <LedgerRow label="Verify DSCR" value={`${(sel.noi / newAds).toFixed(4)}x`} eq="NOI ÷ new ADS" color="var(--pass)" />
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
 
-                                  {/* Final NOI */}
-                                  <div style={{ borderTop: '1px solid var(--border)', marginTop: '0.5rem', paddingTop: '0.4rem' }}>
-                                    <MathLine
-                                      label={r.noiDetail.hasAdj ? 'Adjusted Annual NOI' : 'Annual NOI (Income − Expenses)'}
-                                      value={formatCurrency(r.noi)}
-                                      eq={r.noiDetail.hasAdj
-                                        ? `(${formatCurrency(r.noiDetail.adjIncome)} − ${formatCurrency(r.noiDetail.adjExpense)}) × 12`
-                                        : `${formatCurrency(r.noiDetail.avgIncome * r.noiDetail.annualizer)} − ${formatCurrency(r.noiDetail.avgExpense * r.noiDetail.annualizer)}`}
-                                      color="var(--text2)"
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                              {!r.noiDetail && (
-                                <div style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--border)', paddingTop: '0.5rem', marginTop: '0.2rem' }}>
-                                  <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>NOI detail not available — upload a forecast file to populate.</div>
-                                </div>
-                              )}
-
-                            </div>
+                    {/* ── History & notes ── */}
+                    {expandedHistory.has(sel.id) && (
+                      <>
+                        <Eyebrow style={{ marginTop: 18 }}>History &amp; notes</Eyebrow>
+                        <div style={{ ...paneCard, padding: '14px 16px' }}>
+                          {/* Add comment */}
+                          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.85rem' }}>
+                            <input
+                              type="text"
+                              value={newComment[sel.id] || ''}
+                              placeholder="Add a note..."
+                              onChange={e => setNewComment(prev => ({ ...prev, [sel.id]: e.target.value }))}
+                              onKeyDown={e => e.key === 'Enter' && saveComment(sel.id)}
+                              style={{ flex: 1, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text)', padding: '5px 8px', fontSize: '0.75rem', fontFamily: 'inherit' }}
+                            />
+                            <button onClick={() => saveComment(sel.id)} className="btn btn-sm btn-primary">Add</button>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })()}
 
-                  {/* ── History & Comments panel ── */}
-                  {expandedHistory.has(r.id) && (() => {
-                    const colCount = ['testType','property','covenant','noiPeriods','rate','result','priorResult','noi','noiVariance','paydown','dfPaydown'].filter(col).length + 2;
-                    const events = propertyEvents[r.id] || null;
-                    const fmtEvent = (iso) => {
-                      const d = new Date(iso);
-                      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-                    };
-                    return (
-                      <tr>
-                        <td colSpan={colCount} style={{ padding: 0, background: 'var(--bg)' }}>
-                          <div style={{ margin: '0 0.75rem 0.75rem', padding: '0.85rem 1rem', background: 'var(--panel)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--pass)' }}>
-                            <div style={{ fontSize: '0.6rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--pass)', marginBottom: '0.75rem', fontWeight: 600 }}>History &amp; Notes — {r.property}</div>
-
-                            {/* Add comment */}
-                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.85rem' }}>
-                              <input
-                                type="text"
-                                value={newComment[r.id] || ''}
-                                placeholder="Add a note..."
-                                onChange={e => setNewComment(prev => ({ ...prev, [r.id]: e.target.value }))}
-                                onKeyDown={e => e.key === 'Enter' && saveComment(r.id)}
-                                style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '5px 8px', fontSize: '0.75rem', fontFamily: 'inherit' }}
-                              />
-                              <button onClick={() => saveComment(r.id)} className="btn btn-sm btn-primary">Add</button>
-                            </div>
-
-                            {/* Events feed */}
-                            {events === null && <div style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>Loading...</div>}
-                            {events !== null && events.length === 0 && <div style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>No history yet — will record automatically on next save.</div>}
-                            {events !== null && events.length > 0 && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 320, overflowY: 'auto' }}>
-                                {events.map(ev => (
-                                  <div key={ev.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.5rem 0.65rem', background: 'var(--bg)', borderRadius: 4, border: '1px solid var(--border)' }}>
-                                    {/* Icon */}
+                          {/* Events feed */}
+                          {selEvents === null && <div style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>Loading...</div>}
+                          {selEvents !== null && selEvents.length === 0 && <div style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>No history yet — will record automatically on next save.</div>}
+                          {selEvents !== null && selEvents.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: 320, overflowY: 'auto' }}>
+                              {selEvents.map(ev => {
+                                const evDate = new Date(ev.created_at);
+                                const evLabel = evDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + evDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                                return (
+                                  <div key={ev.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.5rem 0.65rem', background: 'var(--panel2)', borderRadius: 5, border: '1px solid var(--border)' }}>
                                     <div style={{ fontSize: '0.75rem', marginTop: '0.05rem', flexShrink: 0, color: ev.type === 'comment' ? 'var(--pass)' : 'var(--accent)' }}>
                                       {ev.type === 'comment' ? <CommentIcon size={12} /> : <CameraIcon size={12} />}
                                     </div>
-                                    {/* Content */}
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                      <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                        {fmtEvent(ev.created_at)}
+                                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--faint)', marginBottom: '0.2rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        {evLabel}
                                         {ev.type === 'snapshot' && (
                                           isPriorBaseline(ev) ? (
-                                            <span style={{
-                                              fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                                              padding: '1px 5px', borderRadius: 4,
-                                              background: 'color-mix(in srgb, var(--pass) 18%, transparent)', color: 'var(--pass)',
-                                            }}>Prior Test</span>
+                                            <span className="pill green" style={{ fontSize: '0.56rem', padding: '1px 5px' }}>Prior Test</span>
                                           ) : (
-                                            <span style={{
-                                              fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
-                                              padding: '1px 5px', borderRadius: 4,
-                                              background: ev.is_monthly === false ? 'color-mix(in srgb, var(--muted) 12%, transparent)' : 'color-mix(in srgb, var(--accent) 15%, transparent)',
-                                              color: ev.is_monthly === false ? 'var(--muted)' : 'var(--accent)',
-                                            }}>{ev.is_monthly === false ? 'Interim' : 'Monthly'}</span>
+                                            <span className={`pill ${ev.is_monthly === false ? '' : 'blue'}`} style={{ fontSize: '0.56rem', padding: '1px 5px', ...(ev.is_monthly === false ? { background: 'color-mix(in srgb, var(--muted) 12%, transparent)', color: 'var(--muted)' } : {}) }}>
+                                              {ev.is_monthly === false ? 'Interim' : 'Monthly'}
+                                            </span>
                                           )
                                         )}
                                       </div>
                                       {ev.type === 'comment' ? (
                                         <div style={{ fontSize: '0.75rem', color: 'var(--text2)' }}>{ev.comment}</div>
                                       ) : (
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.2rem' }}>
-                                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>NOI <strong style={{ color: 'var(--text2)' }}>{formatCurrency(ev.noi)}</strong></span>
-                                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Rate <strong style={{ color: 'var(--text2)' }}>{ev.rate ? `${(ev.rate * 100).toFixed(3)}%` : '—'}</strong></span>
-                                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>{r.covenantType === 'dscr' ? 'DSCR' : 'DY'} <strong style={{ color: ev.satisfied ? 'var(--pass)' : 'var(--fail)' }}>{ev.result ? (r.covenantType === 'dscr' ? `${parseFloat(ev.result).toFixed(4)}x` : `${parseFloat(ev.result).toFixed(4)}%`) : '—'}</strong></span>
-                                          <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>Req <strong style={{ color: 'var(--text2)' }}>{ev.covenant_req ? (r.covenantType === 'dscr' ? `${parseFloat(ev.covenant_req).toFixed(2)}x` : `${parseFloat(ev.covenant_req).toFixed(2)}%`) : '—'}</strong></span>
-                                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: ev.satisfied ? 'var(--pass)' : 'var(--fail)' }}>{ev.satisfied ? '✓ Pass' : '✗ Fail'}</span>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1.2rem', fontFamily: 'var(--font-mono)' }}>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>NOI <strong style={{ color: 'var(--text2)' }}>{formatCurrency(ev.noi)}</strong></span>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Rate <strong style={{ color: 'var(--text2)' }}>{ev.rate ? `${(ev.rate * 100).toFixed(3)}%` : '—'}</strong></span>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{sel.covenantType === 'dscr' ? 'DSCR' : 'DY'} <strong style={{ color: ev.satisfied ? 'var(--pass)' : 'var(--fail)' }}>{ev.result ? (sel.covenantType === 'dscr' ? `${parseFloat(ev.result).toFixed(4)}x` : `${parseFloat(ev.result).toFixed(4)}%`) : '—'}</strong></span>
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>Req <strong style={{ color: 'var(--text2)' }}>{ev.covenant_req ? (sel.covenantType === 'dscr' ? `${parseFloat(ev.covenant_req).toFixed(2)}x` : `${parseFloat(ev.covenant_req).toFixed(2)}%`) : '—'}</strong></span>
+                                          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: ev.satisfied ? 'var(--pass)' : 'var(--fail)' }}>{ev.satisfied ? '✓ Pass' : '✗ Fail'}</span>
                                         </div>
                                       )}
                                     </div>
-                                    {/* Delete */}
-                                    <button onClick={() => { if (window.confirm('Delete this entry?')) deleteEvent(ev.id, r.id); }}
-                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--border)', fontSize: '0.7rem', padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}
+                                    <button onClick={() => { if (window.confirm('Delete this entry?')) deleteEvent(ev.id, sel.id); }}
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--faint)', fontSize: '0.7rem', padding: '2px 4px', flexShrink: 0, lineHeight: 1 }}
                                       onMouseEnter={e => e.target.style.color = 'var(--fail)'}
-                                      onMouseLeave={e => e.target.style.color = 'var(--border)'}>✕</button>
+                                      onMouseLeave={e => e.target.style.color = 'var(--faint)'}>✕</button>
                                   </div>
-                                ))}
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* ── Refi sizing — floating overlay ── */}
+            {refiOpen && sel && selDF && (
+              <div style={{ position: 'absolute', right: 22, top: 66, width: 296, background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 11, boxShadow: 'var(--pop-shadow)', zIndex: 120, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', background: 'var(--text)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 12, color: 'var(--header)' }}>Debt-fund refi sizing · {sel.property}</span>
+                  <span onClick={() => setRefiOpen(false)} style={{ cursor: 'pointer', color: 'var(--faint)', fontSize: 14, userSelect: 'none' }}>✕</span>
+                </div>
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 11 }}>
+                    <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--text2)' }}>Size by</span>
+                    <div className="seg">
+                      {['DSCR', 'DY'].map(opt => (
+                        <button key={opt} className={dfMode === opt.toLowerCase() ? 'on' : ''} onClick={() => setDfMode(opt.toLowerCase())}>{opt}</button>
+                      ))}
+                    </div>
+                  </div>
+                  {dfMode === 'dscr' && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 11 }}>
+                        <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--text2)' }}>Target DSCR (x)</span>
+                        <input type="number" step="0.01" value={dfDSCRInput}
+                          onChange={e => setDfDSCRInput(e.target.value)}
+                          onBlur={() => { const v = parseFloat(dfDSCRInput); if (!isNaN(v) && v > 0) setDfDSCR(String(v)); }}
+                          style={smallInput} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 11 }}>
+                        <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--text2)' }}>Spread over SOFR (%)</span>
+                        <input type="number" step="0.01" value={dfSpreadInput}
+                          onChange={e => setDfSpreadInput(e.target.value)}
+                          onBlur={() => { const v = parseFloat(dfSpreadInput); if (!isNaN(v) && v >= 0) setDfSpread(String(v)); }}
+                          style={smallInput} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 11 }}>
+                        <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--text2)' }}>Amortization</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div className="seg">
+                            {['I/O', 'Amort'].map(opt => (
+                              <button key={opt} className={(opt === 'I/O' ? dfIO : !dfIO) ? 'on' : ''} onClick={() => setDfIO(opt === 'I/O')}>{opt}</button>
+                            ))}
+                          </div>
+                          {!dfIO && (
+                            <input type="number" step="1" min="1" max="40" value={dfAmortInput}
+                              onChange={e => setDfAmortInput(e.target.value)}
+                              onBlur={() => { const v = parseInt(dfAmortInput); if (!isNaN(v) && v > 0) setDfAmort(String(v)); }}
+                              style={{ ...smallInput, width: 52 }} />
+                          )}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {dfMode === 'dy' && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 11 }}>
+                        <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--text2)' }} title="T1 at test date">As-Is DY (%)</span>
+                        <input type="number" step="0.01" value={dfDYAsIsInput}
+                          onChange={e => setDfDYAsIsInput(e.target.value)}
+                          onBlur={() => { const v = parseFloat(dfDYAsIsInput); if (!isNaN(v) && v > 0) setDfDYAsIs(String(v)); }}
+                          style={smallInput} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 11 }}>
+                        <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11.5, color: 'var(--text2)' }} title="First month >92% occupancy, annualized">Stabilized DY (%)</span>
+                        <input type="number" step="0.01" value={dfDYStabInput}
+                          onChange={e => setDfDYStabInput(e.target.value)}
+                          onBlur={() => { const v = parseFloat(dfDYStabInput); if (!isNaN(v) && v > 0) setDfDYStab(String(v)); }}
+                          style={smallInput} />
+                      </div>
+                    </>
+                  )}
+                  <div style={{ marginTop: 6, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, letterSpacing: '.06em', color: 'var(--muted)', textTransform: 'uppercase' }}>Max refi loan</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 18, color: 'var(--pass)' }}>{selDF.noi > 0 ? formatCurrency(selDF.maxLoan) : '—'}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 8 }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, letterSpacing: '.06em', color: 'var(--muted)', textTransform: 'uppercase' }}>Paydown</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 13, color: dfLineText(sel, selDF) === 'None' ? 'var(--pass)' : 'var(--fail)' }}>{dfLineText(sel, selDF)}</span>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--faint)', marginTop: 7 }}>
+                      vs {formatCurrency(selDF.loan)} balance · {selDF.label}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Upload Forecast — floating panel ── */}
+            {uploadPanelOpen && !showUploadResults && (
+              <div style={{ position: 'absolute', right: 22, top: 66, width: 306, background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 11, boxShadow: 'var(--pop-shadow)', zIndex: 120, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', background: 'var(--text)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 12, color: 'var(--header)' }}>Upload forecast workbook</span>
+                  <span onClick={() => setUploadPanelOpen(false)} style={{ cursor: 'pointer', color: 'var(--faint)', fontSize: 14, userSelect: 'none' }}>✕</span>
+                </div>
+                <div style={{ padding: '14px 16px' }}>
+                  <label style={labelStyle}>Forecast month label (optional)</label>
+                  <input
+                    type="text"
+                    value={forecastMonthInput}
+                    onChange={e => setForecastMonthInput(e.target.value)}
+                    placeholder="e.g. February 2026"
+                    style={inputStyle}
+                  />
+                  {pinUnlocked ? (
+                    <label className="btn btn-tinted" style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}>
+                      ↑ Choose .xlsx forecast file
+                      <input type="file" accept=".xlsx" onChange={handleFileUpload} style={{ display: 'none' }} />
+                    </label>
+                  ) : (
+                    <button onClick={() => requirePin(() => {})} className="btn btn-locked" style={{ marginTop: 12, width: '100%', justifyContent: 'center' }}>
+                      <LockIcon size={11} /> Unlock to upload
+                    </button>
+                  )}
+                  {uploadStatus && (
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, marginTop: 10, color: uploadStatus.startsWith('✓') ? 'var(--pass)' : uploadStatus.startsWith('Error') ? 'var(--fail)' : 'var(--text2)' }}>{uploadStatus}</div>
+                  )}
+                  <div style={{ fontSize: '0.66rem', color: 'var(--faint2)', marginTop: 10, lineHeight: 1.55 }}>
+                    Parses every sheet, fuzzy-matches to properties, then opens a review panel before anything is saved.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Export / upload status toast */}
+            {(exportMsg || (uploadStatus && !showUploadResults && !uploadPanelOpen)) && (
+              <div style={{
+                position: 'absolute', bottom: 18, right: 22, zIndex: 90,
+                background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 8,
+                boxShadow: 'var(--pop-shadow)', padding: '8px 14px',
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                color: (exportMsg || uploadStatus).startsWith('✓') || (exportMsg || uploadStatus).includes('exported') ? 'var(--pass)' : 'var(--text2)',
+              }}>
+                {exportMsg || uploadStatus}
+              </div>
+            )}
+          </div>
+
+          {/* ══ Upload Results Review — overlay ══ */}
+          {showUploadResults && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 130, background: 'color-mix(in srgb, var(--text) 22%, transparent)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '38px 30px', overflow: 'auto' }}>
+              <div className="card" style={{ width: '100%', maxWidth: 1000, boxShadow: 'var(--pop-shadow)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: 12, flexWrap: 'wrap' }}>
+                  <div className="label" style={{ marginBottom: 0 }}>
+                    {uploadMode === 'prior' ? 'Upload Preview — Set as Prior Test' : 'Upload Preview — Review NOI Updates'}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <label
+                      title="Update current NOI: overwrite live figures with this forecast (the normal monthly update). Set as Prior Test only: record this forecast as the last test result baseline without changing current NOI — use it to backfill an earlier forecast for the comparison column."
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', fontWeight: 600, color: 'var(--muted)' }}
+                    >
+                      <select value={uploadMode} onChange={e => setUploadMode(e.target.value)} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', padding: '4px 8px', fontSize: '0.7rem', fontFamily: 'inherit', cursor: 'pointer' }}>
+                        <option value="current">Update current NOI</option>
+                        <option value="prior">Set as Prior Test only</option>
+                      </select>
+                    </label>
+                    {uploadMode === 'current' && (
+                      <label
+                        title="Checked: this upload is the official monthly report and becomes the baseline for the Prior Test comparison. Uncheck for a small interim update so it does not overwrite last month's result."
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: monthlyUpload ? 'var(--accent)' : 'var(--muted)' }}
+                      >
+                        <input type="checkbox" checked={monthlyUpload} onChange={e => setMonthlyUpload(e.target.checked)} style={{ accentColor: 'var(--accent)', cursor: 'pointer' }} />
+                        Monthly baseline update
+                      </label>
+                    )}
+                    <button onClick={() => setShowUploadResults(false)} className="btn btn-sm btn-ghost">Dismiss</button>
+                    <button onClick={() => uploadMode === 'prior' ? applyAsPriorTest() : applyUploadResults()} className="btn btn-sm btn-primary">{uploadMode === 'prior' ? 'Set as Prior Test' : 'Apply All Updates'}</button>
+                  </div>
+                </div>
+                {uploadMode === 'prior' && (
+                  <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '0.85rem', padding: '0.5rem 0.65rem', background: 'var(--panel2)', borderRadius: 4, borderLeft: '3px solid var(--accent)' }}>
+                    Records this forecast as the <strong style={{ color: 'var(--text2)' }}>Prior Test</strong> result{(forecastMonthInput.trim() || forecastMonth) ? <> dated <strong style={{ color: 'var(--text2)' }}>{forecastMonthInput.trim() || forecastMonth}</strong></> : null}. Current live NOI figures are left unchanged.
+                  </div>
+                )}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        {['Property', 'Status', 'Matched Sheet', 'T-Periods', 'Old NOI', 'New NOI', 'Change'].map(h => (
+                          <th key={h} style={{ padding: '0.4rem 0.75rem' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {uploadResults.map(r => (
+                        <tr key={r.id}>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text)', fontSize: '0.82rem' }}>{r.property}</td>
+                          <td style={{ padding: '0.5rem 0.75rem' }}>
+                            <span className={`pill ${r.status === 'matched' ? 'green' : 'red'}`}>
+                              {r.status === 'matched' ? `✓ Matched (${Math.round(r.score * 100)}%)` : r.status === 'no_match' ? '✗ No match' : '⚠ Insufficient data'}
+                            </span>
+                            {(r.matchWarning || (r.parseWarnings && r.parseWarnings.length > 0)) && (
+                              <div style={{ marginTop: '0.3rem', fontSize: '0.62rem', color: 'var(--warn-text)', maxWidth: 260, lineHeight: 1.45 }}>
+                                {r.matchWarning && <div>⚠ {r.matchWarning}</div>}
+                                {r.parseWarnings && r.parseWarnings.length > 0 && (
+                                  <div title={r.parseWarnings.join('\n')}>
+                                    ⚠ {r.parseWarnings.length} cell{r.parseWarnings.length > 1 ? 's' : ''} could not be parsed (treated as $0): {r.parseWarnings.slice(0, 2).join('; ')}{r.parseWarnings.length > 2 ? ' …' : ''}
+                                  </div>
+                                )}
                               </div>
                             )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })()}
+                          </td>
+                          <td style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: 'var(--muted)', maxWidth: 200 }}>
+                            {r.matchedSheet ? r.matchedSheet.replace(/^Budget Analysis - /, '').replace(/ - \d{4}.*$/, '') : '—'}
+                          </td>
+                          <td className="mono" style={{ padding: '0.5rem 0.75rem', fontSize: '0.72rem', color: 'var(--muted)' }}>
+                            {r.incomeMonths ? `T${r.incomeMonths} Inc / T${r.expenseMonths} Exp` : '—'}
+                          </td>
+                          <td className="mono" style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: 'var(--muted)' }}>{r.oldNOI != null ? formatCurrency(r.oldNOI) : '—'}</td>
+                          <td className="mono" style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem', color: r.newNOI != null ? 'var(--pass)' : 'var(--muted)', fontWeight: 600 }}>{r.newNOI != null ? formatCurrency(r.newNOI) : '—'}</td>
+                          <td className="mono" style={{ padding: '0.5rem 0.75rem', fontSize: '0.78rem' }}>
+                            {r.oldNOI != null && r.newNOI != null ? (() => {
+                              const delta = r.newNOI - r.oldNOI;
+                              return <span style={{ color: delta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>{delta >= 0 ? '+' : ''}{formatCurrency(delta)}</span>;
+                            })() : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
 
-                  {/* ── Fund sub-rows ── */}
-                  {isFundRow && expandedFund && fundProps.map((fp, fi) => {
-                    const fpLoan = fp.allocatedLoan;
-                    const fpNOI = fp.noi || 0;
-                    // Parent's covenant-date rate — already the highest of all
-                    // three prongs (SOFR, 10Y, sizing floor), so a sub-row can't
-                    // show a pass the floor-based covenant math would fail.
-                    const fpRate = r.rate;
-                    const fpADS = fpLoan ? calcADS(fpLoan, fpRate, r.amort) : null;
-                    const fpDSCR = fpADS && fpADS > 0 ? fpNOI / fpADS : null;
-                    const fpPassing = fpDSCR !== null ? fpDSCR >= r.covenantReq : null;
-                    const fpColor = fpDSCR === null ? 'var(--faint)' : fpPassing ? 'var(--pass)' : 'var(--fail)';
-                    const fpDelta = fpDSCR !== null ? fpDSCR - r.covenantReq : null;
-                    const fpRequiredNOI = fpADS ? r.covenantReq * fpADS : null;
-                    const fpVariance = fpRequiredNOI !== null ? fpNOI - fpRequiredNOI : null;
-                    return (
-                    <tr key={`fund-${fi}`} style={{ background: 'var(--panel2)', borderBottom: fi === fundProps.length - 1 ? '2px solid var(--border)' : '1px solid var(--panel)' }}>
+          {/* ══ Add / Edit Form — overlay ══ */}
+          {showForm && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 130, background: 'color-mix(in srgb, var(--text) 22%, transparent)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '38px 30px', overflow: 'auto' }}>
+              <div className="card" style={{ width: '100%', maxWidth: 920, boxShadow: 'var(--pop-shadow)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <div className="label" style={{ marginBottom: 0, color: 'var(--accent)' }}>
+                    {editId !== null ? 'Edit Property' : 'Add New Property'}
+                  </div>
+                  <button className="tt-ico" title="Close" onClick={() => { setShowForm(false); setEditId(null); setForm(EMPTY_FORM); }}>✕</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  {[
+                    { label: 'Property Name', key: 'property', type: 'text', placeholder: 'e.g. Ellenton' },
+                    { label: 'Lender', key: 'lender', type: 'text', placeholder: 'e.g. UMB' },
+                    { label: 'Loan Amount ($)', key: 'loanAmount', type: 'number', placeholder: '62332714' },
+                    { label: 'Annual NOI ($)', key: 'noi', type: 'number', placeholder: '3579240' },
+                  ].map(({ label, key, type, placeholder }) => (
+                    <div key={key}>
+                      <label style={labelStyle}>{label}</label>
+                      <input type={type} value={form[key]} placeholder={placeholder}
+                        onChange={e => setF(key, e.target.value)} style={inputStyle} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={labelStyle}>SOFR Spread (%)</label>
+                    <input type="number" value={form.spread} step="0.05" min="0" max="10" onChange={e => setF('spread', e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>10yr Spread (%)</label>
+                    <input type="number" value={form.spread10y ?? ''} step="0.05" min="0" max="10" placeholder="optional" onChange={e => setF('spread10y', e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Sizing / Floor Rate (%)</label>
+                    <input type="number" value={form.sizingRate ?? ''} step="0.05" min="0" max="20" placeholder="optional" onChange={e => setF('sizingRate', e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Test Type</label>
+                    <select value={form.testType || 'Covenant'} onChange={e => setF('testType', e.target.value)} style={inputStyle}>
+                      <option value="Covenant">Covenant</option>
+                      <option value="Maturity">Maturity</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Amortization</label>
+                    <select value={form.amort} onChange={e => setF('amort', e.target.value)} style={inputStyle}>
+                      <option value="30">30 Year</option>
+                      <option value="35">35 Year</option>
+                      <option value="0">I/O</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Covenant Type</label>
+                    <select value={form.covenantType} onChange={e => setF('covenantType', e.target.value)} style={inputStyle}>
+                      <option value="dscr">DSCR</option>
+                      <option value="dy">Debt Yield</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>{form.covenantType === 'dscr' ? 'Required DSCR (x)' : 'Required DY (%)'}</label>
+                    <input type="number" value={form.covenantReq} step={form.covenantType === 'dscr' ? '0.05' : '0.25'} min="0" onChange={e => setF('covenantReq', e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Income Months (T#)</label>
+                    <select value={form.incomeMonths} onChange={e => setF('incomeMonths', e.target.value)} style={inputStyle}>
+                      <option value="1">T1</option>
+                      <option value="3">T3</option>
+                      <option value="12">T12</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Expense Months (T#)</label>
+                    <select value={form.expenseMonths} onChange={e => setF('expenseMonths', e.target.value)} style={inputStyle}>
+                      <option value="1">T1</option>
+                      <option value="3">T3</option>
+                      <option value="12">T12</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={labelStyle}>Covenant Test Date (SOFR lookup + NOI trailing period)</label>
+                    <input type="date" value={form.covenantDate} min={SOFR_MIN} max={SOFR_MAX} onChange={e => setF('covenantDate', e.target.value)} style={inputStyle} />
+                    {form.covenantDate && <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                      SOFR: <strong style={{ color: 'var(--text2)' }}>{(getSofr(form.covenantDate) * 100).toFixed(4)}%</strong>
+                      &nbsp;· All-in: <strong style={{ color: 'var(--accent)' }}>{((getSofr(form.covenantDate) + parseFloat(form.spread || 0) / 100) * 100).toFixed(4)}%</strong>
+                    </div>}
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Loan Maturity Date</label>
+                    <input type="date" value={form.maturityDate} onChange={e => setF('maturityDate', e.target.value)} style={inputStyle} />
+                  </div>
+                </div>
+                {/* ── Variable Loan Balance Toggle ── */}
+                <div style={{ marginBottom: '1rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
+                    <div
+                      onClick={() => setF('variableLoan', !form.variableLoan)}
+                      style={{ width: 36, height: 20, borderRadius: 10, background: form.variableLoan ? 'var(--accent)' : 'var(--border2)', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
+                      <div style={{ position: 'absolute', top: 3, left: form.variableLoan ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.3)', transition: 'left 0.2s' }} />
+                    </div>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: form.variableLoan ? 'var(--accent)' : 'var(--muted)', fontWeight: 600 }}>Variable Loan Balance</span>
+                  </label>
+                </div>
 
-                      {/* Date cell — empty */}
-                      <td style={{ padding: '0.4rem 0.75rem', borderRight: '1px solid var(--border)' }}></td>
+                {/* ── Covenant Waived Toggle ── */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
+                    <div
+                      onClick={() => setF('waived', !form.waived)}
+                      style={{ width: 36, height: 20, borderRadius: 10, background: form.waived ? 'var(--pass)' : 'var(--border2)', position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0 }}>
+                      <div style={{ position: 'absolute', top: 3, left: form.waived ? 18 : 3, width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.3)', transition: 'left 0.2s' }} />
+                    </div>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: form.waived ? 'var(--pass)' : 'var(--muted)', fontWeight: 600 }}>Covenant Waived</span>
+                  </label>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--faint2)', marginTop: '0.3rem' }}>Lender has waived this test — shows WAIVED instead of FAIL on the dashboard and Doc View.</div>
+                </div>
 
-                      {/* Type — empty */}
-                      {col('testType') && <td></td>}
+                {form.variableLoan && (
+                  <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--panel2)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--accent)' }}>
+                    {/* Commitment field — replaces loan amount display */}
+                    <div style={{ marginBottom: '0.85rem' }}>
+                      <label style={labelStyle}>Loan Commitment (Total Facility, $)</label>
+                      <input
+                        type="number"
+                        value={form.loanCommitment ?? ''}
+                        placeholder="e.g. 548500000"
+                        onChange={e => setF('loanCommitment', e.target.value)}
+                        style={inputStyle}
+                      />
+                      <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: '0.25rem' }}>
+                        The total facility size. The drawn balance schedule below drives the DSCR calculation.
+                      </div>
+                    </div>
 
-                      {/* Property name + allocated loan */}
-                      {col('property') && (
-                        <td style={{ padding: '0.5rem 0.75rem 0.5rem 1.5rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <div style={{ width: 1, height: 28, background: 'var(--border)', flexShrink: 0 }}></div>
-                            <div>
-                              <div style={{ fontSize: '0.8rem', color: 'var(--text2)', fontWeight: 600 }}>{fp.name}</div>
-                              <div style={{ fontSize: '0.68rem', color: 'var(--faint)' }}>{fpLoan ? formatCurrency(fpLoan) : 'Loan TBD'}</div>
+                    {/* 12-row schedule */}
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.5rem', fontWeight: 600 }}>Loan Balance Schedule (12 months)</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem' }}>
+                      {(form.loanSchedule || []).map((entry, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                          <input
+                            type="month"
+                            value={entry.month || ''}
+                            onChange={e => {
+                              const s = [...form.loanSchedule];
+                              s[i] = { ...s[i], month: e.target.value };
+                              setF('loanSchedule', s);
+                            }}
+                            style={{ ...inputStyle, flex: '0 0 130px', fontSize: '0.7rem', padding: '4px 6px' }}
+                          />
+                          <input
+                            type="number"
+                            value={entry.balance || ''}
+                            placeholder="Balance $"
+                            onChange={e => {
+                              const s = [...form.loanSchedule];
+                              s[i] = { ...s[i], balance: e.target.value };
+                              setF('loanSchedule', s);
+                            }}
+                            style={{ ...inputStyle, flex: 1, fontSize: '0.7rem', padding: '4px 6px' }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--faint)', marginTop: '0.5rem' }}>
+                      Enter months in any order. The 3 months immediately before the test month will be used for T-3 interest calculation (matching the trailing NOI window).
+                    </div>
+                  </div>
+                )}
+
+                {/* ── NOI Adjustments (Fund only) ── */}
+                {form.variableLoan && (() => {
+                  const nInc = parseInt(form.incomeMonths) || 1;
+                  const nExp = parseInt(form.expenseMonths) || 1;
+                  // Helper: get month label for slot idx (0 = most recent before test date)
+                  const monthLabel = (idx) => {
+                    if (!form.covenantDate) return `Month ${idx + 1}`;
+                    const base = new Date(form.covenantDate + 'T00:00:00');
+                    const year = base.getFullYear();
+                    const month = base.getMonth(); // 0-based month of test date
+                    // idx 0 = one month before test date, idx 1 = two months before, etc.
+                    const totalMonths = year * 12 + month - 1 - idx;
+                    const y = Math.floor(totalMonths / 12);
+                    const m = totalMonths % 12;
+                    return new Date(y, m, 1).toLocaleString('default', { month: 'short', year: 'numeric' });
+                  };
+                  const setAETM = (idx, val) => {
+                    const arr = [...(form.actualEarlyTermMonths || [])];
+                    while (arr.length <= idx) arr.push('');
+                    arr[idx] = val;
+                    setF('actualEarlyTermMonths', arr);
+                  };
+                  const setOTEM = (idx, val) => {
+                    const arr = [...(form.oneTimeExpenseMonths || [])];
+                    while (arr.length <= idx) arr.push('');
+                    arr[idx] = val;
+                    setF('oneTimeExpenseMonths', arr);
+                  };
+                  return (
+                    <div style={{ marginBottom: '1rem', padding: '0.85rem 1rem', background: 'var(--panel2)', borderRadius: 6, border: '1px solid var(--border)', borderLeft: '3px solid var(--pass)' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--pass)', marginBottom: '0.75rem', fontWeight: 600 }}>NOI Adjustments</div>
+
+                      {/* Section: Less Actual Early Term — one per income month */}
+                      <div style={{ marginBottom: '0.85rem' }}>
+                        <div style={{ fontSize: '0.62rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
+                          Less: Actual Early Term Income — per trailing income month ($)
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${nInc}, 1fr)`, gap: '0.5rem' }}>
+                          {Array.from({ length: nInc }, (_, idx) => (
+                            <div key={idx}>
+                              <label style={{ ...labelStyle, color: 'var(--faint2)' }}>{monthLabel(idx)}</label>
+                              <input type="number" min="0"
+                                value={(form.actualEarlyTermMonths || [])[idx] ?? ''}
+                                placeholder="0"
+                                onChange={e => setAETM(idx, e.target.value)}
+                                style={inputStyle} />
                             </div>
-                          </div>
-                        </td>
-                      )}
+                          ))}
+                        </div>
+                      </div>
 
-                      {/* Requirement + individual pass/fail */}
-                      {col('covenant') && (
-                        <td style={{ padding: '0.5rem 0.75rem' }}>
-                          <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 700, background: fpPassing === null ? 'color-mix(in srgb, var(--faint) 20%, transparent)' : fpPassing ? 'color-mix(in srgb, var(--pass) 15%, transparent)' : 'color-mix(in srgb, var(--fail) 15%, transparent)', color: fpPassing === null ? 'var(--faint)' : fpPassing ? 'var(--pass)' : 'var(--fail)' }}>
-                            {fpPassing === null ? '—' : fpPassing ? '✓ PASS' : '✗ FAIL'}
-                          </span>
-                        </td>
-                      )}
+                      {/* Section: Less One-Time Expenses — one per expense month */}
+                      <div style={{ marginBottom: '0.85rem' }}>
+                        <div style={{ fontSize: '0.62rem', color: 'var(--muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
+                          Less: One-Time Expenses — per trailing expense month ($)
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${nExp}, 1fr)`, gap: '0.5rem' }}>
+                          {Array.from({ length: nExp }, (_, idx) => (
+                            <div key={idx}>
+                              <label style={{ ...labelStyle, color: 'var(--faint2)' }}>{monthLabel(idx)}</label>
+                              <input type="number" min="0"
+                                value={(form.oneTimeExpenseMonths || [])[idx] ?? ''}
+                                placeholder="0"
+                                onChange={e => setOTEM(idx, e.target.value)}
+                                style={inputStyle} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
 
-                      {/* NOI periods — inherited */}
-                      {col('noiPeriods') && <td></td>}
+                      {/* Fixed fields */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border)' }}>
+                        <div>
+                          <label style={labelStyle}>Add: Standardized Early Term (monthly $)</label>
+                          <input type="number" value={form.stdEarlyTerm ?? ''} placeholder="e.g. 40250" min="0"
+                            onChange={e => setF('stdEarlyTerm', e.target.value)} style={inputStyle} />
+                          <div style={{ fontSize: '0.6rem', color: 'var(--faint)', marginTop: '0.2rem' }}>T-12 normalized avg — added back to adj income avg</div>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Add: Replacement Reserves (monthly $)</label>
+                          <input type="number" value={form.replacementReserves ?? ''} placeholder="e.g. 52979" min="0"
+                            onChange={e => setF('replacementReserves', e.target.value)} style={inputStyle} />
+                          <div style={{ fontSize: '0.6rem', color: 'var(--faint)', marginTop: '0.2rem' }}>Fixed monthly reserve — added to adj expense avg</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
-                      {/* Rate — inherited */}
-                      {col('rate') && <td></td>}
-
-                      {/* Individual DSCR vs req */}
-                      {col('result') && (
-                        <td style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap' }}>
-                          {fpDSCR !== null ? (
-                            <>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <span style={{ fontSize: '0.95rem', fontWeight: 700, color: fpColor }}>{fpDSCR.toFixed(3)}x</span>
-                                <span style={{ fontSize: '0.65rem', color: 'var(--faint)' }}>vs</span>
-                                <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{r.covenantReq.toFixed(2)}x</span>
-                              </div>
-                              <span style={{ display: 'inline-block', marginTop: '0.15rem', padding: '1px 6px', borderRadius: 4, fontSize: '0.68rem', fontWeight: 600, background: fpDelta >= 0 ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: fpDelta >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
-                                {fpDelta >= 0 ? '+' : ''}{fpDelta.toFixed(3)}x
-                              </span>
-                            </>
-                          ) : <span style={{ color: 'var(--faint)', fontSize: '0.75rem' }}>—</span>}
-                        </td>
-                      )}
-
-                      {/* Individual NOI */}
-                      {col('noi') && (
-                        <td style={{ padding: '0.5rem 0.75rem' }}>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text2)', fontWeight: 600 }}>{fpNOI ? formatCurrency(fpNOI) : '—'}</div>
-                          {fpRequiredNOI && <div style={{ fontSize: '0.65rem', color: 'var(--faint)' }}>Req: {formatCurrency(fpRequiredNOI)}</div>}
-                        </td>
-                      )}
-
-                      {/* NOI variance */}
-                      {col('noiVariance') && (
-                        <td style={{ padding: '0.5rem 0.75rem' }}>
-                          {fpVariance !== null ? (
-                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 4, fontSize: '0.72rem', fontWeight: 600, background: fpVariance >= 0 ? 'color-mix(in srgb, var(--pass) 12%, transparent)' : 'color-mix(in srgb, var(--fail) 12%, transparent)', color: fpVariance >= 0 ? 'var(--pass)' : 'var(--fail)' }}>
-                              {fpVariance >= 0 ? '+' : ''}{formatCurrency(fpVariance)}
-                            </span>
-                          ) : <span style={{ color: 'var(--faint)' }}>—</span>}
-                        </td>
-                      )}
-
-                      {col('paydown') && <td></td>}
-                      {col('dfPaydown') && <td></td>}
-                      <td></td>
-                    </tr>
-                    );
-                  })}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {rows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--faint)', fontSize: '0.85rem' }}>No properties yet — click "+ Add Property" to get started</div>}
-        {rows.length > 0 && visibleRows.length === 0 && <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--faint)', fontSize: '0.85rem' }}>All tests are hidden — click "Show Hidden" to view them.</div>}
-      </div>
-
-      </div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={labelStyle}>Note (optional)</label>
+                  <input type="text" value={form.note || ''} placeholder="e.g. NOI: T1 Dec 2026 annualized"
+                    onChange={e => setF('note', e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={saveForm} className="btn btn-primary" style={{ padding: '7px 20px' }}>
+                    {editId !== null ? 'Save Changes' : 'Add Property'}
+                  </button>
+                  <button onClick={() => { setShowForm(false); setEditId(null); setForm(EMPTY_FORM); }} className="btn">Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -2961,23 +2908,59 @@ export default function App() {
     if (pinPendingAction) { pinPendingAction(); setPinPendingAction(null); }
   }
 
-  const LOGO_SRC = "data:image/png;base64,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yWczPcq4uFgS0Utt/P8ybvkd4AlHe5XxegoJsqW9z4f4jCCRmUJW19O0/1totHYcCc5PUXf5Cgx8rvYBEvE6Oq/mOniOzl3lmIdZs4sDLHPQY0IITz7jSPDMGlxOn72dXh/HOuqerqAR6BpqvHvkFlDqgm8if+MTUhgNbmluojjIbXyRI1s4ahIfpPgT0mJHQ0gqMI7O42MkfFO5z7fbfFSRuAcvKTFYcvKxKWdmqXy/yzRcZh2uImHt9mZ4F3WFv4dmaBykss7gKbfstc0ieYivBfPOkDOqrCPx+y6a33w99107FndwCgghPPmMowEEm33RLfv4AMoU3ScbeJu0GFKpVPpe45dJfO/gPjeLtVtFYrg8wGzUR2HhP2vAhUhzdTaJrvHJp9FH2C0v6K2PcBHPzt0Mmzt8FbdE55EIN6a1HzSW9j44w4QQnnzOI1/eKL0Z5bVtVfGUT90wTYvQkWRhXcNTzttylgco28xFklXYg7IU5SKR4upME0JYjJHco9Twvh9Y4HMvEhGMonL+BnUJu8Vi746jlPb3z8j39mtkEY7SnzyOR3HU/GXL7NOLgaPgJSWEMOg7ySr8Nr640yK+OtwmEsafDtkqDM4wIYTBIJnCA8RtGtsIHhK0F2IYDIMQwmAgJKvwKvLFzXB4mt8B8tMNe+AkOKOEEAaDpob76mwOch1PCPEkrMJg0IQQBn0ln6w0WYVvIdGzxAYbKAnDNLIWi6b9D4LChBAGfaXJOh4XkRU4jkJoFlCc4TQp6UFYhcEgCSEMBkqyCi8j0TOL8BaKRVxBmVweDKt8wdkkhLAYu/jc3zJqxObj6hab9WG+NJuT+5TepHoaR2W1rNXg+QqPw5LC1vDlNlfxZAudUEnbGccDxWfx9UM2m1iFjeeniqf5P64c9vul9J9zKLj7EoNbUP44LG3ZBD6QZOepJ2urBF8nhLAYZs1Mokq7g/u+uuUasozm0MjqHTTaeoPeZEFeRWXdwRtcu1mqF1GDvJBe15B192knBUhWoa0et4cL2xY6r3Wap7VqPD8rKCD6bSRwraiiUJ3vopvZl+haPkrHdBJYQseyjY5tFB3rCjr2oA/EBPMOacd31c3E/X5uv5tt97pc7foAG7d5ko6h15z08gVBEARBEARBEASFybLsr4ddhiAIekiWZX877DIE/SHLsr8cdhmCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAiCIAh6wP8GMDZpGBxVWa4AAAAASUVORK5CYII=";
-  const TTLogo = () => (
-    // The wordmark PNG is white-on-transparent; darken it on light surfaces.
-    <img src={LOGO_SRC} alt="Thompson Thrift" style={{ height: 44, objectFit: "contain", filter: theme === 'light' ? 'invert(0.82)' : 'none' }} />
-  );
+  // ── Weekly uploads: collapsed pill in the top bar → expandable amber row ──
+  const weekly = useWeeklyUploads({ sofrUpdated, activeTab });
+  const [bannerOpen, setBannerOpen] = useState(false);
 
+  // Covenant failing count for the sidebar status dot + badge — reported by
+  // CovenantTab once its rows are computed (null until first visit).
+  const [covFailing, setCovFailing] = useState(null);
+
+  function openLeasing() {
+    // The Leasing tab may be hidden from the shared tab config — reveal it for
+    // this session only (nothing is saved) so the upload is reachable; the
+    // gear menu still controls the permanent setting.
+    setVisibleTabs(v => (v.leasing ? v : { ...v, leasing: true }));
+    setActiveTab('leasing');
+  }
+
+  const NAV_ITEMS = [
+    ['covenant', 'Covenant Tracker'],
+    ['debt', 'Debt Dashboard'],
+    ['pipeline', 'Lender Pipeline'],
+    ['map', 'Project Map'],
+    ['loans', 'Loans'],
+    ['land', 'Land Facility'],
+    ['leasing', 'Leasing'],
+    ['calculator', 'Calculator'],
+    ['matrix', 'DY / DSCR Matrix'],
+  ].filter(([key]) => visibleTabs[key]);
+
+  const navItemStyle = (active) => ({
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    width: '100%', textAlign: 'left', padding: '10px 22px',
+    fontFamily: 'var(--font-sans)', fontSize: 12.5, fontWeight: active ? 600 : 500,
+    color: active ? 'var(--sidebar-active)' : 'var(--sidebar-text)',
+    background: active ? 'rgba(255,255,255,.08)' : 'transparent',
+    border: 'none', borderLeft: `2px solid ${active ? '#fff' : 'transparent'}`,
+  });
+
+  // Split-frame screens own their full pane (list column · detail); the rest
+  // get the standard padded scroll surface.
+  const fullBleed = activeTab === 'covenant' || activeTab === 'loans' || activeTab === 'map';
+
+  const lockLabel = pinUnlocked ? 'Editing' : 'View only';
+  const lockGlyph = pinUnlocked ? <UnlockIcon size={12} /> : <LockIcon size={12} />;
+  const toggleLock = () => (pinUnlocked ? setPinUnlocked(false) : setShowPinModal(true));
 
   return (
     <div style={{
-      fontFamily: "'Inter', sans-serif",
-      background: TT_NAVY,
-      minHeight: "100vh",
-      color: "var(--text)",
-      padding: "0",
-      display: "flex",
-      flexDirection: "column",
-      position: "relative",
+      fontFamily: 'var(--font-sans)',
+      background: 'var(--bg)',
+      height: '100vh',
+      color: 'var(--text)',
+      display: 'flex',
+      overflow: 'hidden',
     }}>
       <style>{SHARED_STYLES}</style>
 
@@ -2989,159 +2972,181 @@ export default function App() {
         />
       )}
 
-      {/* ── Header bar ── */}
-      <div style={{
-        background: "var(--header)",
-        borderBottom: "1px solid var(--border)",
-        padding: "0.85rem 2rem",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        position: "relative",
-        zIndex: 1,
+      {/* ── Sidebar ── */}
+      <div className="tt-sidebar" style={{
+        width: 196, flex: 'none', background: 'var(--sidebar-bg)',
+        display: 'flex', flexDirection: 'column', padding: '22px 0', overflowY: 'auto',
       }}>
-        {/* Logo + Title */}
-        <div style={{ display: "flex", alignItems: "center", gap: "1.1rem" }}>
-          <TTLogo />
-          <div style={{ width: 1, height: 30, background: "var(--border)", flexShrink: 0 }} />
-          <div>
-            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text)", letterSpacing: "0.01em", lineHeight: 1.3 }}>
-              Debt &amp; Capital Markets
-            </div>
-            <div style={{ fontSize: "0.68rem", color: "var(--muted)", lineHeight: 1.4 }}>
-              Portfolio Analytics &amp; Reporting
-            </div>
-          </div>
+        <div className="sidebar-word" style={{ padding: '0 22px 22px' }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: '#fff', lineHeight: 1.22 }}>Thompson<br />Thrift</div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, fontSize: 9, letterSpacing: '.2em', color: 'var(--sidebar-faint)', textTransform: 'uppercase', marginTop: 7 }}>Debt Suite</div>
         </div>
-        {/* Right side — theme toggle + SOFR curve status + upload */}
-        <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-        <button
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          aria-label="Toggle light / dark mode"
-          style={{
-            width: 34, height: 34, borderRadius: 6, cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            background: 'var(--panel)', border: '1px solid var(--border)',
-            color: 'var(--text2)', fontSize: '0.9rem', lineHeight: 1, flexShrink: 0,
-            transition: 'background-color 0.15s ease-out, border-color 0.15s ease-out',
-          }}
-        >{theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}</button>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: "0.7rem", color: "var(--faint)" }}>Chatham 1-Mo Term SOFR Forward Curve</div>
-          <div style={{ fontSize: "0.7rem", color: sofrUpdated ? "var(--pass)" : "var(--faint)" }}>
-            {sofrUpdated
-              ? `Updated ${sofrUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-              : "as of 03 Mar 2026 (hardcoded)"}
-          </div>
-          {pinUnlocked ? (
-            <label className="btn btn-sm" style={{ marginTop: '0.35rem', fontSize: '0.66rem', padding: '2px 9px' }}>
-              ↑ Update Curve
-              <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
-            </label>
-          ) : (
-            <button onClick={() => setShowPinModal(true)} className="btn btn-sm btn-locked" style={{ marginTop: '0.35rem', fontSize: '0.66rem', padding: '2px 9px' }}>
-              <LockIcon size={10} /> Update Curve
+
+        {NAV_ITEMS.map(([key, name]) => {
+          const active = activeTab === key;
+          const failDot = key === 'covenant' && covFailing > 0;
+          return (
+            <button key={key} onClick={() => setActiveTab(key)} style={navItemStyle(active)}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', flex: 'none', display: 'inline-block', background: failDot ? 'var(--fail)' : 'rgba(255,255,255,.14)' }} />
+                <span className="nav-label" style={{ whiteSpace: 'nowrap' }}>{name}</span>
+              </span>
+              {failDot ? <span className="nav-label" style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 9, color: 'var(--fail)' }}>{covFailing}</span> : null}
             </button>
-          )}
-        </div>
+          );
+        })}
+
+        {/* Hidden admin item — appears only while editing is unlocked */}
+        {pinUnlocked && (
+          <button
+            onClick={() => setActiveTab('registry')}
+            title="Deal Registry — review every deal, assign stable ids, edit statuses (visible only while editing is unlocked)"
+            style={{
+              ...navItemStyle(activeTab === 'registry'),
+              justifyContent: 'flex-start', gap: 11,
+              marginTop: 8, borderTop: '1px dashed rgba(255,255,255,.14)', paddingTop: 14,
+            }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: '50%', flex: 'none', display: 'inline-block', background: 'var(--warn)' }} />
+            <span className="nav-label" style={{ whiteSpace: 'nowrap' }}>Deal Registry</span>
+          </button>
+        )}
+
+        {/* Footer: edit-lock + account */}
+        <div style={{ marginTop: 'auto', padding: '16px 22px 0', borderTop: '1px solid rgba(255,255,255,.1)' }}>
+          <button
+            onClick={toggleLock}
+            title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
+            style={{
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, padding: 0,
+              background: 'none', border: 'none',
+              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+              color: pinUnlocked ? '#8fd0a8' : 'var(--sidebar-text)',
+            }}
+          >{lockGlyph} <span className="nav-label">{lockLabel}</span></button>
+          <div className="nav-label" style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--sidebar-faint)', marginTop: 6 }}>
+            {pinUnlocked ? 'PIN accepted · changes live' : 'Unlock to edit · PIN'}
+          </div>
+          <button
+            onClick={() => signOut()}
+            title={userEmail ? `Signed in as ${userEmail} — click to sign out` : 'Sign out'}
+            className="nav-label"
+            style={{
+              cursor: 'pointer', background: 'none', border: 'none', padding: 0, marginTop: 12,
+              fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--sidebar-faint)',
+              textAlign: 'left', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block',
+            }}
+          >{userEmail ? `${userEmail} · Sign out` : 'Sign out'}</button>
         </div>
       </div>
 
-      {/* ── Weekly upload reminder (re-arms every Monday) ── */}
-      <WeeklyUploadBanner
-        sofrUpdated={sofrUpdated}
-        activeTab={activeTab}
-        pinUnlocked={pinUnlocked}
-        onCurveFile={handleSofrUpload}
-        onRequirePin={() => setShowPinModal(true)}
-        onOpenLeasing={() => {
-          // The Leasing tab may be hidden from the shared tab config — reveal
-          // it for this session only (nothing is saved) so the upload is
-          // reachable; the gear menu still controls the permanent setting.
-          setVisibleTabs(v => (v.leasing ? v : { ...v, leasing: true }));
-          setActiveTab('leasing');
-        }}
-      />
-      <div className="app-main" style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
+      {/* ── Main column ── */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--panel3)' }}>
 
-        {/* ── Tab Nav ── */}
-        <div className="tab-nav" style={{ display: 'flex', borderBottom: `1px solid var(--border)`, marginBottom: '2rem', alignItems: 'flex-end', position: 'relative' }}>
-          {visibleTabs.calculator && <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("calculator")}>Calculator</button>}
-          {visibleTabs.matrix     && <button className={`tab-btn ${activeTab === "matrix"     ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("matrix")}>DY / DSCR Matrix</button>}
-          {visibleTabs.covenant   && <button className={`tab-btn ${activeTab === "covenant"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("covenant")}>Covenant Tracker</button>}
-          {visibleTabs.leasing    && <button className={`tab-btn ${activeTab === "leasing"    ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("leasing")}>Leasing Dashboard</button>}
-          {visibleTabs.pipeline   && <button className={`tab-btn ${activeTab === "pipeline"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("pipeline")}>Lender Pipeline</button>}
-          {visibleTabs.land       && <button className={`tab-btn ${activeTab === "land"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("land")}>Land Facility</button>}
-          {visibleTabs.loans      && <button className={`tab-btn ${activeTab === "loans"      ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("loans")}>Loans</button>}
-          {visibleTabs.debt       && <button className={`tab-btn ${activeTab === "debt"       ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("debt")}>Debt Dashboard</button>}
-          {visibleTabs.map        && <button className={`tab-btn ${activeTab === "map"        ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("map")}>Project Map</button>}
-          {/* Hidden admin tab — appears only while editing is unlocked */}
-          {pinUnlocked && (
+        {/* Top utility bar */}
+        <div style={{
+          flex: 'none', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 24px', borderBottom: '1px solid var(--border2)', background: 'var(--header)',
+          position: 'relative', zIndex: 20,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            {weekly.due ? (
+              <WeeklyUploadPill dueCount={weekly.dueCount} onClick={() => setBannerOpen(v => !v)} />
+            ) : (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                SOFR fwd curve · {sofrUpdated
+                  ? `updated ${sofrUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                  : 'as of 03 Mar 2026'}
+              </span>
+            )}
+            {pinUnlocked && (
+              <label className="tt-btn btn-sm" title="Upload the weekly Chatham forward-curve workbook">
+                ↑ Update Curve
+                <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
+              </label>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <button className="tt-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} aria-label="Toggle light / dark mode">
+              {theme === 'dark' ? <><MoonIcon size={12} /> Dark</> : <><SunIcon size={12} /> Light</>}
+            </button>
             <button
-              className={`tab-btn ${activeTab === "registry" ? "tab-active" : "tab-inactive"}`}
-              onClick={() => setActiveTab("registry")}
-              title="Deal Registry — review every deal, assign stable ids, edit statuses (visible only while editing is unlocked)"
-            ><UnlockIcon size={10} style={{ marginRight: 5, verticalAlign: 'baseline' }} />Deal Registry</button>
-          )}
-          {/* Gear button */}
-          <button
-            onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
-            title={pinUnlocked ? 'Configure visible tabs' : 'Unlock to configure tabs'}
-            style={{ marginLeft: 'auto', marginBottom: 6, padding: '4px 8px', background: showTabConfig ? 'color-mix(in srgb, var(--accent) 15%, transparent)' : 'none', border: showTabConfig ? `1px solid color-mix(in srgb, var(--accent) 27%, transparent)` : '1px solid transparent', borderRadius: 6, cursor: 'pointer', color: showTabConfig ? TT_ORANGE : 'var(--faint)', fontSize: '0.9rem', lineHeight: 1 }}
-          >⚙</button>
-          {/* Tab config dropdown */}
+              className="tt-ico"
+              onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
+              title={pinUnlocked ? 'Configure visible tabs' : 'Unlock to configure tabs'}
+            >⚙</button>
+            <button
+              onClick={toggleLock}
+              title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
+              style={{
+                cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+                padding: '7px 13px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 6,
+                color: pinUnlocked ? 'var(--pass)' : 'var(--accent)',
+                background: pinUnlocked ? 'color-mix(in srgb, var(--pass) 10%, transparent)' : 'var(--panel)',
+                border: `1px solid ${pinUnlocked ? 'color-mix(in srgb, var(--pass) 35%, transparent)' : 'var(--border2)'}`,
+                userSelect: 'none',
+              }}
+            >{lockGlyph} {lockLabel}</button>
+          </div>
+
+          {/* Tab visibility gear popover */}
           {showTabConfig && (
-            <div className="menu" style={{ minWidth: 210, padding: '0.35rem 0 0.6rem' }}>
-              <div className="menu-heading">Visible Tabs</div>
-              {[['calculator','Calculator'],['matrix','DY / DSCR Matrix'],['covenant','Covenant Tracker'],['leasing','Leasing Dashboard'],['pipeline','Lender Pipeline'],['land','Land Facility'],['loans','Loans'],['debt','Debt Dashboard'],['map','Project Map']].map(([key, label]) => (
-                <label key={key} className="menu-item" style={{ padding: '0.3rem 0.95rem' }}>
-                  <input type="checkbox" checked={!!visibleTabs[key]} onChange={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))} style={{ width: 14, height: 14 }} />
-                  <span style={{ fontSize: '0.75rem', color: visibleTabs[key] ? 'var(--text)' : 'var(--faint2)' }}>{label}</span>
-                </label>
-              ))}
-              <div style={{ marginTop: '0.45rem', padding: '0 0.95rem', fontSize: '0.64rem', color: 'var(--faint2)' }}>Changes persist across sessions.</div>
+            <div style={{
+              position: 'absolute', right: 52, top: 48, width: 238,
+              background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 10,
+              boxShadow: 'var(--pop-shadow)', padding: '12px 0', zIndex: 40,
+            }}>
+              <div style={{ padding: '4px 16px 10px', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, letterSpacing: '.1em', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Visible tabs</div>
+              {[['covenant', 'Covenant Tracker'], ['debt', 'Debt Dashboard'], ['pipeline', 'Lender Pipeline'], ['map', 'Project Map'], ['loans', 'Loans'], ['land', 'Land Facility'], ['leasing', 'Leasing'], ['calculator', 'Calculator'], ['matrix', 'DY / DSCR Matrix']].map(([key, label]) => {
+                const on = !!visibleTabs[key];
+                return (
+                  <div
+                    key={key}
+                    onClick={() => requirePin(() => saveTabVisibility({ ...visibleTabs, [key]: !visibleTabs[key] }))}
+                    style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 16px', fontSize: 12, fontWeight: 500, color: 'var(--text)' }}
+                  >
+                    <span>{label}</span>
+                    <span style={{ width: 32, height: 18, borderRadius: 10, background: on ? 'var(--pass)' : 'var(--border2)', position: 'relative', transition: 'background-color .15s', flex: 'none' }}>
+                      <span style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.3)', transition: 'left .15s' }} />
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{ marginTop: 6, padding: '0 16px', fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--faint2)' }}>Changes persist across sessions.</div>
             </div>
           )}
         </div>
 
-        {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
-        {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
-        {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "leasing"    && <LeasingTab />}
-        {activeTab === "pipeline"   && <PipelineTab pinUnlocked={pinUnlocked} />}
-        {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "map"        && <MapTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-        {activeTab === "registry"   && pinUnlocked && <RegistryTab />}
+        {/* Weekly upload reminder — expanded amber row */}
+        {bannerOpen && weekly.due && (
+          <WeeklyUploadBannerRow
+            weekly={weekly}
+            pinUnlocked={pinUnlocked}
+            onCurveFile={handleSofrUpload}
+            onRequirePin={() => setShowPinModal(true)}
+            onOpenLeasing={openLeasing}
+            onClose={() => { setBannerOpen(false); weekly.dismiss(); }}
+          />
+        )}
 
-        {/* ── Footer ── */}
-        <div style={{ marginTop: "2.5rem", paddingTop: "1rem", borderTop: `1px solid var(--border)`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: "0.68rem", color: "var(--faint)" }}>
-            Chatham 1-Month Term SOFR Forward Curve · as of 03 Mar 2026
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-            <button
-              onClick={() => pinUnlocked ? setPinUnlocked(false) : setShowPinModal(true)}
-              className="btn btn-sm"
-              style={{ fontSize: '0.66rem', padding: '2px 9px', ...(pinUnlocked ? { color: 'var(--pass)', borderColor: 'color-mix(in srgb, var(--pass) 30%, transparent)', background: 'color-mix(in srgb, var(--pass) 9%, transparent)' } : {}) }}
-              title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
-            >
-              {pinUnlocked ? <><UnlockIcon size={11} /> Editing unlocked</> : <><LockIcon size={11} /> View only</>}
-            </button>
-            <button
-              onClick={() => signOut()}
-              title={userEmail ? `Signed in as ${userEmail} — click to sign out` : 'Sign out'}
-              className="btn btn-sm btn-ghost"
-              style={{ fontSize: '0.66rem', padding: '2px 9px' }}
-            >
-              {userEmail ? `${userEmail} · Sign out` : 'Sign out'}
-            </button>
-            <span style={{ fontSize: "0.8rem", color: "var(--text2)", fontWeight: 600, letterSpacing: "0.01em" }}>
-              Kevin Ashburn · <span style={{ color: "var(--highlight)" }}>Thompson Thrift</span>
-            </span>
-          </div>
+        {/* Screen content */}
+        <div
+          className={fullBleed ? undefined : 'app-main'}
+          style={fullBleed
+            ? { flex: 1, overflow: 'hidden', display: 'flex', minWidth: 0, position: 'relative' }
+            : { flex: 1, overflow: 'auto', padding: '24px 28px', minWidth: 0, position: 'relative' }}
+        >
+          {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
+          {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
+          {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} onCurveFile={handleSofrUpload} onFailingCount={setCovFailing} />}
+          {activeTab === "leasing"    && <LeasingTab />}
+          {activeTab === "pipeline"   && <PipelineTab pinUnlocked={pinUnlocked} />}
+          {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+          {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+          {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+          {activeTab === "map"        && <MapTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
+          {activeTab === "registry"   && pinUnlocked && <RegistryTab />}
         </div>
       </div>
     </div>

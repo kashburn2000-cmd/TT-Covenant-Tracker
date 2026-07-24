@@ -5,6 +5,13 @@ import { LockIcon } from '../icons.jsx';
 
 const DY_THRESHOLDS = [0.08, 0.085, 0.09, 0.095, 0.10];
 
+// Compact mono "value chip" look for the input controls in the left card.
+const chipInput = {
+  width: 132, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 500,
+  padding: '5px 11px', background: 'var(--panel2)', border: '1px solid var(--border)',
+  borderRadius: 5, color: 'var(--text)',
+};
+
 // ── Calculator Tab ────────────────────────────────────────────────────────────
 export function CalculatorTab({ thresholds }) {
   const [loanAmount, setLoanAmount] = useState(20000000);
@@ -15,6 +22,7 @@ export function CalculatorTab({ thresholds }) {
   const [locked, setLocked]         = useState("loan");
   const [targetDY,   setTargetDY]   = useState("");
   const [targetDSCR, setTargetDSCR] = useState("");
+  const [solveOpen,  setSolveOpen]  = useState(false); // UI-only: back-solve panel visibility
 
   const sofrRate = useMemo(() => getSofr(pickedDate), [pickedDate]);
 
@@ -64,234 +72,238 @@ export function CalculatorTab({ thresholds }) {
   }), [noi, allInRate, amort]);
 
   const lockBtn = (id, label) => (
-    <button onClick={() => setLocked(id)} style={{
-      padding: "3px 14px", borderRadius: "3px", border: "none", cursor: "pointer",
-      fontFamily: "inherit", fontSize: "0.72rem", fontWeight: 600, letterSpacing: "0.05em",
-      background: locked === id ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "var(--border)",
-      color: locked === id ? "var(--text2)" : "var(--faint)",
-      outline: locked === id ? "1px solid var(--text2)" : "1px solid var(--border)",
-    }}><LockIcon size={11} /> {label}</button>
+    <button key={id} onClick={() => setLocked(id)} className={`chip${locked === id ? ' chip-active' : ''}`}>
+      <LockIcon size={10} style={{ marginRight: 4, verticalAlign: '-1px' }} />{label}
+    </button>
+  );
+
+  const lockedTag = (
+    <span className="pill blue" style={{ marginLeft: 6 }}>
+      <LockIcon size={9} style={{ marginRight: 3, verticalAlign: '-1px' }} />Locked
+    </span>
+  );
+
+  // One input row of the left card: label + mono value chip, then the slider.
+  const inputRow = (label, control, body, last) => (
+    <div key={typeof label === 'string' ? label : undefined} style={{ padding: '13px 0', borderBottom: last ? 'none' : '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 12, color: 'var(--text2)' }}>{label}</span>
+        {control}
+      </div>
+      {body}
+    </div>
+  );
+
+  const extents = (lo, val, hi) => (
+    <div className="mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted)', marginTop: 6 }}>
+      <span>{lo}</span>
+      <span style={{ color: 'var(--text)', fontWeight: 600 }}>{val}</span>
+      <span>{hi}</span>
+    </div>
   );
 
   return (
     <div>
-      {/* ── Deal Inputs ── */}
-      <div className="section-title">Deal Inputs</div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
-        <span style={{ fontSize: "0.7rem", color: "var(--faint)", letterSpacing: "0.04em" }}>LOCK:</span>
-        {lockBtn("loan", "Loan Amount")}
-        {lockBtn("noi", "NOI")}
-        <span style={{ fontSize: "0.68rem", color: "var(--faint)" }}>
-          Lock one value, then enter a target DY or DSCR to back-solve the other
-        </span>
+      {/* ── Header ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+        <div>
+          <div style={{ fontSize: 21, fontWeight: 600, color: 'var(--text)' }}>Deal-Sizing Calculator</div>
+          <div className="mono" style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>Interactive · nothing saved</div>
+        </div>
+        <button className={`tt-btn${solveOpen ? ' btn-tinted' : ''}`} onClick={() => setSolveOpen(s => !s)}>
+          ⇄ Back-solve loan / NOI
+        </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-        <div className="card" style={{ borderColor: locked === "loan" ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-            <div className="label" style={{ margin: 0 }}>Loan Amount</div>
-            {locked === "loan" && <span className="pill blue"><LockIcon size={10} style={{ marginRight: 4 }} /> Locked</span>}
+      {/* ── Back-solve panel (header control opens it; behavior unchanged) ── */}
+      {solveOpen && (
+        <div className="card" style={{ marginBottom: 16, borderColor: 'color-mix(in srgb, var(--accent) 30%, transparent)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+            <span className="label" style={{ margin: 0 }}>Lock</span>
+            {lockBtn('loan', 'Loan amount')}
+            {lockBtn('noi', 'NOI')}
+            <span style={{ fontSize: '0.7rem', color: 'var(--faint)' }}>
+              Lock one value, then enter a target DY or DSCR to back-solve the other
+            </span>
           </div>
-          <input type="number" value={loanAmount} step={500000} onChange={e => setLoanAmount(+e.target.value)} style={{ marginBottom: "0.75rem" }} />
-          <input type="range" min={20000000} max={75000000} step={500000}
-            value={Math.min(Math.max(loanAmount, 20000000), 75000000)}
-            onChange={e => setLoanAmount(+e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--muted)", marginTop: "0.3rem" }}>
-            <span>$20M</span>
-            <span style={{ color: "var(--pass)", fontWeight: 600 }}>{formatCurrency(loanAmount)}</span>
-            <span>$75M</span>
-          </div>
-        </div>
-
-        <div className="card" style={{ borderColor: locked === "noi" ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-            <div className="label" style={{ margin: 0 }}>Net Operating Income (NOI)</div>
-            {locked === "noi" && <span className="pill blue"><LockIcon size={10} style={{ marginRight: 4 }} /> Locked</span>}
-          </div>
-          <input type="number" value={noi} step={25000} onChange={e => setNoi(+e.target.value)} style={{ marginBottom: "0.75rem" }} />
-          <input type="range" min={500000} max={10000000} step={25000}
-            value={Math.min(Math.max(noi, 500000), 10000000)}
-            onChange={e => setNoi(+e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--muted)", marginTop: "0.3rem" }}>
-            <span>$500K</span>
-            <span style={{ color: "var(--pass)", fontWeight: 600 }}>{formatCurrency(noi)}</span>
-            <span>$10M</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Target Back-Solve */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-        <div className="card" style={{ borderColor: targetDY ? "color-mix(in srgb, var(--pass) 33%, transparent)" : "var(--border)" }}>
-          <div className="label">Target Debt Yield (%)</div>
-          <input type="number" value={targetDY} step={0.1} min={0} max={30} placeholder="e.g. 9.00"
-            onChange={e => { setTargetDY(e.target.value); setTargetDSCR(""); }}
-            style={{ marginBottom: "0.5rem" }} />
-          {solvedFromDY ? (
-            <div style={{ marginTop: "0.25rem" }}>
-              <div style={{ fontSize: "0.68rem", color: "var(--faint)", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
-                → {solvedFromDY.label}
-              </div>
-              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--pass)" }}>{solvedFromDY.value}</div>
-              <div style={{ fontSize: "0.68rem", color: "var(--faint)", marginTop: "0.25rem" }}>
-                At {parseFloat(targetDY).toFixed(2)}% DY · {locked === "loan" ? `Loan fixed at ${formatCurrency(loanAmount)}` : `NOI fixed at ${formatCurrency(noi)}`}
-              </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div>
+              <div className="label">Target Debt Yield (%)</div>
+              <input type="number" value={targetDY} step={0.1} min={0} max={30} placeholder="e.g. 9.00"
+                onChange={e => { setTargetDY(e.target.value); setTargetDSCR(""); }}
+                style={{ marginBottom: '0.5rem', fontFamily: 'var(--font-mono)', fontSize: 13 }} />
+              {solvedFromDY ? (
+                <div>
+                  <div className="label" style={{ marginBottom: '0.3rem' }}>→ {solvedFromDY.label}</div>
+                  <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: 'var(--pass)' }}>{solvedFromDY.value}</div>
+                  <div className="note mono" style={{ marginTop: '0.25rem' }}>
+                    At {parseFloat(targetDY).toFixed(2)}% DY · {locked === "loan" ? `Loan fixed at ${formatCurrency(loanAmount)}` : `NOI fixed at ${formatCurrency(noi)}`}
+                  </div>
+                </div>
+              ) : (
+                <div className="note">Enter a target DY % to solve for the {locked === "loan" ? "required NOI" : "max loan amount"}.</div>
+              )}
             </div>
-          ) : (
-            <div className="note">Enter a target DY % to solve for the {locked === "loan" ? "required NOI" : "max loan amount"}.</div>
+            <div>
+              <div className="label">Target DSCR (x)</div>
+              <input type="number" value={targetDSCR} step={0.05} min={0} max={10} placeholder="e.g. 1.25"
+                onChange={e => { setTargetDSCR(e.target.value); setTargetDY(""); }}
+                style={{ marginBottom: '0.5rem', fontFamily: 'var(--font-mono)', fontSize: 13 }} />
+              {solvedFromDSCR ? (
+                <div>
+                  <div className="label" style={{ marginBottom: '0.3rem' }}>→ {solvedFromDSCR.label}</div>
+                  <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: 'var(--accent)' }}>{solvedFromDSCR.value}</div>
+                  <div className="note mono" style={{ marginTop: '0.25rem' }}>
+                    At {parseFloat(targetDSCR).toFixed(2)}x · {(allInRate * 100).toFixed(3)}% all-in · {amort === 0 ? "I/O" : `${amort}-yr amort`}
+                  </div>
+                </div>
+              ) : (
+                <div className="note">Enter a target DSCR to solve for the {locked === "loan" ? "required NOI" : "max loan amount"} at current rate &amp; amortization.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Inputs (left) · Outputs (right) ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 340px) 1fr', gap: 16, alignItems: 'start' }}>
+
+        {/* Left input card */}
+        <div className="card" style={{ padding: '8px 18px', height: 'max-content' }}>
+          {inputRow(
+            <span>Loan amount{solveOpen && locked === 'loan' && lockedTag}</span>,
+            <input type="number" value={loanAmount} step={500000} onChange={e => setLoanAmount(+e.target.value)} style={chipInput} />,
+            <>
+              <input type="range" min={20000000} max={75000000} step={500000}
+                value={Math.min(Math.max(loanAmount, 20000000), 75000000)}
+                onChange={e => setLoanAmount(+e.target.value)} style={{ marginTop: 10 }} />
+              {extents('$20M', formatCurrency(loanAmount), '$75M')}
+            </>
+          )}
+          {inputRow(
+            <span>Net operating income{solveOpen && locked === 'noi' && lockedTag}</span>,
+            <input type="number" value={noi} step={25000} onChange={e => setNoi(+e.target.value)} style={chipInput} />,
+            <>
+              <input type="range" min={500000} max={10000000} step={25000}
+                value={Math.min(Math.max(noi, 500000), 10000000)}
+                onChange={e => setNoi(+e.target.value)} style={{ marginTop: 10 }} />
+              {extents('$500K', formatCurrency(noi), '$10M')}
+            </>
+          )}
+          {inputRow(
+            'SOFR forward date',
+            <input type="date" value={pickedDate} min={minDate} max={maxDate}
+              onChange={e => setPickedDate(e.target.value)}
+              style={{ ...chipInput, width: 158, textAlign: 'left' }} />,
+            <div className="note mono" style={{ marginTop: 8 }}>
+              1-Mo Term SOFR <strong style={{ color: 'var(--text)' }}>{formatPct(sofrRate, 4)}</strong> · interpolated from the Chatham curve ({minDate} – {maxDate})
+            </div>
+          )}
+          {inputRow(
+            'Spread over SOFR (%)',
+            <input type="number" value={spread} step={0.05} min={0} max={10}
+              onChange={e => setSpread(+e.target.value)} style={chipInput} />,
+            <>
+              <input type="range" min={0.5} max={6} step={0.05} value={spread} onChange={e => setSpread(+e.target.value)} style={{ marginTop: 10 }} />
+              {extents('0.50%', `${spread.toFixed(2)}%`, '6.00%')}
+            </>
+          )}
+          {inputRow(
+            'Amortization',
+            <select value={amort} onChange={e => setAmort(+e.target.value)} style={{ ...chipInput, width: 158, textAlign: 'left', cursor: 'pointer' }}>
+              <option value={30}>30-yr</option>
+              <option value={35}>35-yr</option>
+              <option value={0}>Interest only (I/O)</option>
+            </select>,
+            <div className="note mono" style={{ marginTop: 8 }}>
+              Ann. debt service <strong style={{ color: 'var(--text)' }}>{formatCurrency(ads)}</strong> · {amort === 0 ? 'I/O: loan × all-in rate' : `P&I over ${amort}-yr schedule`}
+            </div>,
+            true
           )}
         </div>
 
-        <div className="card" style={{ borderColor: targetDSCR ? "color-mix(in srgb, var(--text2) 33%, transparent)" : "var(--border)" }}>
-          <div className="label">Target DSCR (x)</div>
-          <input type="number" value={targetDSCR} step={0.05} min={0} max={10} placeholder="e.g. 1.25"
-            onChange={e => { setTargetDSCR(e.target.value); setTargetDY(""); }}
-            style={{ marginBottom: "0.5rem" }} />
-          {solvedFromDSCR ? (
-            <div style={{ marginTop: "0.25rem" }}>
-              <div style={{ fontSize: "0.68rem", color: "var(--faint)", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: "0.3rem" }}>
-                → {solvedFromDSCR.label}
+        {/* Right: output cards + sizing table */}
+        <div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+            <div className="card" style={{ padding: '16px 18px' }}>
+              <div className="label" style={{ margin: 0 }}>Debt Yield</div>
+              <div className="metric" style={{ fontSize: 28, marginTop: 7 }}>{currentDY}%</div>
+              <div style={{ marginTop: 9 }}>
+                <span className={+currentDY >= 9 ? "pill green" : +currentDY >= 7 ? "pill yellow" : "pill red"}>
+                  {+currentDY >= 9 ? "Strong" : +currentDY >= 7 ? "Moderate" : "Thin"}
+                </span>
               </div>
-              <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "var(--text2)" }}>{solvedFromDSCR.value}</div>
-              <div style={{ fontSize: "0.68rem", color: "var(--faint)", marginTop: "0.25rem" }}>
-                At {parseFloat(targetDSCR).toFixed(2)}x · {(allInRate * 100).toFixed(3)}% all-in · {amort === 0 ? "I/O" : `${amort}yr amort`}
+              <div className="note">NOI ÷ loan amount — rate-agnostic</div>
+            </div>
+
+            <div className="card" style={{ padding: '16px 18px' }}>
+              <div className="label" style={{ margin: 0 }}>DSCR</div>
+              <div className="metric" style={{ fontSize: 28, marginTop: 7 }}>{dscr.toFixed(3)}x</div>
+              <div style={{ marginTop: 9 }}>
+                <span className={`pill ${dscrClass(dscr, thresholds)}`}>
+                  {dscr >= thresholds.high ? "Serviceable" : dscr >= thresholds.low ? "Breakeven" : "Distressed"}
+                </span>
               </div>
+              <div className="note">NOI ÷ annual debt service ({formatCurrency(ads)})</div>
             </div>
-          ) : (
-            <div className="note">Enter a target DSCR to solve for the {locked === "loan" ? "required NOI" : "max loan amount"} at current rate & amortization.</div>
-          )}
-        </div>
-      </div>
 
-      {/* ── Loan Structure ── */}
-      <div className="section-title">Loan Structure</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-        <div className="card">
-          <div className="label">SOFR Forward Date</div>
-          <input type="date" value={pickedDate} min={minDate} max={maxDate}
-            onChange={e => setPickedDate(e.target.value)}
-            style={{ marginBottom: "0.6rem", colorScheme: "dark" }} />
-          <div className="sub">1-Mo Term SOFR: <strong style={{ color: "var(--text2)" }}>{formatPct(sofrRate, 4)}</strong></div>
-          <div className="note">Pick your closing or rate lock date. Rate is interpolated from the Chatham curve ({minDate} – {maxDate}).</div>
-        </div>
-
-        <div className="card">
-          <div className="label">Spread over SOFR (%)</div>
-          <input type="number" value={spread} step={0.05} min={0} max={10}
-            onChange={e => setSpread(+e.target.value)} style={{ marginBottom: "0.75rem" }} />
-          <input type="range" min={0.5} max={6} step={0.05} value={spread} onChange={e => setSpread(+e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--muted)", marginTop: "0.3rem" }}>
-            <span>0.50%</span>
-            <span style={{ color: "var(--text2)", fontWeight: 600 }}>{spread.toFixed(2)}%</span>
-            <span>6.00%</span>
-          </div>
-          <div className="sub" style={{ marginTop: "0.5rem" }}>
-            All-in Rate: <strong style={{ color: "var(--text2)" }}>{formatPct(allInRate, 4)}</strong>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="label">Amortization</div>
-          <select value={amort} onChange={e => setAmort(+e.target.value)} style={{ marginBottom: "0.6rem" }}>
-            <option value={30}>30 Years</option>
-            <option value={35}>35 Years</option>
-            <option value={0}>Interest Only (I/O)</option>
-          </select>
-          <div className="sub">Ann. Debt Service: <strong style={{ color: "var(--warn)" }}>{formatCurrency(ads)}</strong></div>
-          <div className="note">{amort === 0 ? "I/O: Debt service = Loan × All-in Rate only" : `P&I: Monthly payment × 12 over ${amort}-yr schedule`}</div>
-        </div>
-      </div>
-
-      {/* ── Results ── */}
-      <div className="section-title">Results</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-        <div className="card" style={{ borderColor: "var(--pass)" }}>
-          <div className="label">Debt Yield</div>
-          <div className="metric" style={{ color: "var(--pass)" }}>{currentDY}%</div>
-          <div className="sub">NOI ÷ Loan Amount</div>
-          <div style={{ marginTop: "0.5rem" }}>
-            <span className={+currentDY >= 9 ? "pill green" : +currentDY >= 7 ? "pill yellow" : "pill red"}>
-              {+currentDY >= 9 ? "✓ Strong" : +currentDY >= 7 ? "⚠ Moderate" : "✗ Thin"}
-            </span>
-          </div>
-          <div className="note">Rate-agnostic — independent of loan structure</div>
-        </div>
-
-        <div className="card" style={{ borderColor: `color-mix(in srgb, ${dscrColor(dscr, thresholds)} 33%, transparent)` }}>
-          <div className="label">DSCR</div>
-          <div className="metric" style={{ color: dscrColor(dscr, thresholds) }}>{dscr.toFixed(3)}x</div>
-          <div className="sub">NOI ÷ Annual Debt Service</div>
-          <div style={{ marginTop: "0.5rem" }}>
-            <span className={`pill ${dscrClass(dscr, thresholds)}`}>
-              {dscr >= thresholds.high ? "✓ Serviceable" : dscr >= thresholds.low ? "⚠ Breakeven" : "✗ Distressed"}
-            </span>
-          </div>
-          <div className="note">Based on {formatPct(sofrRate, 4)} SOFR + {spread.toFixed(2)}% spread{amort === 0 ? " · I/O" : ` · ${amort}yr amort`}</div>
-        </div>
-
-        <div className="card">
-          <div className="label">Rate Composition</div>
-          <div style={{ marginTop: "0.4rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
-              <span style={{ fontSize: "0.78rem", color: "var(--text2)" }}>1-Mo Term SOFR</span>
-              <span style={{ fontSize: "0.78rem", color: "var(--text2)", fontWeight: 600 }}>{formatPct(sofrRate, 4)}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.4rem 0", borderBottom: "1px solid var(--border)" }}>
-              <span style={{ fontSize: "0.78rem", color: "var(--text2)" }}>Spread</span>
-              <span style={{ fontSize: "0.78rem", color: "var(--text2)", fontWeight: 600 }}>+ {spread.toFixed(2)}%</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem 0 0" }}>
-              <span style={{ fontSize: "0.82rem", color: "var(--text)", fontWeight: 600 }}>All-in Rate</span>
-              <span style={{ fontSize: "0.82rem", color: "var(--warn)", fontWeight: 700 }}>{formatPct(allInRate, 4)}</span>
+            <div className="card" style={{ padding: '16px 18px' }}>
+              <div className="label" style={{ margin: 0 }}>All-in Rate</div>
+              <div className="metric" style={{ fontSize: 28, marginTop: 7 }}>{(allInRate * 100).toFixed(2)}%</div>
+              <div style={{ marginTop: 9 }}>
+                <span className="pill blue">{amort === 0 ? 'I/O' : `${amort}-yr amort`}</span>
+              </div>
+              <div className="mono" style={{ marginTop: 10, fontSize: 11, color: 'var(--text2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', borderBottom: '1px solid var(--border)' }}>
+                  <span>1-Mo SOFR</span><span>{formatPct(sofrRate, 4)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                  <span>Spread</span><span>+{spread.toFixed(2)}%</span>
+                </div>
+              </div>
+              <div className="note mono">SOFR date {pickedDate}</div>
             </div>
           </div>
-          <div className="note" style={{ marginTop: "0.6rem" }}>SOFR date: {pickedDate}</div>
-        </div>
-      </div>
 
-      {/* ── Min Loan Sizing Table ── */}
-      <div className="section-title">Minimum Loan Sizing by DY Threshold</div>
-      <div className="card" style={{ marginBottom: "1.5rem" }}>
-        <div className="sub" style={{ marginBottom: "1rem" }}>
-          Maximum loan a lender would approve at each DY floor given your NOI of <strong style={{ color: "var(--pass)" }}>{formatCurrency(noi)}</strong>.
-          DSCR calculated at <strong style={{ color: "var(--warn)" }}>{formatPct(allInRate, 4)}</strong> {amort === 0 ? "I/O" : `/ ${amort}yr amort`}.
-          Current loan: <strong style={{ color: "var(--text2)" }}>{formatCurrency(loanAmount)}</strong>.
-        </div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
-              {["DY Floor", "Max Loan Amount", "vs. Your Loan", "Implied DSCR", "Status"].map(h => (
-                <th key={h}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {minLoanRows.map(({ dy, maxLoan, dscr: rowDscr }) => {
-              const under = loanAmount <= maxLoan;
-              const diff = maxLoan - loanAmount;
-              return (
-                <tr key={dy}>
-                  <td style={{ color: "var(--text)", fontWeight: 600 }}>{(dy * 100).toFixed(1)}%</td>
-                  <td style={{ color: "var(--pass)", fontWeight: 600 }}>{formatCurrency(maxLoan)}</td>
-                  <td>
-                    {under
-                      ? <span className="pill green">✓ Under by {formatCurrency(diff)}</span>
-                      : <span className="pill red">✗ Over by {formatCurrency(Math.abs(diff))}</span>}
-                  </td>
-                  <td><span className={`pill ${dscrClass(rowDscr, thresholds)}`}>{rowDscr.toFixed(3)}x</span></td>
-                  <td>
-                    <span className={`pill ${rowDscr >= thresholds.high ? "green" : rowDscr >= thresholds.low ? "yellow" : "red"}`}>
-                      {rowDscr >= thresholds.high ? "Serviceable" : rowDscr >= thresholds.low ? "Breakeven" : "Distressed"}
-                    </span>
-                  </td>
+          {/* ── Minimum loan sizing table ── */}
+          <div className="section-title" style={{ margin: '22px 0 4px' }}>Minimum loan sizing · by debt-yield floor</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', marginBottom: 10 }}>
+            NOI {formatCurrency(noi)} · {formatPct(allInRate, 4)} all-in {amort === 0 ? 'I/O' : `/ ${amort}-yr amort`} · current loan {formatCurrency(loanAmount)}
+          </div>
+          <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: '1.5rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '10px 18px' }}>DY floor</th>
+                  <th style={{ padding: '10px 18px', textAlign: 'right' }}>Max loan</th>
+                  <th style={{ padding: '10px 18px', textAlign: 'right' }}>vs current</th>
+                  <th style={{ padding: '10px 18px', textAlign: 'right' }}>Implied DSCR</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {minLoanRows.map(({ dy, maxLoan, dscr: rowDscr }) => {
+                  const under = loanAmount <= maxLoan;
+                  const diff = maxLoan - loanAmount;
+                  return (
+                    <tr key={dy}>
+                      <td className="mono" style={{ padding: '10px 18px', fontWeight: 500, fontSize: 12 }}>{(dy * 100).toFixed(1)}%</td>
+                      <td className="mono" style={{ padding: '10px 18px', textAlign: 'right', fontWeight: 500, fontSize: 12 }}>{formatCurrency(maxLoan)}</td>
+                      <td className="mono"
+                        title={under ? `Under the floor by ${formatCurrency(diff)}` : `Over the floor by ${formatCurrency(Math.abs(diff))}`}
+                        style={{ padding: '10px 18px', textAlign: 'right', fontWeight: 500, fontSize: 12, color: under ? 'var(--pass)' : 'var(--fail)' }}>
+                        {under ? '+' : '−'}{formatCurrency(Math.abs(diff))}
+                      </td>
+                      <td className="mono" style={{ padding: '10px 18px', textAlign: 'right', fontSize: 12, color: dscrColor(rowDscr, thresholds) }}>
+                        {rowDscr.toFixed(3)}x
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
-
     </div>
   );
 }

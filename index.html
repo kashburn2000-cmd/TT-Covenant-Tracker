@@ -8,76 +8,93 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#131418" />
+    <meta name="theme-color" content="#17160f" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <style>
       /* ── Theme tokens ───────────────────────────────────────────────
-         Dark is the baseline; [data-theme="light"] overrides it.
-         Toggled at runtime by setting data-theme on <html>. */
-      :root, :root[data-theme="dark"] {
-        /* Layered graphite surfaces: bg < header < panel < panel3 (elevated).
-           panel2 is the inset/recessed surface (inputs, table headers, zebra rows). */
-        --bg: #0E0F13;
-        --header: #131418;
-        --panel: #17181D;
-        --panel2: #111216;
-        --panel3: #1C1E24;
-        --border: #2A2C34;
-        --border2: #3B3E49;          /* strong border / hover border */
-        --row-hover: #1F2128;
-        --text: #F5F5F7;
-        --text2: #CDCED6;
-        --muted: #93959F;
-        --faint: #63656F;
-        --faint2: #81838E;
-        --faint3: #71737E;
-        --accent: #8478F0;           /* iris violet — primary action/emphasis */
-        --accent-strong: #A79DFF;
-        --highlight: #D24FA6;        /* orchid — secondary highlight, use sparingly */
-        --cat-teal: #2AA898;         /* categorical: construction / closing */
-        --cat-violet: #8A7FE6;       /* categorical: perm-bridge / extension */
-        --pass: #4FBF8F;
-        --fail: #E06A6A;
-        --warn: #D6A84F;
-        --disabled: #1B1D23;
-        --shadow: 0 1px 2px rgba(0,0,0,0.4);
-        --ring: color-mix(in srgb, var(--accent) 40%, transparent);
-        color-scheme: dark;
-      }
-      :root[data-theme="light"] {
-        --bg: #F4F4F6;
-        --header: #FFFFFF;
-        --panel: #FFFFFF;
-        --panel2: #F6F6F8;
-        --panel3: #FBFBFC;
-        --border: #E2E2E8;
-        --border2: #C8C8D2;
-        --row-hover: #F0F0F4;
-        --text: #1A1B20;
-        --text2: #3D3F4C;
-        --muted: #6E7080;
-        --faint: #9B9DAA;
-        --faint2: #6F7280;
-        --faint3: #85879A;
-        --accent: #6552E0;
-        --accent-strong: #5040C0;
-        --highlight: #B0399B;
-        --cat-teal: #00937D;
-        --cat-violet: #6E60CC;
-        --pass: #1E7A4E;
-        --fail: #C03B3B;
-        --warn: #9C7420;
-        --disabled: #EBEBEF;
-        --shadow: 0 1px 2px rgba(20,20,28,0.06), 0 1px 3px rgba(20,20,28,0.05);
+         Warm-neutral "console" palette (design_handoff_debt_suite_restyle).
+         Light is the baseline; [data-theme="dark"] overrides it with dark
+         equivalents (status hues kept). Toggled at runtime by setting
+         data-theme on <html>. */
+      :root, :root[data-theme="light"] {
+        /* Surfaces: bg (canvas) < panel3 (content pane) < panel/header (cards).
+           panel2 is the subtle fill (table headers, chips, selected rows). */
+        --bg: #eceae4;
+        --header: #ffffff;
+        --panel: #ffffff;
+        --panel2: #f4f2ec;
+        --panel3: #faf9f6;
+        --border: rgba(0, 0, 0, 0.08);
+        --border2: rgba(0, 0, 0, 0.14);         /* strong border / hover border */
+        --row-hover: #f4f2ec;
+        --text: #17160f;                        /* ink */
+        --text2: #74716a;                       /* secondary */
+        --muted: #8a877f;                       /* labels, eyebrows */
+        --faint: #b7b4ac;                       /* icons, neutral maturities */
+        --faint2: #8a877f;
+        --faint3: #94918a;
+        --accent: #3a4a6b;                      /* interactive navy */
+        --accent-strong: #2c3a56;
+        --highlight: #c46410;                   /* under-construction orange */
+        --cat-teal: #2f6b45;                    /* categorical: construction / closing */
+        --cat-violet: #3a4a6b;                  /* categorical: perm-bridge / extension */
+        --pass: #2f6b45;
+        --fail: #b23b2e;
+        --warn: #a5701f;
+        --warn-text: #8a5a1f;                   /* amber text on amber tint */
+        --disabled: #eae8e2;
+        --shadow: 0 1px 2px rgba(23, 22, 15, 0.05);
+        --pop-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
         --ring: color-mix(in srgb, var(--accent) 30%, transparent);
+        /* Sidebar-on-dark (same in both themes) */
+        --sidebar-bg: #17160f;
+        --sidebar-active: #ffffff;
+        --sidebar-text: #b8b5ad;
+        --sidebar-faint: #77746c;
+        --font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+        --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
         color-scheme: light;
+      }
+      :root[data-theme="dark"] {
+        --bg: #100f0b;
+        --header: #1c1a14;
+        --panel: #201e17;
+        --panel2: #171610;
+        --panel3: #1a1812;
+        --border: rgba(255, 255, 255, 0.09);
+        --border2: rgba(255, 255, 255, 0.17);
+        --row-hover: #26241b;
+        --text: #f0eee6;
+        --text2: #b8b5ad;
+        --muted: #8a877f;
+        --faint: #5d5a52;
+        --faint2: #8a877f;
+        --faint3: #78756d;
+        --accent: #93a7d1;
+        --accent-strong: #aebfe0;
+        --highlight: #d98b4a;
+        --cat-teal: #5da97c;
+        --cat-violet: #93a7d1;
+        --pass: #5da97c;
+        --fail: #d4695c;
+        --warn: #cf9a4d;
+        --warn-text: #cf9a4d;
+        --disabled: #26241d;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --pop-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+        --ring: color-mix(in srgb, var(--accent) 40%, transparent);
+        --sidebar-bg: #0b0a07;
+        --sidebar-active: #ffffff;
+        --sidebar-text: #b8b5ad;
+        --sidebar-faint: #77746c;
+        color-scheme: dark;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         background: var(--bg);
-        font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+        font-family: var(--font-sans);
         transition: background-color 0.2s ease;
         -webkit-font-smoothing: antialiased;
         text-rendering: optimizeLegibility;

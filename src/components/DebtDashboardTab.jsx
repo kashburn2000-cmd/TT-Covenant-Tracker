@@ -3,7 +3,6 @@ import ReactGridLayout, { useContainerWidth, verticalCompactor } from 'react-gri
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
-import { TT_ORANGE } from '../theme.js';
 import { LockIcon, CameraIcon, EyeIcon, EyeOffIcon, PencilIcon } from '../icons.jsx';
 import { formatCurrency } from '../format.js';
 import { parseAtRiskRows, parseStabilizedRows } from '../parseDebtSchedules.js';
@@ -54,12 +53,16 @@ function useAppTheme() {
 }
 
 // ── Small shared UI pieces ────────────────────────────────────────────────────
-function StatTile({ label, value, sub }) {
+// Orange marking for manually edited values (maps to the design's construction
+// orange token; replaces the old hardcoded TT_ORANGE hex).
+const EDIT_MARK = 'var(--highlight)';
+
+function StatTile({ label, value, sub, color }) {
   return (
-    <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.8rem 1rem', minWidth: 130, flex: '1 1 130px' }}>
+    <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.7rem 0.9rem', minWidth: 120, flex: '1 1 120px' }}>
       <div className="label" style={{ marginBottom: '0.3rem' }}>{label}</div>
-      <div style={{ fontSize: '1.45rem', fontWeight: 600, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>{value}</div>
-      {sub && <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.2rem' }}>{sub}</div>}
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: color || 'var(--text)' }}>{value}</div>
+      {sub && <div className="mono" style={{ fontSize: '0.64rem', color: 'var(--muted)', marginTop: '0.25rem' }}>{sub}</div>}
     </div>
   );
 }
@@ -91,7 +94,7 @@ function Th({ label, k, sort, right }) {
 }
 
 // width:auto overrides the app-wide `select { width: 100% }` rule
-const selStyle = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '0.25rem 0.5rem', fontFamily: 'inherit', fontSize: '0.72rem', outline: 'none', width: 'auto' };
+const selStyle = { background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 6, color: 'var(--text)', padding: '0.25rem 0.5rem', fontFamily: 'inherit', fontSize: '0.72rem', outline: 'none', width: 'auto' };
 const SOURCE_LABEL = { at_risk: 'Construction', stabilized: 'Stabilized' };
 const CATEGORY_LABEL = { residential: 'Residential', commercial: 'Commercial' };
 // land_draws statuses shown when a credit facility is broken open (paid-off
@@ -172,7 +175,7 @@ function ProjectEditModal({ project, onSave, onRemove, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderTop: `3px solid ${TT_ORANGE}`, borderRadius: 6, padding: '1.5rem 1.75rem', width: 460, maxWidth: '92vw', maxHeight: '88vh', overflow: 'auto' }}>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border2)', borderTop: `3px solid ${EDIT_MARK}`, borderRadius: 10, padding: '1.5rem 1.75rem', width: 460, maxWidth: '92vw', maxHeight: '88vh', overflow: 'auto', boxShadow: 'var(--pop-shadow)' }}>
         <div style={{ fontSize: '0.72rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>Edit project</div>
         <div style={{ fontSize: '0.95rem', fontWeight: 600, margin: '0.25rem 0 0.35rem' }}>{project.name}</div>
         <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '1rem' }}>
@@ -191,7 +194,7 @@ function ProjectEditModal({ project, onSave, onRemove, onClose }) {
                     value={drafts[f.key]}
                     onChange={e => setDraft(f.key, e.target.value)}
                     placeholder={f.type === 'percent' ? 'e.g. 65' : ''}
-                    style={{ ...selStyle, width: '100%', boxSizing: 'border-box', borderColor: touched ? TT_ORANGE : 'var(--border)' }}
+                    style={{ ...selStyle, width: '100%', boxSizing: 'border-box', borderColor: touched ? EDIT_MARK : 'var(--border2)' }}
                   />
                   {touched && (
                     <div style={{ fontSize: '0.64rem', color: 'var(--faint)', marginTop: 2 }}>Schedule: {fmtSched(f.type, project._base[f.key])}</div>
@@ -220,7 +223,7 @@ function ProjectEditModal({ project, onSave, onRemove, onClose }) {
 
 // Orange dot marking a manually edited value; hover shows the schedule figure
 const Ov = ({ p, k, type }) => (p._edited?.[k]
-  ? <span title={`Manually edited — schedule: ${fmtSched(type, p._base[k])}`} style={{ color: TT_ORANGE, marginLeft: 3, cursor: 'help' }}>•</span>
+  ? <span title={`Manually edited — schedule: ${fmtSched(type, p._base[k])}`} style={{ color: EDIT_MARK, marginLeft: 3, cursor: 'help' }}>•</span>
   : null);
 
 // ── Leverage Tracker ──────────────────────────────────────────────────────────
@@ -348,52 +351,21 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {[['all', 'All'], ['residential', 'Resid'], ['commercial', 'Comm'], ['(unset)', 'Untyped']].map(([k, label]) => (
+          <button key={k} onClick={() => setCategoryFilter(k)} className={`chip${categoryFilter === k ? ' chip-active' : ''}`}>{label}</button>
+        ))}
         <SourceFilter value={sourceFilter} onChange={setSourceFilter} />
         <select value={fundFilter} onChange={e => setFundFilter(e.target.value)} style={selStyle}>
           <option value="all">All funds</option>
           {funds.map(f => <option key={f} value={f}>{f}</option>)}
           <option value="(unassigned)">Unassigned</option>
         </select>
-        <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={selStyle}>
-          <option value="all">All types</option>
-          <option value="residential">Residential</option>
-          <option value="commercial">Commercial</option>
-          <option value="(unset)">Untyped</option>
-        </select>
         {hiddenCount > 0 && (
           <label style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
-            <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} style={{ accentColor: TT_ORANGE }} />
+            <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} style={{ width: 'auto' }} />
             Show hidden ({hiddenCount})
           </label>
         )}
-        {removed.length > 0 && (
-          <button onClick={() => setShowRemoved(v => !v)} className="btn btn-ghost btn-sm">
-            Removed ({removed.length}) {showRemoved ? '▴' : '▾'}
-          </button>
-        )}
-      </div>
-      {showRemoved && removed.length > 0 && (
-        <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem' }}>
-          <div style={{ color: 'var(--muted)', marginBottom: 6 }}>Removed projects (sold / paid off) — excluded from every widget, and stay removed when schedules are re-uploaded.</div>
-          {removed.map(p => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '2px 0' }}>
-              <span>{p.name}</span>
-              <span style={{ color: 'var(--faint)' }}>{SOURCE_LABEL[p.source]} · {fmtM(p.loan_amount)}</span>
-              {pinUnlocked && (
-                <button
-                  onClick={() => onPatch(p, { removed: false })}
-                  title="Restore this project to the dashboard"
-                  className="btn btn-sm" style={{ marginLeft: 'auto' }}
-                >Restore</button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <StatTile label="Portfolio LTC" value={fmtPct(totals.ltc)} sub="Σ loan ÷ Σ project cost (construction)" />
-        <StatTile label="Portfolio LTV" value={fmtPct(totals.ltv)} sub="Σ loan ÷ Σ value" />
-        <StatTile label="Total debt" value={fmtM(totals.loanAll)} sub={`${totals.n} project${totals.n === 1 ? '' : 's'}`} />
       </div>
       <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -407,7 +379,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
             <Th label="Cost" k="project_cost" sort={sort} right />
             <Th label="Value" k="appraised_value" sort={sort} right />
             <Th label="LTC" k="ltc" sort={sort} right />
-            <Th label="LTV" k="ltv" sort={sort} right />
+            <Th label="LTV" k="ltv" sort={sort} />
             <Th label="Maturity" k="maturity_date" sort={sort} />
             {pinUnlocked && <th />}
           </tr></thead>
@@ -416,7 +388,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
               <tr key={p.id} style={p.hidden ? { opacity: 0.45 } : undefined}>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {p.name}
-                  {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
+                  {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--faint2)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
                   {p._status === 'committed' && <span className="pill blue" style={{ marginLeft: 6 }}>COMMITTED</span>}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
@@ -432,14 +404,27 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                       <option value="residential">Residential</option>
                       <option value="commercial">Commercial</option>
                     </select>
+                  ) : p.category ? (
+                    <span
+                      onClick={pinUnlocked ? () => setEditingCategory(p.id) : undefined}
+                      title={pinUnlocked ? `${CATEGORY_LABEL[p.category]} — click to edit type` : CATEGORY_LABEL[p.category]}
+                      style={{
+                        fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
+                        cursor: pinUnlocked ? 'pointer' : 'default',
+                        color: p.category === 'commercial' ? 'var(--accent)' : 'var(--text2)',
+                        background: p.category === 'commercial'
+                          ? 'color-mix(in srgb, var(--accent) 10%, transparent)'
+                          : 'color-mix(in srgb, var(--text) 6%, transparent)',
+                      }}
+                    >{p.category === 'commercial' ? 'C' : 'R'}</span>
                   ) : pinUnlocked ? (
                     <span
                       onClick={() => setEditingCategory(p.id)}
                       title="Click to edit type"
-                      style={{ cursor: 'pointer', color: p.category ? 'var(--muted)' : 'var(--faint)', borderBottom: '1px dashed var(--border)' }}
-                    >{CATEGORY_LABEL[p.category] || '+ set'}</span>
+                      style={{ cursor: 'pointer', color: 'var(--faint)', borderBottom: '1px dashed var(--border)' }}
+                    >+ set</span>
                   ) : (
-                    <span style={{ color: p.category ? 'var(--muted)' : 'var(--faint)' }}>{CATEGORY_LABEL[p.category] || '—'}</span>
+                    <span style={{ color: 'var(--faint)' }}>—</span>
                   )}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
@@ -463,11 +448,20 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                 </td>
                 <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{SOURCE_LABEL[p.source]}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{p.lender || '—'}<Ov p={p} k="lender" type="text" /></td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}<Ov p={p} k="loan_amount" type="currency" /></td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.project_cost)}<Ov p={p} k="project_cost" type="currency" /></td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.appraised_value)}<Ov p={p} k="appraised_value" type="currency" /></td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltc)}<Ov p={p} k="ltc" type="percent" /></td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltv)}<Ov p={p} k="ltv" type="percent" /></td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}<Ov p={p} k="loan_amount" type="currency" /></td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.project_cost)}<Ov p={p} k="project_cost" type="currency" /></td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.appraised_value)}<Ov p={p} k="appraised_value" type="currency" /></td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.ltc)}<Ov p={p} k="ltc" type="percent" /></td>
+                <td style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', minWidth: 110 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ minWidth: 42, textAlign: 'right' }}>{fmtPct(p.ltv)}<Ov p={p} k="ltv" type="percent" /></span>
+                    {p.ltv != null && !isNaN(p.ltv) && (
+                      <div style={{ flex: 1, minWidth: 36, height: 5, background: 'color-mix(in srgb, var(--text) 7%, transparent)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.min(100, Math.round((p.ltv / 0.70) * 100))}%`, background: p.ltv >= 0.58 ? 'var(--warn)' : 'var(--accent)', borderRadius: 3 }} />
+                      </div>
+                    )}
+                  </div>
+                </td>
                 <td style={{ whiteSpace: 'nowrap' }}>{p._status === 'committed' ? 'Not closed' : p.maturity_date ? <>{fmtDate(p.maturity_date)}<Ov p={p} k="maturity_date" type="date" /></> : '—'}</td>
                 {pinUnlocked && (
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -492,25 +486,56 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
         <datalist id="tt-fund-options">{funds.map(f => <option key={f} value={f} />)}</datalist>
         {rows.length === 0 && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>No projects — upload the At Risk / Stabilized schedules above.</div>}
       </div>
-      {facilities.map(p => (
-        <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem', flexShrink: 0, opacity: p.hidden ? 0.45 : 1 }}>
-              {/* The section IS the facility — its title comes straight off the sheet row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+      {/* Portfolio total footer — 2px ink rule per the design handoff */}
+      <div style={{ borderTop: '2px solid var(--text)', background: 'var(--panel3)', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', flexShrink: 0 }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text)' }}>Portfolio</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {removed.length > 0 && (
+            <button
+              onClick={() => setShowRemoved(v => !v)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 500, color: 'var(--accent)', padding: 0 }}
+            >Removed ({removed.length}) {showRemoved ? '▴' : '▾'}</button>
+          )}
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
+            {fmtM(totals.loanAll)} · {fmtPct(totals.ltc)} LTC · {fmtPct(totals.ltv)} LTV · {totals.n} project{totals.n === 1 ? '' : 's'}
+          </span>
+        </span>
+      </div>
+      {showRemoved && removed.length > 0 && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: '0.6rem 0.75rem', background: 'var(--panel2)', fontSize: '0.72rem', flexShrink: 0 }}>
+          <div style={{ color: 'var(--muted)', marginBottom: 6 }}>Removed projects (sold / paid off) — excluded from every widget, and stay removed when schedules are re-uploaded.</div>
+          {removed.map(p => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '2px 0' }}>
+              <span>{p.name}</span>
+              <span className="mono" style={{ color: 'var(--faint)' }}>{SOURCE_LABEL[p.source]} · {fmtM(p.loan_amount)}</span>
+              {pinUnlocked && (
                 <button
-                  onClick={() => toggleFacility(p)}
-                  title={openFacility === p.id ? 'Collapse the land-piece breakdown' : 'Break the facility open — show the land pieces held inside it'}
-                  style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '0 2px', lineHeight: 1, fontSize: '0.7rem' }}
-                >{openFacility === p.id ? '▾' : '▸'}</button>
-                <span style={{ whiteSpace: 'nowrap', fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>
+                  onClick={() => onPatch(p, { removed: false })}
+                  title="Restore this project to the dashboard"
+                  className="btn btn-sm" style={{ marginLeft: 'auto' }}
+                >Restore</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {facilities.map(p => (
+        <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 0, background: 'var(--panel2)', fontSize: '0.72rem', flexShrink: 0, opacity: p.hidden ? 0.45 : 1, overflow: 'hidden' }}>
+              {/* The section IS the facility — its title comes straight off the sheet row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', padding: '10px 12px', cursor: 'pointer' }} onClick={() => toggleFacility(p)}>
+                <span style={{ color: 'var(--muted)', lineHeight: 1, fontSize: '0.7rem' }} title={openFacility === p.id ? 'Collapse the land-piece breakdown' : 'Break the facility open — show the land pieces held inside it'}>
+                  {openFacility === p.id ? '▾' : '▸'}
+                </span>
+                <span style={{ whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>
                   {p.name}
                 </span>
-                {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
-                <span className="pill blue">{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>
-                <span style={{ color: 'var(--faint)', whiteSpace: 'nowrap' }}>
+                {p.deal_uid && <span title="Deal Registry id — stable across every tab" className="mono" style={{ fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
+                <span className="pill yellow">{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>
+                <span className="mono" style={{ color: 'var(--text2)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                   {p.lender || '—'} · {fmtM(p.loan_amount)}{p.maturity_date ? ` · matures ${fmtDate(p.maturity_date)}` : ''}
                 </span>
                 {pinUnlocked && (
-                  <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                  <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                     <button
                       onClick={() => setEditing(p)}
                       title="Edit facility figures / maturity"
@@ -526,11 +551,11 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                   </span>
                 )}
               </div>
-              <div style={{ color: 'var(--faint2)', fontSize: '0.66rem', margin: '2px 0 0 1.05rem' }}>
+              <div style={{ color: 'var(--faint2)', fontSize: '0.66rem', margin: '0 12px 8px 30px' }}>
                 Tracked separately from projects — excluded from the portfolio totals above. Break open (▸) to view or type in the land pieces; they sync with the Land Facility tab.
               </div>
               {openFacility === p.id && (
-                <div style={{ margin: '2px 0 8px 1.05rem', borderLeft: '2px solid var(--border)', padding: '0.35rem 0 0.35rem 0.75rem' }}>
+                <div style={{ margin: '2px 12px 10px 30px', borderLeft: '2px solid var(--border)', padding: '0.35rem 0 0.35rem 0.75rem' }}>
                   {drawsError && <div style={{ color: 'var(--fail)' }}>{drawsError}</div>}
                   {!drawsError && landDraws == null && <div style={{ color: 'var(--faint)' }}>Loading land pieces…</div>}
                   {landDraws != null && (() => {
@@ -561,7 +586,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                                   <tr key={d.id}>
                                     <td title={d.note || undefined}>{d.name}</td>
                                     <td><span className={`pill ${DRAW_PILL[d.status] || 'blue'}`}>{DRAW_LABEL[d.status] || d.status}</span></td>
-                                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(d.draw_amount)}</td>
+                                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(d.draw_amount)}</td>
                                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(d.takedown_date)}</td>
                                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(d.payoff_date)}</td>
                                     {pinUnlocked && (
@@ -644,12 +669,13 @@ function MaturityWidget({ projects, onSetHidden, onPatch, pinUnlocked }) {
     .filter(p => p.maturity_date && p._status !== 'committed' && (sourceFilter === 'all' || p.source === sourceFilter))
     .sort((a, b) => a.maturity_date.localeCompare(b.maturity_date)), [projects, sourceFilter]);
 
-  const pill = (iso) => {
+  // Colored square by time-left, per the design handoff: red <6mo (or matured),
+  // amber <12mo, neutral otherwise.
+  const timeLeft = (iso) => {
     const m = monthsUntil(iso);
-    if (m < 0) return ['red', 'MATURED'];
-    if (m < 6) return ['red', `${Math.ceil(m)} mo`];
-    if (m < 12) return ['yellow', `${Math.ceil(m)} mo`];
-    return ['green', m < 24 ? `${Math.ceil(m)} mo` : `${(m / 12).toFixed(1)} yr`];
+    const color = m < 6 ? 'var(--fail)' : m < 12 ? 'var(--warn)' : 'var(--faint)';
+    const label = m < 0 ? 'Matured' : m < 24 ? `${Math.ceil(m)} mo` : `${(m / 12).toFixed(1)} yr`;
+    return [color, label, m];
   };
 
   const cols = pinUnlocked ? 6 : 5;
@@ -665,18 +691,21 @@ function MaturityWidget({ projects, onSetHidden, onPatch, pinUnlocked }) {
               const year = p.maturity_date.slice(0, 4);
               const yearHeader = year !== lastYear;
               lastYear = year;
-              const [cls, label] = pill(p.maturity_date);
+              const [sqColor, label, months] = timeLeft(p.maturity_date);
               return (
                 <React.Fragment key={p.id}>
                   {yearHeader && (
-                    <tr><td colSpan={cols} style={{ background: 'var(--panel2)', color: 'var(--muted)', fontSize: '0.66rem', letterSpacing: '0.06em', fontWeight: 600, textTransform: 'uppercase', padding: '0.35rem 0.85rem' }}>{year}</td></tr>
+                    <tr><td colSpan={cols} style={{ background: 'var(--panel2)', color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontSize: '0.66rem', letterSpacing: '0.06em', fontWeight: 600, textTransform: 'uppercase', padding: '0.35rem 0.85rem' }}>{year}</td></tr>
                   )}
                   <tr>
-                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(p.maturity_date)}<Ov p={p} k="maturity_date" type="date" /></td>
-                    <td>{p.name}{p._classification && <span className="pill blue" style={{ marginLeft: 6 }}>{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>}</td>
+                    <td style={{ whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)' }}>{fmtDate(p.maturity_date)}<Ov p={p} k="maturity_date" type="date" /></td>
+                    <td>
+                      <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, background: sqColor, marginRight: 8, verticalAlign: 'baseline' }} />
+                      {p.name}{p._classification && <span className="pill yellow" style={{ marginLeft: 6 }}>{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>}
+                    </td>
                     <td style={{ whiteSpace: 'nowrap' }}>{p.lender || '—'}<Ov p={p} k="lender" type="text" /></td>
-                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}<Ov p={p} k="loan_amount" type="currency" /></td>
-                    <td><span className={`pill ${cls}`}>{label}</span></td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}<Ov p={p} k="loan_amount" type="currency" /></td>
+                    <td style={{ whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', color: months < 6 ? 'var(--fail)' : 'var(--text2)', fontVariantNumeric: 'tabular-nums' }}>{label}</td>
                     {pinUnlocked && (
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <button
@@ -736,13 +765,18 @@ function GuarantyWidget({ projects }) {
       <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <SourceFilter value={sourceFilter} onChange={setSourceFilter} />
         <label style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
-          <input type="checkbox" checked={showZero} onChange={e => setShowZero(e.target.checked)} style={{ accentColor: TT_ORANGE }} />
+          <input type="checkbox" checked={showZero} onChange={e => setShowZero(e.target.checked)} style={{ width: 'auto' }} />
           Include $0 guaranties
         </label>
       </div>
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <StatTile label="Total TTH repayment guaranty" value={fmtM(totals.amt)} sub={`${rows.length} guaranteed loan${rows.length === 1 ? '' : 's'}`} />
-        <StatTile label="Wtd avg guaranty %" value={fmtPct(totals.avgPct)} sub="Weighted by loan amount" />
+      <div style={{ flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+          <span style={{ fontSize: '0.74rem', color: 'var(--text2)' }}>Total exposure · {rows.length} guaranteed loan{rows.length === 1 ? '' : 's'}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(totals.amt)}</span>
+        </div>
+        <div className="mono" style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: 2 }}>
+          Loan-weighted avg <b style={{ color: 'var(--text)', fontWeight: 600 }}>{fmtPct(totals.avgPct)}</b>
+        </div>
       </div>
       <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -758,9 +792,9 @@ function GuarantyWidget({ projects }) {
               <tr key={p.id}>
                 <td>{p.name}{p._classification && <span className="pill blue" style={{ marginLeft: 6 }}>{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>}</td>
                 <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{SOURCE_LABEL[p.source]}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.guaranty_pct, 0)}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.guaranty_amt)}</td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}</td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtPct(p.guaranty_pct, 0)}</td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.guaranty_amt)}</td>
               </tr>
             ))}
           </tbody>
@@ -800,15 +834,7 @@ function LenderExposureWidget({ projects }) {
   const maxLoan = rollup[0]?.totalLoan || 1;
 
   const modeBtn = (key, label) => (
-    <button
-      onClick={() => setMode(key)}
-      style={{
-        background: mode === key ? 'var(--panel2)' : 'none',
-        border: '1px solid ' + (mode === key ? 'var(--border)' : 'transparent'),
-        borderRadius: 5, color: mode === key ? 'var(--text)' : 'var(--muted)',
-        fontSize: '0.7rem', fontWeight: 600, padding: '0.25rem 0.6rem', cursor: 'pointer',
-      }}
-    >{label}</button>
+    <button onClick={() => setMode(key)} className={`chip${mode === key ? ' chip-active' : ''}`}>{label}</button>
   );
 
   // Terms-comparison columns: fmt renders, best marks which direction is
@@ -854,7 +880,7 @@ function LenderExposureWidget({ projects }) {
                     const v = col.get(c);
                     const isBest = col.best && v != null && v === bestValue(col);
                     return (
-                      <td key={col.label} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: isBest ? 'var(--good, #3fb46f)' : undefined, fontWeight: isBest ? 700 : undefined }}>
+                      <td key={col.label} style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: isBest ? 'var(--pass)' : undefined, fontWeight: isBest ? 700 : undefined }}>
                         {v == null ? '—' : col.fmt(v)}
                       </td>
                     );
@@ -880,10 +906,12 @@ function LenderExposureWidget({ projects }) {
         {modeBtn('compare', 'Terms Comparison')}
         <div style={{ marginLeft: '0.5rem' }}><SourceFilter value={sourceFilter} onChange={setSourceFilter} /></div>
       </div>
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-        <StatTile label="Total debt" value={fmtM(stats.total)} sub={`across ${stats.lenderCount} lender${stats.lenderCount === 1 ? '' : 's'}`} />
-        <StatTile label="Largest relationship" value={stats.top ? fmtM(stats.top.totalLoan) : '—'} sub={stats.top ? `${stats.top.lender} · ${fmtPct(stats.top.share, 0)} of total` : ''} />
-        <StatTile label="Top-3 concentration" value={fmtPct(stats.top3Share, 0)} sub="Share of total debt" />
+      {/* Concentration stats strip (mono, per the design handoff header stats) */}
+      <div className="mono" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 10.5, color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+        <span>Lenders <b style={{ color: 'var(--text)', fontWeight: 600 }}>{stats.lenderCount}</b></span>
+        <span>Total debt <b style={{ color: 'var(--text)', fontWeight: 600 }}>{fmtM(stats.total)}</b></span>
+        <span>Top lender <b style={{ color: 'var(--text)', fontWeight: 600 }}>{stats.top ? `${stats.top.lender} · ${fmtPct(stats.top.share, 0)}` : '—'}</b></span>
+        <span>Top-3 share <b style={{ color: 'var(--text)', fontWeight: 600 }}>{fmtPct(stats.top3Share, 0)}</b></span>
       </div>
       <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -897,25 +925,25 @@ function LenderExposureWidget({ projects }) {
               <React.Fragment key={r.key}>
                 <tr onClick={() => setOpenKey(k => k === r.key ? null : r.key)} style={{ cursor: 'pointer' }} title="Click to list this lender's deals">
                   <td style={{ fontWeight: 600 }}>{r.lender}{r.abstractCount > 0 && <span className="pill blue" style={{ marginLeft: 6 }} title="Loan abstracts on file">{r.abstractCount} abstract{r.abstractCount > 1 ? 's' : ''}</span>}</td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.dealCount}</td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(r.totalLoan)}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{r.dealCount}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(r.totalLoan)}</td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ flex: 1, height: 6, background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden' }}>
-                        <div style={{ width: `${(r.totalLoan / maxLoan) * 100}%`, height: '100%', background: TT_ORANGE, borderRadius: 3 }} />
+                      <span className="mono" style={{ fontSize: '0.7rem', color: 'var(--text)', fontVariantNumeric: 'tabular-nums', minWidth: 34 }}>{fmtPct(r.share, 0)}</span>
+                      <div style={{ flex: 1, height: 5, background: 'color-mix(in srgb, var(--text) 7%, transparent)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${(r.totalLoan / maxLoan) * 100}%`, height: '100%', background: r.share >= 0.25 ? 'var(--warn)' : 'var(--accent)', borderRadius: 3 }} />
                       </div>
-                      <span style={{ fontSize: '0.66rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', minWidth: 32, textAlign: 'right' }}>{fmtPct(r.share, 0)}</span>
                     </div>
                   </td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.totalGuaranty ? fmtM(r.totalGuaranty) : '—'}</td>
-                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.wAvgSpreadBps != null ? `${Math.round(r.wAvgSpreadBps)} bps` : '—'}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{r.totalGuaranty ? fmtM(r.totalGuaranty) : '—'}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{r.wAvgSpreadBps != null ? `${Math.round(r.wAvgSpreadBps)} bps` : '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{r.nearestMaturity ? fmtDate(r.nearestMaturity) : '—'}</td>
                 </tr>
                 {openKey === r.key && r.deals.map((d, i) => (
                   <tr key={i} style={{ background: 'var(--panel2)' }}>
                     <td style={{ paddingLeft: '1.5rem', color: 'var(--muted)' }}>{d.name}</td>
                     <td />
-                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{fmtM(d.loan_amount)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{fmtM(d.loan_amount)}</td>
                     <td />
                     <td />
                     <td style={{ textAlign: 'right', color: 'var(--faint)' }}>{SOURCE_LABEL[d.source] || d.source}</td>
@@ -1004,12 +1032,13 @@ function HedgeWidget({ pinUnlocked }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <StatTile label="Active hedges" value={summary.active} sub={`${fmtM(summary.notional)} notional`} />
-        <StatTile label="Cap value (intrinsic)" value={fmtM(summary.capValue)} sub="Expected receipts vs forwards" />
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'stretch' }}>
+        <StatTile label="Active" value={summary.active} sub="hedges on" />
+        <StatTile label="Notional" value={fmtM(summary.notional)} sub="active total" />
+        <StatTile label="Cap value" value={fmtM(summary.capValue)} sub="Expected receipts vs forwards" />
         <StatTile label="Swap MTM" value={fmtM(summary.swapValue)} sub="Payer-fixed vs forwards, undiscounted" />
         {pinUnlocked && !draft && (
-          <button onClick={() => setDraft({ ...EMPTY_HEDGE })} className="btn btn-sm" style={{ marginLeft: 'auto' }}>+ Add Hedge</button>
+          <button onClick={() => setDraft({ ...EMPTY_HEDGE })} className="btn btn-sm" style={{ marginLeft: 'auto', alignSelf: 'center' }}>+ Add Hedge</button>
         )}
       </div>
       {draft && (
@@ -1051,12 +1080,12 @@ function HedgeWidget({ pinUnlocked }) {
                   <tr onClick={() => setOpenId(isOpen ? null : h.id)} style={{ cursor: 'pointer' }} title="Click for the month-by-month breakdown">
                     <td style={{ fontWeight: 600 }}>{h.deal_name}</td>
                     <td><span className={`pill ${h.hedge_type === 'cap' ? 'blue' : 'yellow'}`}>{h.hedge_type}</span></td>
-                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(h.notional)}</td>
-                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{h.strike_pct != null ? `${Number(h.strike_pct).toFixed(2)}%` : h.fixed_rate_pct != null ? `${Number(h.fixed_rate_pct).toFixed(2)}%` : '—'}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(h.notional)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{h.strike_pct != null ? `${Number(h.strike_pct).toFixed(2)}%` : h.fixed_rate_pct != null ? `${Number(h.fixed_rate_pct).toFixed(2)}%` : '—'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{h.counterparty || '—'}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(h.maturity_date)}</td>
                     <td><span className={`pill ${cls}`}>{label}</span></td>
-                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: value == null ? undefined : value >= 0 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)', fontWeight: 600 }}>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: value == null ? undefined : value >= 0 ? 'var(--pass)' : 'var(--fail)', fontWeight: 600 }}>
                       {value == null ? '—' : fmtM(value)}
                     </td>
                     {pinUnlocked && (
@@ -1069,10 +1098,10 @@ function HedgeWidget({ pinUnlocked }) {
                   {isOpen && months.length > 0 && (
                     <tr style={{ background: 'var(--panel2)' }}>
                       <td colSpan={pinUnlocked ? 9 : 8} style={{ padding: '0.5rem 0.85rem' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem 1rem', fontSize: '0.66rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem 1rem', fontSize: '0.66rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
                           {months.map(m => (
                             <span key={m.date}>
-                              {m.date.slice(0, 7)}: fwd {(m.fwd * 100).toFixed(2)}% → <b style={{ color: m.amt >= 0 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)' }}>{fmtM(m.amt)}</b>
+                              {m.date.slice(0, 7)}: fwd {(m.fwd * 100).toFixed(2)}% → <b style={{ color: m.amt >= 0 ? 'var(--pass)' : 'var(--fail)' }}>{fmtM(m.amt)}</b>
                             </span>
                           ))}
                         </div>
@@ -1164,7 +1193,7 @@ function LoanMtmWidget({ pinUnlocked }) {
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <StatTile label="Par (priced loans)" value={fmtM(result.par)} sub={`${result.rows.length} of ${loans.length} abstracts priceable`} />
         <StatTile label="Market value" value={fmtM(result.value)} sub="DCF at market spread vs forwards" />
-        <StatTile label="Premium / (Discount)" value={fmtM(result.premium)} sub={result.par ? `${((result.value / result.par - 1) * 100).toFixed(2)}% of par` : ''} />
+        <StatTile label="Premium / (Disc)" value={fmtM(result.premium)} color={result.premium < 0 ? 'var(--fail)' : undefined} sub={result.par ? `${((result.value / result.par - 1) * 100).toFixed(2)}% of par` : ''} />
         {pinUnlocked && !editing && (
           <button className="btn btn-sm" style={{ marginLeft: 'auto' }}
             onClick={() => setEditing({
@@ -1173,8 +1202,13 @@ function LoanMtmWidget({ pinUnlocked }) {
             })}>Update Market Spreads</button>
         )}
       </div>
+      {spreads && Object.keys(spreads).length > 0 && !editing && (
+        <div className="mono" style={{ fontSize: 9.5, color: 'var(--muted)' }}>
+          Market spreads · {Object.values(spreads).map(s => `${s.loan_type} S+${s.spread_bps}${s.source ? ` (${s.source})` : ''} as of ${fmtDate(s.as_of)}`).join(' · ')}
+        </div>
+      )}
       {staleTypes.length > 0 && !editing && (
-        <div style={{ fontSize: '0.7rem', color: 'var(--warn, #d29922)' }}>
+        <div style={{ fontSize: '0.7rem', color: 'var(--warn)' }}>
           ⚠ Market spread{staleTypes.length > 1 ? 's' : ''} for {staleTypes.map(s => s.loan_type).join(' & ')} {staleTypes.length > 1 ? 'are' : 'is'} over {SPREAD_STALE_DAYS} days old — refresh from current lender quotes.
         </div>
       )}
@@ -1206,13 +1240,13 @@ function LoanMtmWidget({ pinUnlocked }) {
               <tr key={l.id}>
                 <td style={{ fontWeight: 600 }}>{name(l)}</td>
                 <td style={{ color: 'var(--muted)' }}>{l.loan_type}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(l.loan_amount)}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{mtm.method === 'fixed' ? `${Number(l.note_rate_pct).toFixed(2)}% fixed` : `S+${l.rate_spread_bps}`}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{mtm.method === 'fixed' ? `+${marketSpreadBps} bps` : `S+${marketSpreadBps}`}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: mtm.pricePct >= 1 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)' }}>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(l.loan_amount)}</td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{mtm.method === 'fixed' ? `${Number(l.note_rate_pct).toFixed(2)}% fixed` : `S+${l.rate_spread_bps}`}</td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{mtm.method === 'fixed' ? `+${marketSpreadBps} bps` : `S+${marketSpreadBps}`}</td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: mtm.pricePct >= 1 ? 'var(--pass)' : 'var(--fail)' }}>
                   {(mtm.pricePct * 100).toFixed(2)}%
                 </td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: mtm.premium >= 0 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)' }}>{fmtM(mtm.premium)}</td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: mtm.premium >= 0 ? 'var(--pass)' : 'var(--fail)' }}>{fmtM(mtm.premium)}</td>
                 <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{fmtDate(l.maturity_date)}</td>
               </tr>
             ))}
@@ -1234,16 +1268,16 @@ function LoanMtmWidget({ pinUnlocked }) {
 }
 
 // ── Forward Curve Tracker ─────────────────────────────────────────────────────
-// Snapshot series are ordinal in time, so they wear a validated one-hue ramp:
-// older curves lighter, the newest darkest/strongest.
-const RAMP_LIGHT = ['#C9C2F2', '#AC9FE8', '#8C7BD8', '#6B58C2', '#4A3A9C'];
-const RAMP_DARK  = ['#4A3F8F', '#5F53AE', '#7768CB', '#9184E2', '#ACA0F4'];
-const rampColors = (n, theme) => {
-  const ramp = theme === 'light' ? RAMP_LIGHT : RAMP_DARK;
+// Snapshot series are ordinal in time: the newest curve wears the full accent,
+// older snapshots fade toward transparent (token-based, so dark mode follows).
+const snapshotColors = (n) => {
   if (n <= 0) return [];
-  if (n === 1) return [ramp[ramp.length - 1]];
-  // Evenly spaced steps ending at the strongest (newest) end
-  return Array.from({ length: n }, (_, i) => ramp[Math.round((i * (ramp.length - 1)) / (n - 1))]);
+  if (n === 1) return ['var(--accent)'];
+  return Array.from({ length: n }, (_, i) => (
+    i === n - 1
+      ? 'var(--accent)'
+      : `color-mix(in srgb, var(--accent) ${Math.round(22 + (48 * i) / (n - 1))}%, transparent)`
+  ));
 };
 
 // Pinned-hair identity: two validated hues × two dash patterns give four
@@ -1289,9 +1323,9 @@ function TipRow({ color, dash, v, delta, label, hint }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
       <span style={{ width: 12, height: 0, borderTop: `2px ${dash ? 'dashed' : 'solid'} ${color}`, flexShrink: 0, display: 'inline-block' }} />
-      <span style={{ fontWeight: 700, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{v == null ? '—' : fmtRate(v)}</span>
+      <span style={{ fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{v == null ? '—' : fmtRate(v)}</span>
       {delta != null && Math.round(Math.abs(delta) * 10000) > 0 && (
-        <span style={{ color: delta > 0 ? 'var(--fail)' : 'var(--pass)', fontSize: '0.64rem', fontVariantNumeric: 'tabular-nums' }}>{fmtBp(delta)}</span>
+        <span style={{ color: delta > 0 ? 'var(--fail)' : 'var(--pass)', fontSize: '0.64rem', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtBp(delta)}</span>
       )}
       <span style={{ color: 'var(--muted)', marginLeft: 'auto', paddingLeft: 10, whiteSpace: 'nowrap' }}>
         {label}{hint && <span style={{ color: 'var(--faint)' }}> · {hint}</span>}
@@ -1553,7 +1587,7 @@ export function CurveChart({ series, theme }) {
         {endTags.map(t => (
           <g key={t.label}>
             <circle cx={X(t.x)} cy={Y(t.v)} r="3.5" fill={t.color} stroke="var(--panel)" strokeWidth="2" />
-            <text x={M.l + iw + 5} y={t.y + 3} fontSize="10" fontWeight="700" fill={t.color} style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtRate(t.v)}</text>
+            <text x={M.l + iw + 5} y={t.y + 3} fontSize="10" fontWeight="700" fill={t.color} style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtRate(t.v)}</text>
           </g>
         ))}
         {hover && (
@@ -1574,7 +1608,7 @@ export function CurveChart({ series, theme }) {
             </g>
             <g>
               <rect x={2} y={hover.py - 7} width="40" height="14" rx="3" fill="var(--panel3)" stroke="var(--border)" />
-              <text x={22} y={hover.py + 3} textAnchor="middle" fontSize="9" fill="var(--text2)" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtRate(yAtPointer)}</text>
+              <text x={22} y={hover.py + 3} textAnchor="middle" fontSize="9" fill="var(--text2)" style={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtRate(yAtPointer)}</text>
             </g>
           </g>
         )}
@@ -1772,7 +1806,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
       });
       return out;
     }
-    const colors = rampColors(seriesData.length, theme);
+    const colors = snapshotColors(seriesData.length);
     const out = seriesData.map((s, i) => ({
       label: fmtDate(s.curve_date),
       color: colors[i],
@@ -2018,7 +2052,7 @@ function CurveWidget({ pinUnlocked, requirePin }) {
             </div>
           )}
           {curveStats && (
-            <div style={{ display: 'flex', gap: '1.1rem', flexWrap: 'wrap', fontSize: '0.7rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ display: 'flex', gap: '1.1rem', flexWrap: 'wrap', fontSize: '0.7rem', color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>
               {curveStats.spot && (
                 <span>Spot <b style={{ color: 'var(--text)' }}>{fmtRate(curveStats.spot.y)}</b> <span style={{ color: 'var(--faint)' }}>({fmtMs(curveStats.spot.x, { month: 'short', day: 'numeric' })})</span></span>
               )}
@@ -2150,7 +2184,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
     const grid = WIDGETS[key].defaultGrid;
     const maxY = layout.reduce((m, l) => Math.max(m, l.y + l.h), 0);
     const nextLayout = [...layout, { i: key, ...grid, x: 0, y: maxY }];
-    setWidgets(nextWidgets); setLayout(nextLayout); setShowAdd(false);
+    setWidgets(nextWidgets); setLayout(nextLayout);
     persistLayout(nextLayout, nextWidgets);
   }
 
@@ -2331,34 +2365,64 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
     }
   }
 
-  const inactive = DEFAULT_WIDGETS.filter(k => !widgets.includes(k));
+  // Headline tiles (screen level, per the design handoff): portfolio LTC/LTV,
+  // total debt and guaranty exposure across the same visible set every widget
+  // reads. Credit facilities stay out of the leverage figures (they're a
+  // different kind of debt) but their count shows in the subtitle.
+  const headline = useMemo(() => {
+    const rows = visibleProjects.filter(p => !p._classification);
+    let loanC = 0, cost = 0, loanV = 0, value = 0, loanAll = 0;
+    for (const p of rows) {
+      if (p.loan_amount != null) loanAll += p.loan_amount;
+      if (p.loan_amount != null && p.project_cost) { loanC += p.loan_amount; cost += p.project_cost; }
+      if (p.loan_amount != null && p.appraised_value) { loanV += p.loan_amount; value += p.appraised_value; }
+    }
+    let g = 0, gw = 0, gl = 0;
+    for (const p of visibleProjects) {
+      if (p.guaranty_amt) g += p.guaranty_amt;
+      if (p.guaranty_pct != null && p.loan_amount) { gw += p.guaranty_pct * p.loan_amount; gl += p.loan_amount; }
+    }
+    return {
+      ltc: cost ? loanC / cost : null, ltv: value ? loanV / value : null,
+      total: loanAll, n: rows.length, nFac: visibleProjects.length - rows.length,
+      guaranty: g, gAvg: gl ? gw / gl : null,
+    };
+  }, [visibleProjects]);
+
+  const fmtStamp = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const subtitle = [
+    uploadTimes.atRiskUploaded && `At Risk ${fmtStamp(uploadTimes.atRiskUploaded)}`,
+    uploadTimes.stabilizedUploaded && `Stabilized ${fmtStamp(uploadTimes.stabilizedUploaded)}`,
+    `${headline.n} project${headline.n === 1 ? '' : 's'}${headline.nFac ? ` + ${headline.nFac} facilit${headline.nFac === 1 ? 'y' : 'ies'}` : ''}`,
+  ].filter(Boolean).join(' · ');
 
   return (
     <div>
-      {/* Toolbar */}
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
-        {pinUnlocked ? (
-          <>
-            <label className="btn btn-sm">
-              ↑ At Risk Schedule
-              <input type="file" accept=".xlsb,.xlsx,.xlsm,.xls" onChange={e => handleScheduleUpload(e, 'at_risk')} style={{ display: 'none' }} />
-            </label>
-            <label className="btn btn-sm">
-              ↑ Stabilized Schedule
-              <input type="file" accept=".xlsx,.xlsm,.xls,.xlsb" onChange={e => handleScheduleUpload(e, 'stabilized')} style={{ display: 'none' }} />
-            </label>
-          </>
-        ) : (
-          <>
-            <button onClick={() => requirePin(() => {})} className="btn btn-sm btn-locked"><LockIcon size={11} /> At Risk Schedule</button>
-            <button onClick={() => requirePin(() => {})} className="btn btn-sm btn-locked"><LockIcon size={11} /> Stabilized Schedule</button>
-          </>
-        )}
-        <div style={{ fontSize: '0.64rem', color: 'var(--faint)', lineHeight: 1.5 }}>
-          {uploadTimes.atRiskUploaded && <div>At Risk: {new Date(uploadTimes.atRiskUploaded).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>}
-          {uploadTimes.stabilizedUploaded && <div>Stabilized: {new Date(uploadTimes.stabilizedUploaded).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>}
+      {/* ── Screen header ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 21, fontWeight: 600, color: 'var(--text)' }}>Debt Dashboard</div>
+          <div className="mono" style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>{subtitle}</div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center', position: 'relative' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => setShowAdd(v => !v)} className={`tt-btn${showAdd ? ' btn-tinted' : ''}`} style={{ color: showAdd ? undefined : 'var(--text)' }}>+ Add Widget</button>
+          {pinUnlocked ? (
+            <>
+              <label className="tt-btn">
+                ↑ At Risk
+                <input type="file" accept=".xlsb,.xlsx,.xlsm,.xls" onChange={e => handleScheduleUpload(e, 'at_risk')} style={{ display: 'none' }} />
+              </label>
+              <label className="tt-btn">
+                ↑ Stabilized
+                <input type="file" accept=".xlsx,.xlsm,.xls,.xlsb" onChange={e => handleScheduleUpload(e, 'stabilized')} style={{ display: 'none' }} />
+              </label>
+            </>
+          ) : (
+            <>
+              <button onClick={() => requirePin(() => {})} className="tt-btn btn-locked"><LockIcon size={11} /> At Risk</button>
+              <button onClick={() => requirePin(() => {})} className="tt-btn btn-locked"><LockIcon size={11} /> Stabilized</button>
+            </>
+          )}
           <button
             onClick={async () => {
               setExporting(true);
@@ -2372,22 +2436,58 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
             }}
             disabled={exporting || merged.length === 0}
             title={merged.length === 0 ? 'Nothing to export yet — upload the schedules first' : 'Download the dashboard as a formatted Excel workbook (one tab per widget)'}
-            className="btn btn-sm"
+            className="tt-btn"
           >{exporting ? 'Generating…' : '⤓ Export Excel'}</button>
-          {inactive.length > 0 && (
-            <button onClick={() => setShowAdd(v => !v)} className="btn btn-sm">+ Add Widget</button>
-          )}
-          {showAdd && (
-            <div className="menu" style={{ minWidth: 200, zIndex: 300 }}>
-              {inactive.map(k => (
-                <button key={k} onClick={() => addWidget(k)} className="menu-item" style={{ display: 'flex', width: '100%', textAlign: 'left', background: 'none', border: 'none', fontFamily: 'inherit' }}>
-                  {WIDGETS[k].title}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
+
+      {/* ── Headline tiles ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14, marginBottom: 16 }}>
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <div className="label" style={{ marginBottom: 0 }}>Portfolio LTC</div>
+          <div className="metric" style={{ marginTop: 7 }}>{fmtPct(headline.ltc)}</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 4 }}>weighted by loan</div>
+        </div>
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <div className="label" style={{ marginBottom: 0 }}>Portfolio LTV</div>
+          <div className="metric" style={{ marginTop: 7 }}>{fmtPct(headline.ltv)}</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 4 }}>Σ loan ÷ Σ value</div>
+        </div>
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <div className="label" style={{ marginBottom: 0 }}>Total debt</div>
+          <div className="metric" style={{ marginTop: 7 }}>{fmtM(headline.total)}</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 4 }}>{headline.n} project{headline.n === 1 ? '' : 's'}</div>
+        </div>
+        <div className="card" style={{ padding: '16px 18px' }}>
+          <div className="label" style={{ marginBottom: 0 }}>Guaranty exposure</div>
+          <div className="metric" style={{ marginTop: 7 }}>{fmtM(headline.guaranty)}</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 4 }}>{headline.gAvg != null ? `${fmtPct(headline.gAvg)} wtd avg` : '—'}</div>
+        </div>
+      </div>
+
+      {/* ── Add-widget chip strip (toggles widgets on/off) ── */}
+      {showAdd && (
+        <div style={{ marginBottom: 12, background: 'var(--panel)', border: '1px dashed color-mix(in srgb, var(--accent) 40%, transparent)', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span className="label" style={{ marginBottom: 0, letterSpacing: '0.08em' }}>Add widget:</span>
+          {DEFAULT_WIDGETS.map(k => {
+            const on = widgets.includes(k);
+            return (
+              <button
+                key={k}
+                onClick={() => (on ? removeWidget(k) : addWidget(k))}
+                title={on ? 'Remove this widget from the dashboard' : 'Add this widget to the dashboard'}
+                style={{
+                  cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+                  padding: '6px 11px', borderRadius: 6,
+                  color: on ? 'var(--pass)' : 'var(--accent)',
+                  background: on ? 'color-mix(in srgb, var(--pass) 10%, transparent)' : 'var(--panel2)',
+                  border: `1px solid ${on ? 'color-mix(in srgb, var(--pass) 30%, transparent)' : 'var(--border2)'}`,
+                }}
+              >{on ? '✓ ' : '+ '}{WIDGETS[k].title}</button>
+            );
+          })}
+        </div>
+      )}
       {uploadStatus && (
         <div style={{ marginBottom: '1rem', fontSize: '0.75rem', color: uploadStatus.startsWith('Error') ? 'var(--fail)' : 'var(--muted)' }}>{uploadStatus}</div>
       )}
@@ -2408,18 +2508,18 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
             compactor={verticalCompactor}
           >
             {widgets.map(key => (
-              <div key={key} style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: 'var(--shadow)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <div className="widget-drag" style={{ display: 'flex', alignItems: 'center', padding: '0.55rem 0.9rem', borderBottom: '1px solid var(--border)', cursor: 'grab', userSelect: 'none', flexShrink: 0 }}>
-                  <span style={{ fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text2)', fontWeight: 600 }}>{WIDGETS[key].title}</span>
-                  <span style={{ marginLeft: 'auto', color: 'var(--faint)', fontSize: '0.7rem', letterSpacing: '0.2em' }}>⠿</span>
+              <div key={key} style={{ background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 10, boxShadow: 'var(--shadow)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div className="widget-drag" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: '1px solid var(--border)', cursor: 'grab', userSelect: 'none', flexShrink: 0 }}>
+                  <span title="Drag to rearrange" style={{ color: 'var(--faint)', fontSize: '0.7rem', letterSpacing: '0.12em' }}>⠿</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{WIDGETS[key].title}</span>
                   <button
                     onClick={() => removeWidget(key)}
                     onPointerDown={e => e.stopPropagation()}
                     title="Remove widget (re-add via + Add Widget)"
-                    style={{ marginLeft: '0.75rem', background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.8rem', lineHeight: 1, padding: 2 }}
+                    style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 2 }}
                   >✕</button>
                 </div>
-                <div style={{ padding: '0.9rem', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '0.9rem 1rem', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                   {renderWidget(key)}
                 </div>
               </div>
