@@ -11,6 +11,7 @@ import { OVERRIDE_FIELDS, applyOverrides, fieldToInput, parseFieldInput, sameVal
 import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync, CLASSIFICATION_LABEL } from '../dealRegistry.js';
 import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
+import { TasksWidget } from './TasksWidget.jsx';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -1593,6 +1594,7 @@ const WIDGETS = {
   maturities: { title: 'Maturity Schedule',      defaultGrid: { x: 0, y: 11, w: 6,  h: 10, minW: 4, minH: 5 } },
   guaranty:   { title: 'Repayment Guaranty Hub', defaultGrid: { x: 6, y: 11, w: 6,  h: 10, minW: 4, minH: 5 } },
   curve:      { title: 'Forward Curve Tracker',  defaultGrid: { x: 0, y: 21, w: 12, h: 10, minW: 6, minH: 6 } },
+  tasks:      { title: 'Tasks & Reminders',      defaultGrid: { x: 0, y: 31, w: 12, h: 9,  minW: 4, minH: 5 } },
 };
 const DEFAULT_WIDGETS = Object.keys(WIDGETS);
 const DEFAULT_LAYOUT = DEFAULT_WIDGETS.map(k => ({ i: k, ...WIDGETS[k].defaultGrid }));
@@ -1853,6 +1855,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       );
       case 'guaranty':   return <GuarantyWidget projects={visibleProjects} />;
       case 'curve':      return <CurveWidget pinUnlocked={pinUnlocked} requirePin={requirePin} />;
+      case 'tasks':      return <TasksWidget pinUnlocked={pinUnlocked} />;
       default: return null;
     }
   }

@@ -42,7 +42,8 @@ begin
     'land_draws',
     'leasing_snapshot',
     'loans',
-    'project_locations'
+    'project_locations',
+    'tasks'
   ]
   loop
     if to_regclass('public.' || t) is not null then
