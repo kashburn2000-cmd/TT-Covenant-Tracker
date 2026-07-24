@@ -71,6 +71,12 @@ const LOAN_FIELD_GROUPS = [
     ['extension_test_summary', 'Extension Test', 'textarea'],
     ['extension_term_changes', 'Extension Term Changes', 'textarea'],
   ] },
+  { title: 'Conversion Option', fields: [
+    ['conversion_window_start', 'Conversion Window Opens', 'date'],
+    ['conversion_window_end', 'Conversion Window Closes', 'date'],
+    ['conversion_fee_pct', 'Conversion Fee (%)', 'number'],
+    ['conversion_terms', 'Conversion Terms', 'textarea'],
+  ] },
   { title: 'Prepayment & Other', fields: [
     ['exit_fee_pct', 'Exit Fee (%)', 'number'],
     ['prepayment_terms', 'Prepayment Terms', 'textarea'],
@@ -86,6 +92,7 @@ const LOAN_NUM_FIELDS = new Set([
   'ltc_pct', 'ltv_pct', 'lead_lender_commitment', 'completion_guaranty_pct', 'repayment_guaranty_pct',
   'min_net_worth', 'min_liquidity', 'dscr_covenant', 'debt_yield_covenant', 'lender_assumed_reserves_per_unit',
   'extension_count', 'extension_term_months', 'extension_fee_pct', 'extension_fee_amount', 'exit_fee_pct',
+  'conversion_fee_pct',
 ]);
 
 const EMPTY_LOAN = {
@@ -102,6 +109,7 @@ const EMPTY_LOAN = {
   financial_reporting_borrower: '', financial_reporting_guarantor: '',
   extension_count: '', extension_term_months: '', extension_fee_pct: '', extension_fee_amount: '',
   extension_maturity_date: '', extension_test_summary: '', extension_term_changes: '',
+  conversion_window_start: '', conversion_window_end: '', conversion_fee_pct: '', conversion_terms: '',
   exit_fee_pct: '', prepayment_open: false, prepayment_terms: '',
   miscellaneous: '', notes: '', type_specific: {}, source_doc_path: '',
 };
@@ -357,7 +365,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       else { body[k] = LOAN_INT_FIELDS.has(k) ? parseInt(v, 10) : Number(v); if (Number.isNaN(body[k])) body[k] = null; }
     });
     // dates: empty string → null
-    ['closing_date', 'maturity_date', 'extension_maturity_date'].forEach(k => { if (body[k] === '') body[k] = null; });
+    ['closing_date', 'maturity_date', 'extension_maturity_date', 'conversion_window_start', 'conversion_window_end'].forEach(k => { if (body[k] === '') body[k] = null; });
     // jsonb fields stay native objects/arrays
     body.participants = Array.isArray(body.participants) ? body.participants : [];
     if (body.type_specific == null || typeof body.type_specific !== 'object') body.type_specific = {};
@@ -1175,6 +1183,9 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           <Row k="Extension Maturity" v={l.extension_maturity_date ? fmtDate(l.extension_maturity_date) : null} />
           <Row k="Prepayment" v={l.prepayment_open ? 'Open, no penalty' : null} />
           <Row k="Exit Fee" v={l.exit_fee_pct != null ? fmtPct(l.exit_fee_pct) : null} />
+          <Row k="Conversion Window" v={l.conversion_window_start ? `${fmtDate(l.conversion_window_start)} – ${l.conversion_window_end ? fmtDate(l.conversion_window_end) : 'maturity'}` : null} />
+          <Row k="Conversion Fee" v={l.conversion_fee_pct != null ? fmtPct(l.conversion_fee_pct) : null} />
+          <Prose k="Conversion Terms" v={l.conversion_terms} />
           <Prose k="Extension Test" v={l.extension_test_summary} />
           <Prose k="Extension Term Changes" v={l.extension_term_changes} />
           <Prose k="Prepayment Terms" v={l.prepayment_terms} />

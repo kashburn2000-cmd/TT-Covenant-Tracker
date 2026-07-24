@@ -44,6 +44,11 @@ Ridge construction loan). The keys are exactly the database column names.
   (construction: completion date, development fee funding, retainage, letters of
   credit, post-closing items; refinance: lockbox, cash management waterfall,
   reserves/holdbacks, prior lender / future advance).
+- **Optional:** floating→fixed conversion options go in four flat keys
+  (requires `db/loan_conversion_setup.sql`): `conversion_window_start`,
+  `conversion_window_end` (ISO dates), `conversion_fee_pct`, and
+  `conversion_terms` (prose). The nightly task generator reminds 60 days
+  before the window opens.
 - **Optional:** a `reporting_requirements` array turns the abstract's reporting
   section into structured deliverables that drive the nightly Tasks & Reminders
   digest (requires `db/loan_reporting_setup.sql`). Re-importing replaces the

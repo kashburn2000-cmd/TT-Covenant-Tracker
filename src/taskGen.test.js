@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildLoanTasks,
   buildCovenantTasks,
+  buildConversionTasks,
   buildReportingTasks,
   tasksNeedingEmail,
   digestHtml,
@@ -97,6 +98,30 @@ describe('buildCovenantTasks', () => {
   it('skips hidden and waived rows', () => {
     expect(buildCovenantTasks([{ ...prop, hidden: true }], TODAY)).toHaveLength(0);
     expect(buildCovenantTasks([{ ...prop, waived: true }], TODAY)).toHaveLength(0);
+  });
+});
+
+describe('buildConversionTasks', () => {
+  const loan = {
+    id: 'abc-9', property_name: 'Lady Lake', lead_lender: 'BMO',
+    conversion_window_start: '2026-10-01', conversion_window_end: '2027-04-01',
+    conversion_fee_pct: 0.25, conversion_terms: 'Fix at 10Y UST + 225.',
+  };
+
+  it('emits a window-opening task with fee and terms in the detail', () => {
+    const tasks = buildConversionTasks([loan], TODAY);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].kind).toBe('conversion_window');
+    expect(tasks[0].due_date).toBe('2026-10-01');
+    expect(tasks[0].lead_days).toBe(60);
+    expect(tasks[0].detail).toContain('through 2027-04-01');
+    expect(tasks[0].detail).toContain('Fee: 0.25%');
+    expect(tasks[0].detail).toContain('Fix at 10Y UST + 225.');
+  });
+
+  it('skips loans without a window and long-past windows', () => {
+    expect(buildConversionTasks([{ ...loan, conversion_window_start: null }], TODAY)).toHaveLength(0);
+    expect(buildConversionTasks([{ ...loan, conversion_window_start: '2026-01-01' }], TODAY)).toHaveLength(0);
   });
 });
 

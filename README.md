@@ -180,7 +180,7 @@ The **Tasks & Reminders** widget (Debt Dashboard → + Add Widget) is filled nig
 
 **One-time setup:**
 
-1. Run [`db/tasks_setup.sql`](db/tasks_setup.sql) in the Supabase SQL editor. Optionally also run [`db/loan_reporting_setup.sql`](db/loan_reporting_setup.sql) to unlock the **Reporting Requirements** section in the Loans tab detail panel — its rows (operating statements, guarantor financials, rent rolls, …) get expanded into dated reminder tasks too.
+1. Run [`db/tasks_setup.sql`](db/tasks_setup.sql) in the Supabase SQL editor. Optionally also run [`db/loan_reporting_setup.sql`](db/loan_reporting_setup.sql) to unlock the **Reporting Requirements** section in the Loans tab detail panel — its rows (operating statements, guarantor financials, rent rolls, …) get expanded into dated reminder tasks too — and [`db/loan_conversion_setup.sql`](db/loan_conversion_setup.sql) to track floating→fixed **rate conversion options** (reminded 60 days before the window opens).
 2. The Action reuses the existing `SUPABASE_KEY` secret — the table sync works with no further setup (run the workflow manually once to fill it).
 3. **Email digest (optional):** create a free [Resend](https://resend.com) account, then add repo secrets `RESEND_API_KEY` and `TASK_EMAIL_TO` (comma-separated recipients). Until a sending domain is verified in Resend, delivery only works to the Resend account owner's address — verify a domain and add a `TASK_EMAIL_FROM` secret (e.g. `Covenant Dashboard <alerts@yourdomain.com>`) for team-wide delivery. Without these secrets the nightly run still syncs tasks and just logs what it would have sent.
 

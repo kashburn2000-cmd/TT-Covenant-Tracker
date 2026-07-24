@@ -27,6 +27,7 @@
 import {
   buildLoanTasks,
   buildCovenantTasks,
+  buildConversionTasks,
   buildReportingTasks,
   tasksNeedingEmail,
   digestHtml,
@@ -66,7 +67,14 @@ async function upsertTasks(rows) {
 
 async function main() {
   // ── 1. Generate ─────────────────────────────────────────────────────────
-  const loans = await sbGet('loans?select=id,property_name,borrower_entity,lead_lender,loan_amount,loan_type,maturity_date,extension_count,extension_term_months,extension_fee_pct,extension_maturity_date');
+  // Conversion columns may predate db/loan_conversion_setup.sql — fall back
+  // to the base column list if the wider select is rejected.
+  let loans;
+  try {
+    loans = await sbGet('loans?select=id,property_name,borrower_entity,lead_lender,loan_amount,loan_type,maturity_date,extension_count,extension_term_months,extension_fee_pct,extension_maturity_date,conversion_window_start,conversion_window_end,conversion_fee_pct,conversion_terms');
+  } catch {
+    loans = await sbGet('loans?select=id,property_name,borrower_entity,lead_lender,loan_amount,loan_type,maturity_date,extension_count,extension_term_months,extension_fee_pct,extension_maturity_date');
+  }
   const properties = await sbGet('properties?select=id,property,lender,test_type,covenant_type,covenant_req,covenant_date,hidden,waived');
 
   let reporting = [];
@@ -87,12 +95,11 @@ async function main() {
     } else throw err;
   }
 
-  const generated = [
-    ...buildLoanTasks(loans, TODAY),
-    ...buildCovenantTasks(properties, TODAY),
-    ...reporting,
-  ];
-  console.log(`Generated ${generated.length} task(s): ${buildLoanTasks(loans, TODAY).length} loan, ${buildCovenantTasks(properties, TODAY).length} covenant, ${reporting.length} reporting.`);
+  const loanTasks = buildLoanTasks(loans, TODAY);
+  const covenantTasks = buildCovenantTasks(properties, TODAY);
+  const conversionTasks = buildConversionTasks(loans, TODAY);
+  const generated = [...loanTasks, ...covenantTasks, ...conversionTasks, ...reporting];
+  console.log(`Generated ${generated.length} task(s): ${loanTasks.length} loan, ${covenantTasks.length} covenant, ${conversionTasks.length} conversion, ${reporting.length} reporting.`);
 
   if (generated.length) await upsertTasks(generated);
   console.log('Tasks synced.');

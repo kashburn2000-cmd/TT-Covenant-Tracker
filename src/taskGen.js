@@ -93,6 +93,34 @@ export function buildLoanTasks(loans, todayISO) {
   return out;
 }
 
+// ── Rate conversion options → window-opening tasks ───────────────────────────
+// Loans with a floating→fixed conversion option (db/loan_conversion_setup.sql)
+// get a reminder due when the exercise window opens, so the conversion
+// decision gets made with runway instead of being discovered late.
+export function buildConversionTasks(loans, todayISO) {
+  const out = [];
+  for (const l of loans || []) {
+    if (!l.conversion_window_start || !inWindow(l.conversion_window_start, todayISO)) continue;
+    const name = l.property_name || l.borrower_entity || 'Unnamed loan';
+    const until = l.conversion_window_end ? ` Window runs through ${l.conversion_window_end}.` : '';
+    const fee = l.conversion_fee_pct != null ? ` Fee: ${l.conversion_fee_pct}%.` : '';
+    out.push({
+      dedupe_key: dedupeKey('conversion_window', 'loans', l.id, l.conversion_window_start),
+      kind: 'conversion_window',
+      title: `${name} — rate conversion window opens`,
+      detail: `${l.lead_lender || 'Lender n/a'} · evaluate fixing the rate vs. staying floating.${until}${fee}${l.conversion_terms ? ` ${l.conversion_terms}` : ''}`,
+      due_date: l.conversion_window_start,
+      lead_days: DEFAULT_LEAD_DAYS.conversion_window,
+      deal_name: name,
+      lender: l.lead_lender || null,
+      source: 'auto',
+      source_table: 'loans',
+      source_id: String(l.id),
+    });
+  }
+  return out;
+}
+
 // ── Covenant tracker properties → test-date tasks ────────────────────────────
 export function buildCovenantTasks(properties, todayISO) {
   const out = [];
