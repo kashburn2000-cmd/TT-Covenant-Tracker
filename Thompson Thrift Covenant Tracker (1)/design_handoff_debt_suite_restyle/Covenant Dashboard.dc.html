@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#eceae4;font-family:'IBM Plex Sans',system-ui,sans-serif}
+.dv-turn{padding:44px 48px 36px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 24px}
+.dv-tid{font:600 10px 'IBM Plex Mono',monospace;padding:3px 7px;background:#17160f;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 14px/1.2 'IBM Plex Sans',sans-serif;color:#17160f}
+.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:11px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px 'IBM Plex Mono',monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#17160f;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:9px;font:400 12px/1.35 'IBM Plex Sans',sans-serif;color:rgba(0,0,0,.55);max-width:1180px}
+.dv-olabel b{color:#17160f;font-weight:600}
+.dv-card{background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;box-shadow:0 6px 28px rgba(0,0,0,.09);overflow:hidden}
+.dv-opt:target .dv-oid{background:#b23b2e;color:#fff}
+.dv-next{margin:26px 0 0;font:12.5px/1.6 'IBM Plex Sans',sans-serif;color:rgba(0,0,0,.5);max-width:900px}
+.dv-next a{color:#17160f;text-decoration:none;border-bottom:1px solid rgba(0,0,0,.2)}
+a{color:#3a4a6b}a:hover{color:#26324a}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Covenant Tracker — three executive directions (neutral palette, risk-first)</span></div>
+<div class="dv-opts">
+
+<!-- ===================== 1a — THE LEDGER ===================== -->
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a><span><b>The Ledger.</b> Editorial, print-grade table. Serif masthead, hairline rules, monospace figures. Failing tests float to the top with a red tick. Analyst-dense but calm.</span></div>
+<div class="dv-card" style="width:1220px">
+  <!-- masthead -->
+  <div style="padding:22px 30px 18px;border-bottom:2px solid #17160f;display:flex;justify-content:space-between;align-items:flex-end">
+    <div>
+      <div style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.22em;color:#8a877f;text-transform:uppercase">Thompson Thrift · Portfolio Finance</div>
+      <div style="font:600 30px/1.05 'Source Serif 4',serif;color:#17160f;margin-top:6px;letter-spacing:-.01em">Covenant Tracker</div>
+    </div>
+    <div style="text-align:right;font:400 12px 'IBM Plex Mono',monospace;color:#74716a">
+      <div>Test date <span style="color:#17160f">03·31·2026</span></div>
+      <div style="margin-top:3px">Curve as of <span style="color:#17160f">03·03·2026</span></div>
+    </div>
+  </div>
+  <!-- tabs -->
+  <div style="display:flex;gap:26px;padding:0 30px;border-bottom:1px solid rgba(0,0,0,.1)">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4"><div style="padding:13px 0;font:{{ t.w }} 12.5px 'IBM Plex Sans',sans-serif;color:{{ t.c }};border-bottom:2px solid {{ t.bd }};margin-bottom:-1px;letter-spacing:.01em">{{ t.name }}</div></sc-for>
+  </div>
+  <!-- summary tiles -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid rgba(0,0,0,.1)">
+    <div style="padding:18px 30px;border-right:1px solid rgba(0,0,0,.08)"><div style="font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#8a877f;text-transform:uppercase">Tests</div><div style="font:600 28px 'IBM Plex Mono',monospace;color:#17160f;margin-top:5px">{{ sumTests }}</div></div>
+    <div style="padding:18px 30px;border-right:1px solid rgba(0,0,0,.08)"><div style="font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#8a877f;text-transform:uppercase">Passing</div><div style="font:600 28px 'IBM Plex Mono',monospace;color:#2f6b45;margin-top:5px">{{ sumPass }}</div></div>
+    <div style="padding:18px 30px;border-right:1px solid rgba(0,0,0,.08)"><div style="font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#8a877f;text-transform:uppercase">Failing</div><div style="font:600 28px 'IBM Plex Mono',monospace;color:#b23b2e;margin-top:5px">{{ sumFail }}</div></div>
+    <div style="padding:18px 30px"><div style="font:500 10.5px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#8a877f;text-transform:uppercase">Potential max paydown</div><div style="font:600 28px 'IBM Plex Mono',monospace;color:#17160f;margin-top:5px">{{ sumPaydown }}</div></div>
+  </div>
+  <!-- table header -->
+  <div style="display:grid;grid-template-columns:16px 2.3fr 1fr 1fr 1.5fr 1.7fr 1fr 1.4fr;gap:14px;padding:11px 30px 11px 20px;border-bottom:1px solid #17160f;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#8a877f;text-transform:uppercase">
+    <div></div><div>Property</div><div style="text-align:right">Loan</div><div style="text-align:right">NOI</div><div style="text-align:right">Rate · prong</div><div>DSCR vs cov.</div><div style="text-align:right">Debt yield</div><div style="text-align:right">Status</div>
+  </div>
+  <!-- rows -->
+  <sc-for list="{{ risk }}" as="d" hint-placeholder-count="9">
+    <div style="display:grid;grid-template-columns:16px 2.3fr 1fr 1fr 1.5fr 1.7fr 1fr 1.4fr;gap:14px;padding:13px 30px 13px 20px;border-bottom:1px solid rgba(0,0,0,.07);align-items:center;border-left:3px solid {{ d.tick }}">
+      <div style="font:600 12px 'IBM Plex Mono',monospace;color:#c7c4bc">{{ d.rank }}</div>
+      <div><div style="font:600 14px 'IBM Plex Sans',sans-serif;color:#17160f">{{ d.name }}</div><div style="font:400 11px 'IBM Plex Mono',monospace;color:#8a877f;margin-top:2px">{{ d.loc }}</div></div>
+      <div style="text-align:right;font:500 13px 'IBM Plex Mono',monospace;color:#17160f">{{ d.loan }}</div>
+      <div style="text-align:right;font:500 13px 'IBM Plex Mono',monospace;color:#17160f">{{ d.noi }}</div>
+      <div style="text-align:right"><div style="font:500 13px 'IBM Plex Mono',monospace;color:#17160f">{{ d.rate }}</div><div style="font:400 10px 'IBM Plex Mono',monospace;color:#8a877f;margin-top:2px">{{ d.ratePr }}</div></div>
+      <div>
+        <div style="display:flex;align-items:baseline;gap:6px"><span style="font:600 15px 'IBM Plex Mono',monospace;color:{{ d.fillColor }}">{{ d.dscrFmt }}</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#8a877f">/ {{ d.thrFmt }}</span></div>
+        <div style="position:relative;height:5px;background:rgba(0,0,0,.07);border-radius:3px;margin-top:6px"><div style="position:absolute;left:0;top:0;bottom:0;width:{{ d.fillPct }};background:{{ d.fillColor }};border-radius:3px"></div><div style="position:absolute;left:62.5%;top:-2px;bottom:-2px;width:1.5px;background:#17160f"></div></div>
+      </div>
+      <div style="text-align:right;font:500 13px 'IBM Plex Mono',monospace;color:#17160f">{{ d.dy }}</div>
+      <div style="text-align:right"><span style="display:inline-block;font:600 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;padding:4px 9px;border-radius:4px;color:{{ d.statusColor }};background:{{ d.statusBg }}">{{ d.statusLabel }}</span><div style="font:400 10px 'IBM Plex Mono',monospace;color:#b23b2e;margin-top:4px;min-height:12px">{{ d.paydownFmt }}</div></div>
+    </div>
+  </sc-for>
+  <div style="padding:14px 30px;display:flex;gap:22px;font:400 10.5px 'IBM Plex Mono',monospace;color:#8a877f;align-items:center">
+    <span>│ = covenant minimum</span>
+    <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:#2f6b45;display:inline-block"></span>Pass</span>
+    <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:#a5701f;display:inline-block"></span>Thin cushion</span>
+    <span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:2px;background:#b23b2e;display:inline-block"></span>Fail / Waived</span>
+    <span style="margin-left:auto;color:#3a4a6b">Export ▾ · Doc View</span>
+  </div>
+</div>
+</div>
+
+<!-- ===================== 1b — SIGNAL ===================== -->
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a><span><b>Signal.</b> Executive glance first. An "Attention required" band surfaces only the breaches with the one number and the cure. Portfolio table below uses cushion bars + trend vs prior test.</span></div>
+<div class="dv-card" style="width:1220px;background:#faf9f6">
+  <!-- top bar -->
+  <div style="padding:16px 30px;background:#17160f;display:flex;justify-content:space-between;align-items:center">
+    <div style="display:flex;align-items:center;gap:30px">
+      <div style="font:700 15px 'IBM Plex Sans',sans-serif;color:#fff;letter-spacing:.02em">Debt & Covenant</div>
+      <div style="display:flex;gap:22px"><sc-for list="{{ tabsDark }}" as="t" hint-placeholder-count="4"><span style="font:{{ t.w }} 12.5px 'IBM Plex Sans',sans-serif;color:{{ t.c }}">{{ t.name }}</span></sc-for></div>
+    </div>
+    <div style="font:400 11.5px 'IBM Plex Mono',monospace;color:#a8a49a">Test date 03/31/2026</div>
+  </div>
+  <!-- title + summary -->
+  <div style="padding:26px 30px 20px;display:flex;justify-content:space-between;align-items:flex-end">
+    <div><div style="font:600 24px 'IBM Plex Sans',sans-serif;color:#17160f;letter-spacing:-.01em">Covenant Tracker</div><div style="font:400 13px 'IBM Plex Sans',sans-serif;color:#74716a;margin-top:4px">Q1 2026 · 9 active tests across the multifamily portfolio</div></div>
+    <div style="display:flex;gap:10px">
+      <div style="padding:10px 16px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:8px;text-align:center"><div style="font:600 22px 'IBM Plex Mono',monospace;color:#2f6b45">{{ sumPass }}</div><div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8a877f;text-transform:uppercase;margin-top:2px">Passing</div></div>
+      <div style="padding:10px 16px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:8px;text-align:center"><div style="font:600 22px 'IBM Plex Mono',monospace;color:#b23b2e">{{ sumFail }}</div><div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8a877f;text-transform:uppercase;margin-top:2px">Failing</div></div>
+      <div style="padding:10px 16px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:8px;text-align:center"><div style="font:600 22px 'IBM Plex Mono',monospace;color:#17160f">{{ sumPaydown }}</div><div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8a877f;text-transform:uppercase;margin-top:2px">Cure paydown</div></div>
+    </div>
+  </div>
+  <!-- attention band -->
+  <div style="margin:0 30px 24px;padding:18px 20px;background:#fbf3f1;border:1px solid rgba(178,59,46,.28);border-radius:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><span style="width:8px;height:8px;border-radius:50%;background:#b23b2e;display:inline-block"></span><span style="font:600 12px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#b23b2e;text-transform:uppercase">Attention required · 3</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <sc-for list="{{ attention }}" as="a" hint-placeholder-count="3">
+        <div style="background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:8px;padding:15px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="font:600 14px 'IBM Plex Sans',sans-serif;color:#17160f">{{ a.name }}</div><span style="font:600 9.5px 'IBM Plex Mono',monospace;letter-spacing:.08em;padding:3px 8px;border-radius:4px;color:{{ a.statusColor }};background:{{ a.statusBg }}">{{ a.statusLabel }}</span></div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:12px"><span style="font:600 26px 'IBM Plex Mono',monospace;color:{{ a.fillColor }}">{{ a.dscrFmt }}</span><span style="font:400 11px 'IBM Plex Mono',monospace;color:#8a877f">DSCR · cov {{ a.thrFmt }}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-top:12px;padding-top:11px;border-top:1px solid rgba(0,0,0,.07)"><span style="font:400 11px 'IBM Plex Sans',sans-serif;color:#74716a">Paydown to cure</span><span style="font:600 12px 'IBM Plex Mono',monospace;color:#b23b2e">{{ a.paydownFmt }}</span></div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <!-- table -->
+  <div style="margin:0 30px 26px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:10px;overflow:hidden">
+    <div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 2fr 1fr 1.1fr;gap:14px;padding:12px 20px;background:#f4f2ec;font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8a877f;text-transform:uppercase">
+      <div>Property</div><div style="text-align:right">Loan</div><div style="text-align:right">Rate</div><div>DSCR cushion</div><div style="text-align:right">vs prior</div><div style="text-align:right">Status</div>
+    </div>
+    <sc-for list="{{ deals }}" as="d" hint-placeholder-count="9">
+      <div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 2fr 1fr 1.1fr;gap:14px;padding:13px 20px;border-top:1px solid rgba(0,0,0,.06);align-items:center">
+        <div><div style="font:600 13.5px 'IBM Plex Sans',sans-serif;color:#17160f">{{ d.name }}</div><div style="font:400 10.5px 'IBM Plex Mono',monospace;color:#8a877f;margin-top:2px">{{ d.loc }}</div></div>
+        <div style="text-align:right;font:500 12.5px 'IBM Plex Mono',monospace;color:#17160f">{{ d.loan }}</div>
+        <div style="text-align:right;font:500 12.5px 'IBM Plex Mono',monospace;color:#17160f">{{ d.rate }}</div>
+        <div style="display:flex;align-items:center;gap:10px"><span style="font:600 13px 'IBM Plex Mono',monospace;color:{{ d.fillColor }};min-width:44px">{{ d.dscrFmt }}</span><div style="position:relative;flex:1;height:6px;background:rgba(0,0,0,.07);border-radius:3px"><div style="position:absolute;left:0;top:0;bottom:0;width:{{ d.fillPct }};background:{{ d.fillColor }};border-radius:3px"></div><div style="position:absolute;left:62.5%;top:-2px;bottom:-2px;width:1.5px;background:#17160f"></div></div></div>
+        <div style="text-align:right;font:500 12px 'IBM Plex Mono',monospace;color:{{ d.trendColor }}">{{ d.trendArrow }} {{ d.priorFmt }}</div>
+        <div style="text-align:right"><span style="font:600 9.5px 'IBM Plex Mono',monospace;letter-spacing:.08em;padding:4px 9px;border-radius:4px;color:{{ d.statusColor }};background:{{ d.statusBg }}">{{ d.statusLabel }}</span></div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</div>
+
+<!-- ===================== 1c — CONSOLE ===================== -->
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a><span><b>Console (my pick).</b> Sidebar shell + split view. Left: risk-ranked covenant list for the glance. Right: the full math transparency chain for the selected test — three-prong rate, NOI build-up, debt service, result, cure. One screen serves the exec and the analyst. <b>Click a property.</b></span></div>
+<div class="dv-card" style="width:1220px;display:flex;height:720px">
+  <!-- sidebar -->
+  <div style="width:184px;flex:none;background:#17160f;display:flex;flex-direction:column;padding:20px 0">
+    <div style="padding:0 20px 22px"><div style="font:700 14px 'IBM Plex Sans',sans-serif;color:#fff;line-height:1.25">Thompson<br>Thrift</div><div style="font:500 9px 'IBM Plex Mono',monospace;letter-spacing:.18em;color:#77746c;text-transform:uppercase;margin-top:6px">Debt Suite</div></div>
+    <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:11px;padding:10px 20px;font:{{ n.w }} 12.5px 'IBM Plex Sans',sans-serif;color:{{ n.c }};background:{{ n.bg }};border-left:2px solid {{ n.bd }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ n.dot }};display:inline-block"></span>{{ n.name }}</div>
+    </sc-for>
+    <div style="margin-top:auto;padding:16px 20px 0;border-top:1px solid rgba(255,255,255,.1);font:400 10px 'IBM Plex Mono',monospace;color:#77746c">🔒 View only · unlock to edit</div>
+  </div>
+  <!-- list column -->
+  <div style="width:340px;flex:none;border-right:1px solid rgba(0,0,0,.1);display:flex;flex-direction:column">
+    <div style="padding:18px 22px 14px;border-bottom:1px solid rgba(0,0,0,.1)">
+      <div style="font:600 18px 'IBM Plex Sans',sans-serif;color:#17160f">Covenant Tracker</div>
+      <div style="font:400 11px 'IBM Plex Mono',monospace;color:#8a877f;margin-top:3px">03/31/2026 · {{ sumFail }} failing · {{ sumPaydown }} to cure</div>
+      <div style="display:flex;gap:7px;margin-top:14px">
+        <sc-for list="{{ chips }}" as="c" hint-placeholder-count="3"><span onClick="{{ c.onPick }}" style="cursor:pointer;font:600 10.5px 'IBM Plex Mono',monospace;padding:5px 11px;border-radius:20px;color:{{ c.c }};background:{{ c.bg }};border:1px solid {{ c.bd }}">{{ c.label }}</span></sc-for>
+      </div>
+    </div>
+    <div style="overflow:auto;flex:1">
+      <sc-for list="{{ list }}" as="d" hint-placeholder-count="9">
+        <div onClick="{{ d.onPick }}" style="cursor:pointer;padding:14px 22px;border-bottom:1px solid rgba(0,0,0,.06);background:{{ d.rowBg }};border-left:3px solid {{ d.selBd }}">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:600 13.5px 'IBM Plex Sans',sans-serif;color:#17160f">{{ d.name }}</span><span style="font:600 9px 'IBM Plex Mono',monospace;letter-spacing:.06em;padding:3px 7px;border-radius:4px;color:{{ d.statusColor }};background:{{ d.statusBg }}">{{ d.statusLabel }}</span></div>
+          <div style="display:flex;align-items:center;gap:9px;margin-top:9px"><span style="font:600 14px 'IBM Plex Mono',monospace;color:{{ d.fillColor }};min-width:42px">{{ d.dscrFmt }}</span><div style="position:relative;flex:1;height:5px;background:rgba(0,0,0,.07);border-radius:3px"><div style="position:absolute;left:0;top:0;bottom:0;width:{{ d.fillPct }};background:{{ d.fillColor }};border-radius:3px"></div><div style="position:absolute;left:62.5%;top:-1.5px;bottom:-1.5px;width:1.5px;background:#17160f"></div></div><span style="font:400 10px 'IBM Plex Mono',monospace;color:#8a877f">{{ d.loc }}</span></div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <!-- detail pane -->
+  <div style="flex:1;overflow:auto;background:#faf9f6">
+    <div style="padding:22px 28px 16px;border-bottom:1px solid rgba(0,0,0,.1);display:flex;justify-content:space-between;align-items:flex-start">
+      <div><div style="font:600 21px 'IBM Plex Sans',sans-serif;color:#17160f">{{ sel.name }}</div><div style="font:400 11.5px 'IBM Plex Mono',monospace;color:#8a877f;margin-top:3px">{{ sel.loc }} · Test 03/31/2026 · {{ sel.amort }}</div></div>
+      <span style="font:600 10.5px 'IBM Plex Mono',monospace;letter-spacing:.08em;padding:5px 11px;border-radius:5px;color:{{ sel.statusColor }};background:{{ sel.statusBg }}">{{ sel.statusLabel }}</span>
+    </div>
+    <!-- result cards -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:20px 28px">
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:15px"><div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8a877f;text-transform:uppercase">DSCR</div><div style="display:flex;align-items:baseline;gap:7px;margin-top:7px"><span style="font:600 27px 'IBM Plex Mono',monospace;color:{{ sel.fillColor }}">{{ sel.dscrFmt }}</span><span style="font:400 11px 'IBM Plex Mono',monospace;color:#8a877f">/ {{ sel.thrFmt }}</span></div></div>
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:15px"><div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8a877f;text-transform:uppercase">Debt Yield</div><div style="display:flex;align-items:baseline;gap:7px;margin-top:7px"><span style="font:600 27px 'IBM Plex Mono',monospace;color:#17160f">{{ sel.dy }}</span><span style="font:400 11px 'IBM Plex Mono',monospace;color:#8a877f">/ {{ sel.dyThr }}</span></div></div>
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:15px"><div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:#8a877f;text-transform:uppercase">Paydown to cure</div><div style="font:600 27px 'IBM Plex Mono',monospace;color:{{ sel.paydownColor }};margin-top:7px">{{ sel.paydownBig }}</div></div>
+    </div>
+    <!-- math chain -->
+    <div style="padding:4px 28px 28px">
+      <div style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#8a877f;text-transform:uppercase;margin:12px 0 12px">Rate selection · highest of three prongs</div>
+      <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;overflow:hidden">
+        <sc-for list="{{ sel.prongs }}" as="p" hint-placeholder-count="3">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.06);background:{{ p.bg }}">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;border-radius:50%;background:{{ p.dot }};display:inline-block"></span><span style="font:{{ p.w }} 12.5px 'IBM Plex Sans',sans-serif;color:#17160f">{{ p.l }}</span>{{ p.tag }}</div>
+            <span style="font:{{ p.w }} 13px 'IBM Plex Mono',monospace;color:#17160f">{{ p.r }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px">
+        <div>
+          <div style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#8a877f;text-transform:uppercase;margin-bottom:10px">NOI build-up</div>
+          <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:6px 16px">
+            <sc-for list="{{ sel.noiRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(0,0,0,.05)"><span style="font:{{ r.w }} 12px 'IBM Plex Sans',sans-serif;color:{{ r.c }}">{{ r.l }}</span><span style="font:{{ r.w }} 12px 'IBM Plex Mono',monospace;color:{{ r.c }}">{{ r.v }}</span></div></sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font:600 11px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#8a877f;text-transform:uppercase;margin-bottom:10px">Debt service &amp; result</div>
+          <div style="background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:9px;padding:6px 16px">
+            <sc-for list="{{ sel.dsRows }}" as="r" hint-placeholder-count="4"><div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(0,0,0,.05)"><span style="font:{{ r.w }} 12px 'IBM Plex Sans',sans-serif;color:{{ r.c }}">{{ r.l }}</span><span style="font:{{ r.w }} 12px 'IBM Plex Mono',monospace;color:{{ r.c }}">{{ r.v }}</span></div></sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Say the word and I'll build out your pick across the other three screens. Try: "extend <a class="dv-oid" href="#1c">1c</a> to Debt Dashboard, Pipeline and Map" · "mix <a class="dv-oid" href="#1b">1b</a>'s attention band into <a class="dv-oid" href="#1a">1a</a>" · "show <a class="dv-oid" href="#1c">1c</a> with a light sidebar" · "give me a denser terminal direction".</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { sel: 1, filter: 'all' };
+
+  raw() {
+    return [
+      { id:'harbor', name:'Harbor View', loc:'Tampa, FL', status:'FAIL', loan:'$52.6M', noi:'$3.30M', rate:'6.88%', ratePr:'10Y + 2.05', dscr:1.18, thr:1.20, dy:'6.8%', dyThr:'7.0%', paydown:'$2.4M', prior:1.24, amort:'30-yr amort',
+        prongs:[['1-Mo SOFR + 2.35','6.70%',0],['10-Yr UST + 2.05','6.88%',1],['Sizing floor','6.25%',0]],
+        noiRows:[['T-12 income','$5.94M',0],['T-12 operating exp','($2.64M)',0],['Net operating income','$3.30M',1]],
+        dsRows:[['Loan amount','$52.6M',0],['All-in rate','6.88%',0],['Annual debt service','$3.79M',0],['DSCR','1.18x',1]] },
+      { id:'stone', name:'Stonebridge', loc:'Raleigh, NC', status:'WAIVED', loan:'$41.0M', noi:'$2.34M', rate:'6.55%', ratePr:'SOFR + 2.20', dscr:1.09, thr:1.15, dy:'6.4%', dyThr:'7.0%', paydown:'$1.1M', prior:1.12, amort:'30-yr amort',
+        prongs:[['1-Mo SOFR + 2.20','6.55%',1],['10-Yr UST + 1.95','6.40%',0],['Sizing floor','6.10%',0]],
+        noiRows:[['T-12 income','$4.42M',0],['T-12 operating exp','($2.08M)',0],['Net operating income','$2.34M',1]],
+        dsRows:[['Loan amount','$41.0M',0],['All-in rate','6.55%',0],['Annual debt service','$2.15M',0],['DSCR','1.09x',1]] },
+      { id:'cedar', name:'Cedar Ridge', loc:'Columbus, OH', status:'THIN', loan:'$29.8M', noi:'$2.05M', rate:'6.30%', ratePr:'SOFR + 1.95', dscr:1.24, thr:1.20, dy:'7.3%', dyThr:'7.0%', paydown:'', prior:1.25, amort:'35-yr amort',
+        prongs:[['1-Mo SOFR + 1.95','6.30%',1],['10-Yr UST + 1.80','6.15%',0],['Sizing floor','6.00%',0]],
+        noiRows:[['T-12 income','$3.61M',0],['T-12 operating exp','($1.56M)',0],['Net operating income','$2.05M',1]],
+        dsRows:[['Loan amount','$29.8M',0],['All-in rate','6.30%',0],['Annual debt service','$1.65M',0],['DSCR','1.24x',1]] },
+      { id:'river', name:'Riverwalk Flats', loc:'Nashville, TN', status:'THIN', loan:'$33.5M', noi:'$2.28M', rate:'6.48%', ratePr:'SOFR + 2.10', dscr:1.21, thr:1.20, dy:'7.1%', dyThr:'7.0%', paydown:'', prior:1.19, amort:'30-yr amort',
+        prongs:[['1-Mo SOFR + 2.10','6.48%',1],['10-Yr UST + 1.90','6.28%',0],['Sizing floor','6.15%',0]],
+        noiRows:[['T-12 income','$4.05M',0],['T-12 operating exp','($1.77M)',0],['Net operating income','$2.28M',1]],
+        dsRows:[['Loan amount','$33.5M',0],['All-in rate','6.48%',0],['Annual debt service','$1.88M',0],['DSCR','1.21x',1]] },
+      { id:'fund', name:'2022 Fund · Barings', loc:'Multi-market · 9 assets', status:'THIN', loan:'$210M', noi:'$12.6M', rate:'6.10%', ratePr:'T-3 rolling', dscr:1.07, thr:1.05, dy:'—', dyThr:'—', paydown:'', prior:1.06, amort:'variable',
+        prongs:[['1-Mo SOFR + 1.85','6.10%',1],['10-Yr UST + 1.70','5.95%',0],['Sizing floor','5.75%',0]],
+        noiRows:[['Aggregate T-3 income','$21.0M',0],['Operating exp + adj.','($8.40M)',0],['Net operating income','$12.6M',1]],
+        dsRows:[['Commitment','$210M',0],['T-3 rolling balance','$188M',0],['Rolling interest','$11.8M',0],['DSCR','1.07x',1]] },
+      { id:'maple', name:'Maple Crossing', loc:'Indianapolis, IN', status:'PASS', loan:'$38.2M', noi:'$2.71M', rate:'6.42%', ratePr:'SOFR + 2.10', dscr:1.42, thr:1.20, dy:'9.1%', dyThr:'7.0%', paydown:'', prior:1.38, amort:'30-yr amort',
+        prongs:[['1-Mo SOFR + 2.10','6.42%',1],['10-Yr UST + 1.90','6.05%',0],['Sizing floor','6.00%',0]],
+        noiRows:[['T-12 income','$4.78M',0],['T-12 operating exp','($2.07M)',0],['Net operating income','$2.71M',1]],
+        dsRows:[['Loan amount','$38.2M',0],['All-in rate','6.42%',0],['Annual debt service','$1.91M',0],['DSCR','1.42x',1]] },
+      { id:'aspen', name:'Aspen Grove', loc:'Denver, CO', status:'PASS', loan:'$44.9M', noi:'$3.31M', rate:'6.35%', ratePr:'SOFR + 2.00', dscr:1.33, thr:1.20, dy:'8.4%', dyThr:'7.0%', paydown:'', prior:1.30, amort:'30-yr amort',
+        prongs:[['1-Mo SOFR + 2.00','6.35%',1],['10-Yr UST + 1.85','6.10%',0],['Sizing floor','5.95%',0]],
+        noiRows:[['T-12 income','$5.86M',0],['T-12 operating exp','($2.55M)',0],['Net operating income','$3.31M',1]],
+        dsRows:[['Loan amount','$44.9M',0],['All-in rate','6.35%',0],['Annual debt service','$2.49M',0],['DSCR','1.33x',1]] },
+      { id:'summit', name:'Summit Park', loc:'Phoenix, AZ', status:'PASS', loan:'$36.1M', noi:'$2.79M', rate:'6.28%', ratePr:'SOFR + 1.95', dscr:1.48, thr:1.20, dy:'9.6%', dyThr:'7.0%', paydown:'', prior:1.45, amort:'30-yr amort',
+        prongs:[['1-Mo SOFR + 1.95','6.28%',1],['10-Yr UST + 1.80','6.05%',0],['Sizing floor','5.90%',0]],
+        noiRows:[['T-12 income','$4.92M',0],['T-12 operating exp','($2.13M)',0],['Net operating income','$2.79M',1]],
+        dsRows:[['Loan amount','$36.1M',0],['All-in rate','6.28%',0],['Annual debt service','$1.89M',0],['DSCR','1.48x',1]] },
+      { id:'lake', name:'Lakeshore Landing', loc:'Kansas City, MO', status:'PASS', loan:'$27.4M', noi:'$2.14M', rate:'6.20%', ratePr:'SOFR + 1.90', dscr:1.55, thr:1.20, dy:'10.2%', dyThr:'7.0%', paydown:'', prior:1.50, amort:'30-yr amort',
+        prongs:[['1-Mo SOFR + 1.90','6.20%',1],['10-Yr UST + 1.75','6.00%',0],['Sizing floor','5.85%',0]],
+        noiRows:[['T-12 income','$3.78M',0],['T-12 operating exp','($1.64M)',0],['Net operating income','$2.14M',1]],
+        dsRows:[['Loan amount','$27.4M',0],['All-in rate','6.20%',0],['Annual debt service','$1.38M',0],['DSCR','1.55x',1]] },
+    ];
+  }
+
+  meta(s) {
+    if (s === 'FAIL') return { label:'FAIL', color:'#b23b2e', bg:'rgba(178,59,46,.11)', tick:'#b23b2e', fill:'#b23b2e' };
+    if (s === 'WAIVED') return { label:'WAIVED', color:'#8a5a1f', bg:'rgba(138,90,31,.12)', tick:'#b23b2e', fill:'#b23b2e' };
+    if (s === 'THIN') return { label:'THIN', color:'#8a5a1f', bg:'rgba(165,112,31,.13)', tick:'#a5701f', fill:'#a5701f' };
+    return { label:'PASS', color:'#2f6b45', bg:'rgba(47,107,69,.11)', tick:'transparent', fill:'#2f6b45' };
+  }
+
+  decorate(d) {
+    const m = this.meta(d.status);
+    const scaleMax = d.thr * 1.6;
+    const fillPct = Math.min(100, Math.round((d.dscr / scaleMax) * 100));
+    const dPrior = +(d.dscr - d.prior).toFixed(2);
+    const trendArrow = dPrior > 0.01 ? '▲' : dPrior < -0.01 ? '▼' : '—';
+    const trendColor = dPrior > 0.01 ? '#2f6b45' : dPrior < -0.01 ? '#b23b2e' : '#8a877f';
+    return {
+      ...d,
+      statusLabel: m.label, statusColor: m.color, statusBg: m.bg, tick: m.tick, fillColor: m.fill,
+      dscrFmt: d.dscr.toFixed(2) + 'x', thrFmt: d.thr.toFixed(2) + 'x',
+      fillPct: fillPct + '%',
+      paydownFmt: d.paydown ? '↳ cure ' + d.paydown : '',
+      paydownBig: d.paydown || 'None',
+      paydownColor: d.paydown ? '#b23b2e' : '#2f6b45',
+      trendArrow, trendColor, priorFmt: d.prior.toFixed(2),
+      prongs: d.prongs.map(p => ({
+        l: p[0], r: p[1],
+        w: p[2] ? 600 : 400,
+        bg: p[2] ? 'rgba(47,107,69,.07)' : '#fff',
+        dot: p[2] ? '#2f6b45' : '#d4d1c9',
+        tag: p[2] ? React.createElement('span', { style:{ font:"600 8.5px 'IBM Plex Mono',monospace", letterSpacing:'.08em', padding:'2px 6px', borderRadius:'3px', color:'#2f6b45', background:'rgba(47,107,69,.12)', marginLeft:'2px' } }, 'GOVERNS') : '',
+      })),
+      noiRows: d.noiRows.map(r => ({ l:r[0], v:r[1], w: r[2]?600:400, c: r[2]?'#17160f':'#74716a' })),
+      dsRows: d.dsRows.map(r => ({ l:r[0], v:r[1], w: r[2]?600:400, c: r[2]?'#17160f':'#74716a' })),
+    };
+  }
+
+  renderVals() {
+    const order = { FAIL:0, WAIVED:1, THIN:2, PASS:3 };
+    const all = this.raw().map(d => this.decorate(d));
+    const risk = [...all].sort((a,b) => order[a.status]-order[b.status]).map((d,i) => ({ ...d, rank: String(i+1).padStart(2,'0') }));
+    const attention = risk.filter(d => d.status==='FAIL' || d.status==='WAIVED' || d.status==='THIN').slice(0,3);
+
+    const sumTests = all.length;
+    const sumFail = all.filter(d => d.status==='FAIL').length;
+    const sumPass = all.filter(d => d.status!=='FAIL' && d.status!=='WAIVED').length;
+    const sumPaydown = '$3.5M';
+
+    // 1c list respects filter
+    const filter = this.state.filter;
+    const listBase = filter === 'fail' ? risk.filter(d => d.status==='FAIL'||d.status==='WAIVED')
+      : filter === 'thin' ? risk.filter(d => d.status==='THIN')
+      : risk;
+    const selId = this.state.sel != null ? (listBase[this.state.sel] ? listBase[this.state.sel].id : (risk[0]||{}).id) : (risk[0]||{}).id;
+    const list = listBase.map((d,i) => ({
+      ...d,
+      onPick: () => this.setState({ sel: i }),
+      rowBg: d.id===selId ? '#f4f2ec' : '#fff',
+      selBd: d.id===selId ? '#17160f' : 'transparent',
+    }));
+    const sel = (list.find(d => d.id===selId)) || list[0] || all[0];
+
+    const chip = (key,label) => ({
+      label, onPick: () => this.setState({ filter:key, sel:0 }),
+      c: filter===key ? '#fff' : '#74716a',
+      bg: filter===key ? '#17160f' : '#f4f2ec',
+      bd: filter===key ? '#17160f' : 'rgba(0,0,0,.1)',
+    });
+    const chips = [chip('all','All 9'), chip('fail','Failing 2'), chip('thin','Thin 3')];
+
+    const tab = (name, on) => ({ name, w: on?600:400, c: on?'#17160f':'#8a877f', bd: on?'#17160f':'transparent' });
+    const tabs = [tab('Covenant Tracker',true), tab('Debt Dashboard',false), tab('Lender Pipeline',false), tab('Project Map',false)];
+    const tabD = (name, on) => ({ name, w: on?600:400, c: on?'#fff':'#a8a49a' });
+    const tabsDark = [tabD('Covenant',true), tabD('Debt Dashboard',false), tabD('Pipeline',false), tabD('Map',false)];
+
+    const nav = (name, on, dot) => ({ name, w: on?600:500, c: on?'#fff':'#b8b5ad', bg: on?'rgba(255,255,255,.08)':'transparent', bd: on?'#fff':'transparent', dot: dot||'transparent' });
+    const navItems = [
+      nav('Covenant Tracker', true, '#b23b2e'),
+      nav('Debt Dashboard', false),
+      nav('Lender Pipeline', false),
+      nav('Project Map', false),
+      nav('Loans', false),
+      nav('Leasing', false),
+    ];
+
+    return { tabs, tabsDark, navItems, chips, list, sel, risk, deals: all, attention, sumTests, sumFail, sumPass, sumPaydown };
+  }
+}
+</script>
+</body>
+</html>
