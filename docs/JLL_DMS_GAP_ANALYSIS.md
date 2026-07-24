@@ -111,7 +111,65 @@ For balance — capabilities we have that the DMS overview doesn't mention: payd
 
 ---
 
-## 4. Descoped items (removed during 2026-07-24 review)
+## 4. Implementation overviews (how each gap would land in this codebase)
+
+Context for all items: the app is a React/Vite SPA talking straight to Supabase (PostgREST + Auth + Storage), covenant math lives in the pure-JS engine `src/calc.js` (mirrored to SQL in `db/powerbi_views.sql` with an equivalence validator), and all automation runs as scheduled GitHub Actions scripts (`scripts/*.mjs`, e.g. the daily rate pull and IMAP leasing ingest). Most gaps below reuse one of those three patterns.
+
+### 4.1 Tasks, email reminders & activity feed (Tier 1)
+- **Schema:** new `tasks` table — `deal_uid`, `kind` (maturity / extension window / reporting item / covenant test / upload), `due_date`, `lead_days`, `status`, `assignee_email`, `source` (auto vs manual), `completed_at`.
+- **Generation:** a nightly GitHub Actions script (same pattern as `pull-rates.mjs`) scans `loans`, `properties`, and the new extension/reporting tables and upserts tasks at 90/60/30-day lead times; idempotent by `(deal_uid, kind, due_date)`.
+- **Email:** send via a transactional provider (Resend/SendGrid free tier) or SMTP on the Gmail account already used for leasing ingest. Covenant-breach alerts hook the same script: re-run the calc (logic already exists in the Power BI SQL views) and email on pass→fail transitions.
+- **UI:** a Tasks widget on the Debt Dashboard plus a badge in the header; the activity feed is just a merged, date-ordered query of `tasks` + `property_events` (which already records every test snapshot and comment).
+
+### 4.2 Reporting requirements, extension options & fee tracking (Tier 1)
+- Extend the loan-abstract schema with child tables: `loan_reporting_requirements` (item, frequency, due day, recipient, grace period), `loan_extension_options` (count, term, fee bps, notice window, conditions such as DSCR hurdles), and fee columns/`loan_fees` (origination, unused-line, exit, guaranty fee bps).
+- Update the ingest JSON sidecar spec (`ingest/README.md`) so newly abstracted loans carry these fields; backfill existing loans via the same paste-JSON import flow.
+- Render in the Loans tab expandable detail; these rows become the feed for the task generator in 4.1 — that pairing is the whole point.
+
+### 4.3 MFA / SSO (Tier 1)
+- Enable TOTP MFA in the Supabase dashboard and add an enroll/challenge step to `AuthGate.jsx` (`supabase.auth.mfa.*` — supported by the SDK already in use). SSO = enabling the Google Workspace (or Azure AD) OAuth provider and adding a "Sign in with Google" button. Days of work, no schema changes. A follow-on: retire the hardcoded shared edit PIN in favor of a per-user `can_edit` flag checked by RLS.
+
+### 4.4 Per-lender exposure rollup (Tier 2)
+- Data already exists in `loans` and `debt_projects`. Add a lender-name normalization map (same pattern as the deal registry's fuzzy matching) so "First Financial" and "First Financial Bank" roll up together, then a new Debt Dashboard widget aggregating per lender: deal count, total commitment, outstanding, TTH guaranty exposure, weighted spread, nearest maturity. Pure frontend aggregation plus one small lookup table.
+
+### 4.5 Lender relationship comparison (Tier 2)
+- Depends on 4.2 (structured fees) — once fees and covenant thresholds are first-class columns, this is a comparison view over the same rollup as 4.4: average spread, fee load per dollar borrowed, covenant tightness (required DSCR/DY), guaranty burden, extension flexibility. A sortable table plus a spread-vs-fees scatter; no new data collection.
+
+### 4.6 Per-loan amortization / draw schedule views (Tier 2)
+- Generalize the existing variable-loan `loan_schedule` jsonb pattern: a schedule generator in `calc.js` (monthly balance / interest / principal from close date, IO period, amortization, and rate terms — inputs the engine already consumes), plus an expandable schedule table + balance chart in the Loans tab. Construction draws: allow uploading an actual draw schedule workbook, reusing the header-based parser pattern from `parseDebtSchedules.js`.
+
+### 4.7 Rate conversion options (Tier 2–3)
+- Schema-only at first: a `conversion_option` jsonb on `loans` (exercise window, fixed-rate formula, fee) surfaced in the loan detail view, with a task from 4.1 ahead of the window opening. Modeling the option's effect on projected debt service can come later as a scenario toggle.
+
+### 4.8 Scenario analysis expansion (Tier 3)
+- `calc.js` is a pure function of its inputs, so shocks are parameters, not new math: NOI ±%, parallel rate-curve shift in bps, spread shift, and a cap-rate/property-value shift (drives LTV and refi sizing). Add a scenario drawer that applies shocks portfolio-wide, shows side-by-side base-vs-scenario covenant results, and saves named scenarios to a `scenarios` table. Volatility inputs only matter for hedge valuation — defer to 4.11.
+
+### 4.9 Document repository per deal (Tier 3)
+- Extend the existing private-bucket + signed-URL pattern (`loan-docs`) to folders per `deal_uid` and a `deal_documents` table (category: loan agreement / guaranty / amendment / hedge / other, filename, storage path, uploaded_by, uploaded_at). Upload/download UI in the Loans and Pipeline detail views. Optionally record document versions as new rows rather than overwrites — that also closes the version-history gap.
+
+### 4.10 Report customization (Tier 3, pragmatic version)
+- Skip a full report builder. Two cheaper paths: (a) saved report templates — a `report_templates` table storing column sets, filters, grouping, and title/branding that drive the existing jsPDF/ExcelJS exporters (the column-picker infrastructure already exists); (b) lean on the Power BI mirror (`powerbi` schema views) as the official "fully custom reporting" answer, since it already exposes the whole covenant engine to a real report designer.
+
+### 4.11 Hedge / derivatives module (Tier 4 — phase it)
+- **Phase 1 — capture & remind:** `hedges` table (deal_uid, type cap/swap, notional schedule jsonb, strike or fixed rate, index, effective/maturity dates, counterparty, premium paid, escrow/collateral terms) + a `hedge-docs` storage folder + maturity tasks via 4.1. This alone answers "where are our caps and when do they expire."
+- **Phase 2 — analytics from data we already have:** with the Chatham SOFR forward curve in-house, compute expected cap receipts and forward-looking replacement-cap cost estimates (intrinsic value against forwards), and swap MTM by discounting fixed-vs-floating cashflows off the same curve — all `calc.js`-style pure functions, mirrored to the Power BI views with the existing validator harness.
+- **Phase 3 — covenant integration & true cap MTM:** feed hedge cashflows into the debt-service line of the covenant engine; cap MTM with time value needs a vol surface — either import Chatham's periodic cap valuations (they already produce them) or license vol data. Recommend importing, not modeling.
+
+### 4.12 Loan mark-to-market (Tier 4 — data problem, not code problem)
+- The calc is straightforward once terms and curves exist (they do): discount each loan's remaining contractual cashflows at today's forwards plus a *current market spread* and report price vs par. The missing piece is the spread source — JLL's is their proprietary lending database. Pragmatic substitute: a `market_spreads` table (asset type × loan type × LTV band → spread, dated), refreshed quarterly from lender quotes and broker surveys, with staleness flagged in the UI. Portfolio MTM becomes one more Debt Dashboard widget.
+
+### 4.13 Yardi / accounting connectivity
+- The SQL Server sync (`mssql` script against `rspYardi_WeeklyLeasingSummary_v3`) is already built but dormant. Reactivate it as a scheduled Action with credentials in GitHub secrets, then extend to pull monthly operating statements / NOI actuals so T12 NOI refreshes automatically instead of via manual Budget Analysis workbook upload — that removes the app's single biggest manual dependency.
+
+### 4.14 Market data freshness
+- Cheap wins only: raise the rate-pull cron to hourly and implement the stubbed `fetchCmeTermSofrCurve()` if/when CME licensing is resolved. True real-time adds cost without changing covenant outcomes (tests are monthly); recommend leaving daily unless a trading-adjacent need appears.
+
+### 4.15 Mobile optimization
+- UI-only pass: responsive breakpoints, tables collapsing to cards on narrow screens, tab bar becoming a hamburger/bottom nav, drag-and-drop disabled on touch for the dashboard grid, and a PWA manifest so it installs to a home screen. No backend changes.
+
+---
+
+## 5. Descoped items (removed during 2026-07-24 review)
 
 The following JLL DMS capabilities were reviewed and intentionally excluded from the gap list (loan mark-to-market was initially descoped, then restored to the gap list on 2026-07-24) — not a build target for this platform:
 
