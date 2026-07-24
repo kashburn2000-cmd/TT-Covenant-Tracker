@@ -41,7 +41,7 @@ function StatTile({ label, value, sub }) {
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.8rem 1rem', minWidth: 130, flex: '1 1 130px' }}>
       <div className="label" style={{ marginBottom: '0.3rem' }}>{label}</div>
-      <div style={{ fontSize: '1.45rem', fontWeight: 600, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>{value}</div>
+      <div className="mono" style={{ fontSize: '1.45rem', fontWeight: 600, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums', color: 'var(--text)' }}>{value}</div>
       {sub && <div style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: '0.2rem' }}>{sub}</div>}
     </div>
   );
@@ -248,7 +248,7 @@ export function RegistryTab() {
 
   const sourceChip = (label, on, color) => (
     <span key={label} style={{
-      fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.04em', padding: '1px 7px', borderRadius: 4,
+      fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.04em', padding: '1px 7px', borderRadius: 4,
       border: `1px solid ${on ? `color-mix(in srgb, ${color} 35%, transparent)` : 'var(--border)'}`,
       background: on ? `color-mix(in srgb, ${color} 11%, transparent)` : 'transparent',
       color: on ? color : 'var(--faint2)', opacity: on ? 1 : 0.45, whiteSpace: 'nowrap',
@@ -257,13 +257,17 @@ export function RegistryTab() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.9rem', marginBottom: '0.35rem' }}>
-        <div style={{ fontSize: '0.95rem', fontWeight: 600 }}>Deal Registry</div>
-        <div style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>
-          Only visible while editing is unlocked. Every deal keeps its TT-id across uploads, renames, and tabs.
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+        <div>
+          <div style={{ fontSize: 21, fontWeight: 600, color: 'var(--text)' }}>Deal Registry</div>
+          <div className="mono" style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>Stable ids &amp; lifecycle status · admin</div>
         </div>
+        <span className="mono" title="Only visible while editing is unlocked" style={{ fontWeight: 600, fontSize: 9, letterSpacing: '0.06em', padding: '5px 10px', borderRadius: 5, color: 'var(--warn-text)', background: 'color-mix(in srgb, var(--warn) 13%, transparent)', whiteSpace: 'nowrap' }}>
+          EDIT MODE ONLY
+        </span>
       </div>
       <div style={{ fontSize: '0.7rem', color: 'var(--faint2)', marginBottom: '1rem', lineHeight: 1.6 }}>
+        Every deal keeps its TT-id across uploads, renames, and tabs.
         Status set here <b>always wins over the sheets</b> — use it when an At Risk row is really a committed deal that
         hasn&apos;t closed, or a deal has been sold. “Auto” follows whatever the schedules/pipeline imply.
         Class marks a deal that isn&apos;t a project — set the Simmons land facility to <b>Land facility</b> and it drops
@@ -305,7 +309,7 @@ export function RegistryTab() {
           <thead><tr>
             <th>ID</th>
             <th>Deal</th>
-            <th>Appears in</th>
+            <th>Source</th>
             <th>Status</th>
             <th>Class</th>
             <th>Lender</th>
@@ -318,18 +322,18 @@ export function RegistryTab() {
           <tbody>
             {shown.map(r => (
               <tr key={r.uid} style={r.status === 'sold' ? { opacity: 0.55 } : undefined}>
-                <td style={{ whiteSpace: 'nowrap', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                <td className="mono" style={{ whiteSpace: 'nowrap', fontWeight: 600, fontSize: '0.72rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
                   {r.uid}
+                </td>
+                <td style={{ minWidth: 140 }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text)' }}>{r.name}</span>
                   {!r.entry.reviewed && (
                     <button
                       onClick={() => markReviewed(r)}
                       title="New deal id — click to mark reviewed"
                       style={{ marginLeft: 6, border: 'none', cursor: 'pointer', padding: 0, background: 'none' }}
-                    ><span className="pill yellow">NEW</span></button>
+                    ><span className="pill green">NEW</span></button>
                   )}
-                </td>
-                <td style={{ minWidth: 140 }}>
-                  {r.name}
                   {r.aka.length > 0 && <div style={{ fontSize: '0.64rem', color: 'var(--faint2)' }}>sheet: {r.aka.join(' · ')}</div>}
                   {r.orphan && <div style={{ fontSize: '0.64rem', color: 'var(--faint2)' }}>not on any current sheet</div>}
                   {r.hiddenOrRemoved && <div style={{ fontSize: '0.64rem', color: 'var(--faint2)' }}>hidden / removed on dashboard</div>}
@@ -348,10 +352,15 @@ export function RegistryTab() {
                     {DEAL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                   </select>
                   {r.status && (
-                    <div style={{ marginTop: 3 }}>
+                    <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span className={`pill ${STATUS_PILL[r.status]}`}>{STATUS_LABEL[r.status]}</span>
+                      <span
+                        className="mono"
+                        title={r.overridden ? 'Manual override — beats whatever the sheets imply' : 'Derived automatically from the schedules / pipeline'}
+                        style={{ fontWeight: 600, fontSize: 8, letterSpacing: '0.05em', padding: '1px 6px', borderRadius: 3, background: 'var(--panel2)', color: r.overridden ? 'var(--warn-text)' : 'var(--muted)' }}
+                      >{r.overridden ? 'OVERRIDE' : 'AUTO'}</span>
                       {r.disagrees && (
-                        <span title="Your override wins — the sheets currently imply a different status" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--warn)' }}>
+                        <span title="Your override wins — the sheets currently imply a different status" style={{ fontSize: '0.62rem', color: 'var(--warn)' }}>
                           sheet says {STATUS_LABEL[r.derived]}
                         </span>
                       )}
@@ -368,13 +377,18 @@ export function RegistryTab() {
                     <option value="">Project</option>
                     {DEAL_CLASSIFICATIONS.map(c => <option key={c} value={c}>{CLASSIFICATION_LABEL[c]}</option>)}
                   </select>
+                  {r.entry.classification && (
+                    <div style={{ marginTop: 3 }}>
+                      <span className="pill yellow">{CLASSIFICATION_LABEL[r.entry.classification]}</span>
+                    </div>
+                  )}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>{r.lender || '—'}</td>
-                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                <td className="mono" style={{ textAlign: 'right', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                   {fmtM(r.loan)}{r.loanIsBudget && <span title="Pipeline total budget — no schedule loan yet" style={{ color: 'var(--faint2)' }}> *</span>}
                 </td>
-                <td style={{ whiteSpace: 'nowrap' }}>{r.status === 'committed' ? 'Not closed' : fmtDate(r.maturity)}</td>
-                <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>
+                <td className="mono" style={{ whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{r.status === 'committed' ? 'Not closed' : fmtDate(r.maturity)}</td>
+                <td className="mono" style={{ whiteSpace: 'nowrap', fontSize: '0.75rem', color: 'var(--muted)' }}>
                   {fmtDate(r.lastSeen)}
                   {r.overridesCount > 0 && <div style={{ fontSize: '0.62rem', color: 'var(--faint2)' }}>{r.overridesCount} field edit{r.overridesCount === 1 ? '' : 's'}</div>}
                 </td>
@@ -401,6 +415,7 @@ export function RegistryTab() {
                       onClick={() => setMergeFrom(r.uid)} disabled={busy}
                       title="Merge this id into another deal (fixes a rename that minted a duplicate)"
                       className="btn btn-ghost btn-sm"
+                      style={{ color: 'var(--accent)' }}
                     >Merge…</button>
                   )}
                 </td>
