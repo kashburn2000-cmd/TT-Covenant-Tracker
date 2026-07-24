@@ -14,6 +14,7 @@ import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
 import { TasksWidget } from './TasksWidget.jsx';
 import { buildLenderRollup, buildLenderComparison, rollupStats } from '../lenderExposure.js';
 import { capExpectedReceipts, swapMtm, hedgeSummary } from '../hedgeCalc.js';
+import { portfolioMtm } from '../loanMtm.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -1096,6 +1097,142 @@ function HedgeWidget({ pinUnlocked }) {
   );
 }
 
+// ── Loan Mark-to-Market ───────────────────────────────────────────────────────
+// Prices the loan abstracts against manually maintained market spreads
+// (public.market_spreads — the stand-in for JLL's proprietary loan pricing
+// database; refresh quarterly from lender quotes). Math in src/loanMtm.js.
+const SPREAD_STALE_DAYS = 120;
+
+function LoanMtmWidget({ pinUnlocked }) {
+  const [loans, setLoans] = useState([]);
+  const [spreads, setSpreads] = useState(null);   // { construction: row, refinance: row }
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [editing, setEditing] = useState(null);   // { construction: {spread_bps, source}, refinance: {...} } | null
+
+  async function load() {
+    try {
+      const [lr, sr] = await Promise.all([
+        fetch(`${SB_URL}/rest/v1/loans?select=id,property_name,borrower_entity,loan_type,loan_amount,rate_spread_bps,note_rate_pct,amortization_type,closing_date,maturity_date,lead_lender`, { headers: SB_HEADERS }),
+        fetch(`${SB_URL}/rest/v1/market_spreads`, { headers: SB_HEADERS }),
+      ]);
+      if (lr.ok) setLoans(await lr.json());
+      if (sr.ok) {
+        const rows = await sr.json();
+        setSpreads(Object.fromEntries(rows.map(r => [r.loan_type, r])));
+      } else {
+        const body = await sr.text();
+        if (sr.status === 404 || /relation .* does not exist|PGRST205/.test(body)) setSetupNeeded(true);
+        setSpreads({});
+      }
+    } catch { setSpreads({}); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function saveSpreads() {
+    const today = todayISO();
+    const rows = ['construction', 'refinance']
+      .filter(t => editing[t]?.spread_bps !== '' && editing[t]?.spread_bps != null)
+      .map(t => ({ loan_type: t, spread_bps: parseInt(editing[t].spread_bps, 10), as_of: today, source: editing[t].source?.trim() || null, updated_at: new Date().toISOString() }));
+    if (rows.length) {
+      await fetch(`${SB_URL}/rest/v1/market_spreads?on_conflict=loan_type`, {
+        method: 'POST', headers: SB_UPSERT(), body: JSON.stringify(rows),
+      });
+    }
+    setEditing(null);
+    load();
+  }
+
+  const today = todayISO();
+  const result = useMemo(() => portfolioMtm(loans, spreads || {}, today), [loans, spreads, today]);
+  const staleTypes = Object.values(spreads || {}).filter(s => {
+    const age = (new Date(today) - new Date(s.as_of)) / 86400000;
+    return age > SPREAD_STALE_DAYS;
+  });
+  const name = l => l.property_name || l.borrower_entity || '—';
+  const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.7rem', padding: '0.28rem 0.45rem', width: 90 };
+
+  if (setupNeeded) {
+    return (
+      <div style={{ color: 'var(--muted)', fontSize: '0.78rem', lineHeight: 1.7, padding: '0.5rem' }}>
+        The market_spreads table hasn't been created yet — run <code>db/market_spreads_setup.sql</code> in the Supabase SQL editor once, then reload and enter current market spreads.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <StatTile label="Par (priced loans)" value={fmtM(result.par)} sub={`${result.rows.length} of ${loans.length} abstracts priceable`} />
+        <StatTile label="Market value" value={fmtM(result.value)} sub="DCF at market spread vs forwards" />
+        <StatTile label="Premium / (Discount)" value={fmtM(result.premium)} sub={result.par ? `${((result.value / result.par - 1) * 100).toFixed(2)}% of par` : ''} />
+        {pinUnlocked && !editing && (
+          <button className="btn btn-sm" style={{ marginLeft: 'auto' }}
+            onClick={() => setEditing({
+              construction: { spread_bps: spreads?.construction?.spread_bps ?? '', source: spreads?.construction?.source || '' },
+              refinance: { spread_bps: spreads?.refinance?.spread_bps ?? '', source: spreads?.refinance?.source || '' },
+            })}>Update Market Spreads</button>
+        )}
+      </div>
+      {staleTypes.length > 0 && !editing && (
+        <div style={{ fontSize: '0.7rem', color: 'var(--warn, #d29922)' }}>
+          ⚠ Market spread{staleTypes.length > 1 ? 's' : ''} for {staleTypes.map(s => s.loan_type).join(' & ')} {staleTypes.length > 1 ? 'are' : 'is'} over {SPREAD_STALE_DAYS} days old — refresh from current lender quotes.
+        </div>
+      )}
+      {editing && (
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem' }}>
+          {['construction', 'refinance'].map(t => (
+            <div key={t} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={{ fontSize: '0.62rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t} spread (bps over SOFR)</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <input type="number" value={editing[t].spread_bps} placeholder="e.g. 275"
+                  onChange={e => setEditing(ed => ({ ...ed, [t]: { ...ed[t], spread_bps: e.target.value } }))} style={inSt} />
+                <input value={editing[t].source} placeholder="Source"
+                  onChange={e => setEditing(ed => ({ ...ed, [t]: { ...ed[t], source: e.target.value } }))} style={{ ...inSt, width: 150 }} />
+              </div>
+            </div>
+          ))}
+          <button className="btn btn-sm" onClick={saveSpreads}>Save (as of today)</button>
+          <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem' }}>Cancel</button>
+        </div>
+      )}
+      <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>
+            <th>Loan</th><th>Type</th><th style={{ textAlign: 'right' }}>Balance</th><th style={{ textAlign: 'right' }}>Contract</th>
+            <th style={{ textAlign: 'right' }}>Market</th><th style={{ textAlign: 'right' }}>Price (% par)</th><th style={{ textAlign: 'right' }}>Premium / (Disc)</th><th>Maturity</th>
+          </tr></thead>
+          <tbody>
+            {result.rows.map(({ loan: l, mtm, marketSpreadBps }) => (
+              <tr key={l.id}>
+                <td style={{ fontWeight: 600 }}>{name(l)}</td>
+                <td style={{ color: 'var(--muted)' }}>{l.loan_type}</td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(l.loan_amount)}</td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{mtm.method === 'fixed' ? `${Number(l.note_rate_pct).toFixed(2)}% fixed` : `S+${l.rate_spread_bps}`}</td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{mtm.method === 'fixed' ? `+${marketSpreadBps} bps` : `S+${marketSpreadBps}`}</td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: mtm.pricePct >= 1 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)' }}>
+                  {(mtm.pricePct * 100).toFixed(2)}%
+                </td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: mtm.premium >= 0 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)' }}>{fmtM(mtm.premium)}</td>
+                <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{fmtDate(l.maturity_date)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {result.rows.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>
+            {Object.keys(spreads || {}).length === 0
+              ? 'Enter current market spreads (Update Market Spreads, PIN required) to price the loan book.'
+              : 'No priceable loans — abstracts need a maturity date plus either a rate spread or a note rate.'}
+          </div>
+        )}
+        <div style={{ marginTop: 6, fontSize: '0.62rem', color: 'var(--faint)' }}>
+          Floating loans: PV of (market − contract) spread over the remaining term. Fixed loans: remaining-schedule DCF at forward SOFR + market spread. No prepay/extension optionality — a monitoring figure, not a dealer quote.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Forward Curve Tracker ─────────────────────────────────────────────────────
 // Snapshot series are ordinal in time, so they wear a validated one-hue ramp:
 // older curves lighter, the newest darkest/strongest.
@@ -1925,6 +2062,7 @@ const WIDGETS = {
   tasks:      { title: 'Tasks & Reminders',      defaultGrid: { x: 0, y: 31, w: 12, h: 9,  minW: 4, minH: 5 } },
   lenders:    { title: 'Lender Exposure',        defaultGrid: { x: 0, y: 40, w: 12, h: 10, minW: 5, minH: 5 } },
   hedges:     { title: 'Hedge Tracker',          defaultGrid: { x: 0, y: 50, w: 12, h: 9,  minW: 5, minH: 5 } },
+  loanMtm:    { title: 'Loan Mark-to-Market',    defaultGrid: { x: 0, y: 59, w: 12, h: 9,  minW: 5, minH: 5 } },
 };
 const DEFAULT_WIDGETS = Object.keys(WIDGETS);
 const DEFAULT_LAYOUT = DEFAULT_WIDGETS.map(k => ({ i: k, ...WIDGETS[k].defaultGrid }));
@@ -2188,6 +2326,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       case 'tasks':      return <TasksWidget pinUnlocked={pinUnlocked} />;
       case 'lenders':    return <LenderExposureWidget projects={visibleProjects} />;
       case 'hedges':     return <HedgeWidget pinUnlocked={pinUnlocked} />;
+      case 'loanMtm':    return <LoanMtmWidget pinUnlocked={pinUnlocked} />;
       default: return null;
     }
   }

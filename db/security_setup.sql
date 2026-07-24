@@ -45,6 +45,7 @@ begin
     'loan_reporting_requirements',
     'deal_documents',
     'hedges',
+    'market_spreads',
     'project_locations',
     'tasks'
   ]
