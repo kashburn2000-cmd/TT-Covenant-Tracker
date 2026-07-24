@@ -17,21 +17,22 @@ This document lists the capabilities the JLL DMS advertises that the TT Covenant
 4. **Extension-option tracking** — structured recording of extension options, extension schedules, and extension fees with reminders ahead of exercise windows.
 5. **Financing fee tracking** — guaranty fees, uncommitted line fees, origination fees, extension fees as first-class data. We track guaranty *percentages/amounts* but no fee schedules.
 6. **Hedging / derivatives module** — the largest single gap. DMS supports interest-rate caps and swaps end-to-end: hedge terms capture, recurring mark-to-market valuations, counterparty and collateral monitoring, hedge-maturity monitoring, forward-looking hedge cost budgeting, hedge cashflows inside covenant calcs, and consolidated hedge documentation. We have no hedge data model at all.
-7. **Lender relationship comparison** — compare lending relationships by credit cost, covenant requirements, and fees. Our Loans tab filters by lender but has no cross-lender analytics.
-8. **Full report content/format customizability** — a general report builder. We have fixed exports (CSV/XLSX/PDF, Doc View) with column pickers, not user-defined report templates.
-9. **SSO / MFA (dual authentication)** — DMS advertises single sign-on and dual authentication. Supabase supports both, but neither is enabled/configured for this app.
-10. **Rate conversion options** — floating→fixed conversion options embedded in loan terms. We support rate floors (three-prong calc) but not conversion options.
-11. **Volatility / property-value scenario inputs** — DMS scenario analysis shifts NOI, property value, rate, margins, time, or volatility. We support NOI what-ifs and refi sizing overlays, but not property-value, rate-shock, or volatility scenarios.
+7. **Loan valuation / mark-to-market** — loan MTM benchmarked against a live (non-survey) loan pricing database. Absent; note the underlying JLL pricing data is proprietary, so a build would need an alternative pricing source.
+8. **Lender relationship comparison** — compare lending relationships by credit cost, covenant requirements, and fees. Our Loans tab filters by lender but has no cross-lender analytics.
+9. **Full report content/format customizability** — a general report builder. We have fixed exports (CSV/XLSX/PDF, Doc View) with column pickers, not user-defined report templates.
+10. **SSO / MFA (dual authentication)** — DMS advertises single sign-on and dual authentication. Supabase supports both, but neither is enabled/configured for this app.
+11. **Rate conversion options** — floating→fixed conversion options embedded in loan terms. We support rate floors (three-prong calc) but not conversion options.
+12. **Volatility / property-value scenario inputs** — DMS scenario analysis shifts NOI, property value, rate, margins, time, or volatility. We support NOI what-ifs and refi sizing overlays, but not property-value, rate-shock, or volatility scenarios.
 
 ### Partially covered (🟡) — exists here in a narrower form
 
-12. **Accounting-software connectivity (Yardi, MRI, etc.)** — we built a Yardi data-warehouse leasing sync (SQL Server) but it is not activated (superseded by email ingest); no MRI or general accounting connectivity.
-13. **Data integration toolkit** — we have point integrations (treasury.gov, NY Fed SOFR, IMAP email ingest, Power BI views) but no configurable integration tooling for arbitrary client systems.
-14. **Amortization / draw / margin schedules** — we hold a 12-month balance schedule for the variable fund facility and land-facility draws, but there is no per-loan amortization/draw/margin schedule viewer.
-15. **"Unlimited" term capture** — our loan abstracts use a fixed schema (plus a `type_specific` JSON escape hatch) rather than arbitrary user-defined term fields on any document type (including entity-formation docs).
-16. **Document repository per deal** — we store one `.docx` abstract per loan in private storage; DMS keeps *all* financing documents attached to the deal record.
-17. **Mobile access** — the SPA loads on mobile but is not designed/optimized for it; DMS advertises desktop **and** mobile access.
-18. **Near real-time market data feed** — our rates refresh on a daily scheduled pull (and CME Term SOFR is stubbed pending licensing) vs. DMS's near-real-time feed.
+13. **Accounting-software connectivity (Yardi, MRI, etc.)** — we built a Yardi data-warehouse leasing sync (SQL Server) but it is not activated (superseded by email ingest); no MRI or general accounting connectivity.
+14. **Data integration toolkit** — we have point integrations (treasury.gov, NY Fed SOFR, IMAP email ingest, Power BI views) but no configurable integration tooling for arbitrary client systems.
+15. **Amortization / draw / margin schedules** — we hold a 12-month balance schedule for the variable fund facility and land-facility draws, but there is no per-loan amortization/draw/margin schedule viewer.
+16. **"Unlimited" term capture** — our loan abstracts use a fixed schema (plus a `type_specific` JSON escape hatch) rather than arbitrary user-defined term fields on any document type (including entity-formation docs).
+17. **Document repository per deal** — we store one `.docx` abstract per loan in private storage; DMS keeps *all* financing documents attached to the deal record.
+18. **Mobile access** — the SPA loads on mobile but is not designed/optimized for it; DMS advertises desktop **and** mobile access.
+19. **Near real-time market data feed** — our rates refresh on a daily scheduled pull (and CME Term SOFR is stubbed pending licensing) vs. DMS's near-real-time feed.
 
 ### Not a software gap (vendor service, noted for completeness)
 
@@ -57,36 +58,37 @@ Legend: ✅ has it · 🟡 partial · ❌ not yet · — not applicable
 | 8 | Forecasted covenant performance | ✅ | ✅ | Future test dates priced off Chatham forward curves (three-prong rate) |
 | 9 | Covenant calcs including hedge cashflows | ✅ | ❌ | No hedge data model |
 | 10 | Scenario analysis (NOI, value, rate, margin, time, volatility) | ✅ | 🟡 | NOI what-ifs + debt-fund refi overlay only |
-| 11 | Interest calc conformance to market-standard index evolution | ✅ | ✅ | SOFR / 10-Yr UST three-prong with floors; daily official-source rate pulls |
+| 11 | Loan valuation MTM based on non-survey, live loan database | ✅ | ❌ | No loan pricing/MTM; JLL pricing data is proprietary — would need an alternative source |
+| 12 | Interest calc conformance to market-standard index evolution | ✅ | ✅ | SOFR / 10-Yr UST three-prong with floors; daily official-source rate pulls |
 | **Instruments & loan structures** |
-| 12 | Term loans, revolvers, construction / variable-balance loans | ✅ | ✅ | Construction + refi abstracts; variable fund facility with balance schedule |
-| 13 | Hedging instruments (caps, swaps) incl. MTM, counterparty & collateral monitoring | ✅ | ❌ | Largest gap — no derivatives module |
-| 14 | Hedge maturity monitoring & forward hedge cost budgeting | ✅ | ❌ | — |
-| 15 | Amortization / draw / margin / call & extension schedules | ✅ | 🟡 | Fund facility 12-mo schedule + land draws; no per-loan schedule views |
-| 16 | Floating-rate conversion options & embedded floors | ✅ | 🟡 | Floors yes (three-prong); conversion options no |
+| 13 | Term loans, revolvers, construction / variable-balance loans | ✅ | ✅ | Construction + refi abstracts; variable fund facility with balance schedule |
+| 14 | Hedging instruments (caps, swaps) incl. MTM, counterparty & collateral monitoring | ✅ | ❌ | Largest gap — no derivatives module |
+| 15 | Hedge maturity monitoring & forward hedge cost budgeting | ✅ | ❌ | — |
+| 16 | Amortization / draw / margin / call & extension schedules | ✅ | 🟡 | Fund facility 12-mo schedule + land draws; no per-loan schedule views |
+| 17 | Floating-rate conversion options & embedded floors | ✅ | 🟡 | Floors yes (three-prong); conversion options no |
 | **Data capture & documents** |
-| 17 | Unlimited term capture from formation & financing docs | ✅ | 🟡 | Fixed abstract schema + `type_specific` JSON |
-| 18 | Financial covenant + reporting requirement + extension option recording | ✅ | 🟡 | Covenants yes; reporting requirements & extension options not structured |
-| 19 | Financing participant & fee tracking (guaranty, line, origination, extension fees) | ✅ | ❌ | Guaranty % tracked; no fee schedules |
-| 20 | Financing documents stored with deal records | ✅ | 🟡 | One `.docx` abstract per loan (private Supabase Storage, signed URLs) |
-| 21 | Consolidated hedge documentation | ✅ | ❌ | — |
+| 18 | Unlimited term capture from formation & financing docs | ✅ | 🟡 | Fixed abstract schema + `type_specific` JSON |
+| 19 | Financial covenant + reporting requirement + extension option recording | ✅ | 🟡 | Covenants yes; reporting requirements & extension options not structured |
+| 20 | Financing participant & fee tracking (guaranty, line, origination, extension fees) | ✅ | ❌ | Guaranty % tracked; no fee schedules |
+| 21 | Financing documents stored with deal records | ✅ | 🟡 | One `.docx` abstract per loan (private Supabase Storage, signed URLs) |
+| 22 | Consolidated hedge documentation | ✅ | ❌ | — |
 | **Workflow & notifications** |
-| 22 | Automated task tracking & real-time notification (maturities, reporting deadlines, data-driven triggers) | ✅ | ❌ | In-app weekly-upload banner only; no tasks, no email/push alerts |
-| 23 | Email reminders for extensions, maturities, lender reporting items | ✅ | ❌ | — |
-| 24 | Team activity feed (recent & upcoming tasks) | ✅ | ❌ | — |
+| 23 | Automated task tracking & real-time notification (maturities, reporting deadlines, data-driven triggers) | ✅ | ❌ | In-app weekly-upload banner only; no tasks, no email/push alerts |
+| 24 | Email reminders for extensions, maturities, lender reporting items | ✅ | ❌ | — |
+| 25 | Team activity feed (recent & upcoming tasks) | ✅ | ❌ | — |
 | **Integration & data feeds** |
-| 25 | Data integration tools for other data sources | ✅ | 🟡 | Point integrations: rate pulls, email ingest, Power BI views |
-| 26 | Accounting software connectivity (Yardi, MRI, …) | ✅ | 🟡 | Yardi SQL-Server leasing sync built but inactive |
-| 27 | Near real-time market data updates | ✅ | 🟡 | Daily scheduled pulls; CME Term SOFR stubbed |
+| 26 | Data integration tools for other data sources | ✅ | 🟡 | Point integrations: rate pulls, email ingest, Power BI views |
+| 27 | Accounting software connectivity (Yardi, MRI, …) | ✅ | 🟡 | Yardi SQL-Server leasing sync built but inactive |
+| 28 | Near real-time market data updates | ✅ | 🟡 | Daily scheduled pulls; CME Term SOFR stubbed |
 | **Relationships & benchmarking** |
-| 28 | Track & compare lender relationships by credit cost, covenants, fees | ✅ | ❌ | Lender filter only; no comparison analytics |
+| 29 | Track & compare lender relationships by credit cost, covenants, fees | ✅ | ❌ | Lender filter only; no comparison analytics |
 | **Security & access** |
-| 29 | Data encryption | ✅ | ✅ | Supabase TLS + encryption at rest; private storage bucket + RLS |
-| 30 | Dual authentication (MFA) | ✅ | ❌ | Supported by Supabase, not enabled |
-| 31 | Single sign-on (SSO) | ✅ | ❌ | Supported by Supabase, not enabled |
+| 30 | Data encryption | ✅ | ✅ | Supabase TLS + encryption at rest; private storage bucket + RLS |
+| 31 | Dual authentication (MFA) | ✅ | ❌ | Supported by Supabase, not enabled |
+| 32 | Single sign-on (SSO) | ✅ | ❌ | Supported by Supabase, not enabled |
 | **Vendor services (not build targets)** |
-| 32 | Ongoing service & support | ✅ | — | Vendor service |
-| 33 | Access to derivative advisors / debt originators (Kensington / JLL) | ✅ | — | Advisory relationship, not software |
+| 33 | Ongoing service & support | ✅ | — | Vendor service |
+| 34 | Access to derivative advisors / debt originators (Kensington / JLL) | ✅ | — | Advisory relationship, not software |
 
 ### Where we are ahead (not in the JLL deck)
 
@@ -98,22 +100,22 @@ For balance — capabilities we have that the DMS overview doesn't mention: payd
 
 | Tier | Gap | Rationale |
 |------|-----|-----------|
-| 1 | Task engine + email notifications (matrix #22–23) | Highest stated DMS value-add; we already track maturities/test dates — alerting on them is incremental |
-| 1 | Reporting-requirements & extension-option tracking (#18), fee fields (#19) | Extends the existing loan-abstract schema; feeds the task engine |
-| 1 | MFA / SSO (#30–31) | Configuration-level effort in Supabase |
-| 2 | Per-lender exposure rollup + lender comparison (#3, #28) | Data already exists in `loans` / `debt_projects` |
-| 2 | Per-loan amortization/draw schedule views (#15) | Extends existing `loan_schedule` pattern |
-| 3 | Scenario analysis expansion (#10), document repository per deal (#20) | Larger builds on existing foundations |
-| 4 | Hedge/derivatives module (#9, #13, #14, #21) | Major new domain |
+| 1 | Task engine + email notifications (matrix #23–24) | Highest stated DMS value-add; we already track maturities/test dates — alerting on them is incremental |
+| 1 | Reporting-requirements & extension-option tracking (#19), fee fields (#20) | Extends the existing loan-abstract schema; feeds the task engine |
+| 1 | MFA / SSO (#31–32) | Configuration-level effort in Supabase |
+| 2 | Per-lender exposure rollup + lender comparison (#3, #29) | Data already exists in `loans` / `debt_projects` |
+| 2 | Per-loan amortization/draw schedule views (#16) | Extends existing `loan_schedule` pattern |
+| 3 | Scenario analysis expansion (#10), document repository per deal (#21) | Larger builds on existing foundations |
+| 4 | Hedge/derivatives module (#9, #14, #15, #22) | Major new domain |
+| 4 | Loan valuation mark-to-market (#11) | Depends on sourcing a loan pricing dataset (JLL's is proprietary) |
 
 ---
 
 ## 4. Descoped items (removed during 2026-07-24 review)
 
-The following JLL DMS capabilities were reviewed and intentionally excluded from the gap list — not a build target for this platform:
+The following JLL DMS capabilities were reviewed and intentionally excluded from the gap list (loan mark-to-market was initially descoped, then restored to the gap list on 2026-07-24) — not a build target for this platform:
 
 - Consolidated cashflow / accrual / valuation reporting
-- Loan valuation mark-to-market vs. live loan database
 - Yield maintenance & defeasance terms and valuation
 - Bond / securitization / CMBS structures
 - In-app loan abstract document customization & generation (abstracts continue to be produced externally and imported)
