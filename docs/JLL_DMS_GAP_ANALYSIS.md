@@ -169,7 +169,33 @@ Context for all items: the app is a React/Vite SPA talking straight to Supabase 
 
 ---
 
-## 5. Descoped items (removed during 2026-07-24 review)
+## 5. Implementation status (2026-07-24 build-out)
+
+Every buildable gap above was implemented on branch `claude/feature-gap-analysis-fs1xfy` (MFA/SSO skipped per review):
+
+| Gap | Status | Where |
+|---|---|---|
+| 4.1 Tasks, email reminders & activity feed | ✅ Built | `db/tasks_setup.sql`, `src/taskGen.js`, `scripts/generate-tasks.mjs`, Tasks & Reminders widget |
+| 4.2 Reporting requirements / extensions / fees | ✅ Built | `db/loan_reporting_setup.sql`, Loans tab detail, sidecar import (extensions & fees already existed on `loans`) |
+| 4.3 MFA / SSO | ⏭ Skipped per review | — |
+| 4.4 Per-lender exposure rollup | ✅ Built | `src/lenderExposure.js`, Lender Exposure widget |
+| 4.5 Lender relationship comparison | ✅ Built | Terms Comparison mode on the Lender Exposure widget |
+| 4.6 Per-loan amortization schedules | ✅ Built | `src/amortSchedule.js`, Loans tab schedule viewer |
+| 4.7 Rate conversion options | ✅ Built | `db/loan_conversion_setup.sql`, Loans form/detail, conversion-window reminders |
+| 4.8 Scenario analysis | ✅ Built | `calcCovenantRow(p, scenario)`, ScenarioBar on the Covenant Tracker |
+| 4.9 Per-deal document repository | ✅ Built | `db/deal_documents_setup.sql`, Documents section in loan detail |
+| 4.10 Report customization | ✅ Built | Saved PDF report templates in the covenant Export menu |
+| 4.11 Hedge module | ✅ Phases 1–2 built | `db/hedges_setup.sql`, `src/hedgeCalc.js`, Hedge Tracker widget, maturity reminders (phase 3 — hedge cashflows in covenant debt service — deferred) |
+| 4.12 Loan mark-to-market | ✅ Built | `db/market_spreads_setup.sql`, `src/loanMtm.js`, Loan MTM widget |
+| 4.13 Yardi connectivity | ⛔ Blocked | Script/workflow exist; needs IT credentials + network path |
+| 4.14 Market data freshness | ⛔ Blocked | Sources publish daily; CME Term SOFR fetch awaits licensing |
+| 4.15 Mobile optimization | ✅ Built | ≤720px responsive pass + PWA manifest |
+
+One-time Supabase setup for the new features: run `db/tasks_setup.sql`, `db/loan_reporting_setup.sql`, `db/loan_conversion_setup.sql`, `db/deal_documents_setup.sql`, `db/hedges_setup.sql`, `db/market_spreads_setup.sql`, then re-run `db/security_setup.sql`. Optional email digest secrets: `RESEND_API_KEY`, `TASK_EMAIL_TO`, `TASK_EMAIL_FROM`.
+
+---
+
+## 6. Descoped items (removed during 2026-07-24 review)
 
 The following JLL DMS capabilities were reviewed and intentionally excluded from the gap list (loan mark-to-market was initially descoped, then restored to the gap list on 2026-07-24) — not a build target for this platform:
 
