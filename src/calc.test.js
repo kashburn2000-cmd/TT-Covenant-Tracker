@@ -311,6 +311,45 @@ describe('calcCovenantRow', () => {
 
 // ─── Regression pin against the shipped curve data ───────────────────────────
 
+describe('calcCovenantRow scenario shocks', () => {
+  beforeAll(() => { setActiveSofrCurve(FLAT_SOFR); setActive10YCurve(FLAT_10Y); });
+  afterAll(() => { setActiveSofrCurve(DEFAULT_SOFR); setActive10YCurve(DEFAULT_10Y); });
+
+  it('null / empty scenario is byte-identical to the base case', () => {
+    expect(calcCovenantRow(BASE, null)).toEqual(calcCovenantRow(BASE));
+    expect(calcCovenantRow(BASE, { noiPct: 0, rateShiftBps: 0, spreadShiftBps: 0 })).toEqual(calcCovenantRow(BASE));
+  });
+
+  it('noiPct scales NOI and the resulting DSCR', () => {
+    const r = calcCovenantRow(BASE, { noiPct: -10 });
+    expect(r.noi).toBeCloseTo(540_000, 6);
+    expect(r.currentVal).toBeCloseTo(540_000 / 500_000, 10);
+  });
+
+  it('rateShiftBps shifts the curve prongs but never a fixed sizing floor', () => {
+    const shocked = calcCovenantRow(BASE, { rateShiftBps: 100 });
+    expect(shocked.rate).toBeCloseTo(0.06, 12);          // SOFR 3%+1% + spread 2%
+    expect(shocked.ads).toBeCloseTo(600_000, 6);
+    // Floor still wins only on its own merits — a 5.5% floor loses to 6%
+    const withFloor = calcCovenantRow({ ...BASE, sizingRate: 5.5 }, { rateShiftBps: 100 });
+    expect(withFloor.rateWinner.label).toBe('SOFR');
+    // Without the shock the floor wins (5.5% > 5%)
+    expect(calcCovenantRow({ ...BASE, sizingRate: 5.5 }).rateWinner.label).toBe('Sizing Rate');
+  });
+
+  it('spreadShiftBps reprices both spread prongs', () => {
+    const r = calcCovenantRow({ ...BASE, spread10y: 0.25 }, { spreadShiftBps: 50 });
+    // SOFR 3% + 2.5% = 5.5% vs 10Y 4.5% + 0.75% = 5.25%
+    expect(r.rate).toBeCloseTo(0.055, 12);
+  });
+
+  it('shocks flow through to paydown-to-cure', () => {
+    const base = calcCovenantRow(BASE);
+    const shocked = calcCovenantRow(BASE, { noiPct: -10 });
+    expect(shocked.paydown).toBeGreaterThan(base.paydown);
+  });
+});
+
 describe('seeded 2022 Fund row on the shipped Chatham curves', () => {
   it('passes its 1.05x covenant with the seeded NOI', () => {
     setActiveSofrCurve(DEFAULT_SOFR);

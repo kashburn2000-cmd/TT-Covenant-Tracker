@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiveSofrCurve, setActive10YCurve, fuzzyMatch, parseMonthLabel, parseCellNumber, computeNOI, calcCovenantRow } from './calc.js';
 import { SB_URL, SB_HEADERS } from './supabase.js';
 import { supabase, signOut } from './auth.js';
+import { ScenarioBar, isScenarioActive } from './components/ScenarioBar.jsx';
 import { TT_NAVY, TT_ORANGE } from './theme.js';
 import { formatCurrency } from './format.js';
 import { PRIOR_TAG, isPriorBaseline, findPriorTest } from './priorTest.js';
@@ -88,6 +89,21 @@ const SHARED_STYLES = `
   .tab-active   { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
   .tab-inactive { color: var(--muted); }
   .tab-inactive:hover { color: var(--text2); }
+  /* ── Mobile (≤ 720px) ────────────────────────────────────────────────────
+     Light-touch responsive pass: the tab bar scrolls horizontally instead of
+     wrapping, paddings tighten, the covenant summary cards drop to two-up,
+     and dense tables shrink a step. Wide tables already live inside their
+     own overflow containers, so the page itself never scrolls sideways. */
+  @media (max-width: 720px) {
+    .app-main { padding: 0.9rem !important; }
+    .tab-nav { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .tab-nav::-webkit-scrollbar { display: none; }
+    .tab-btn { padding: 0.55rem 0.7rem; font-size: 0.75rem; white-space: nowrap; flex-shrink: 0; }
+    .covenant-summary { grid-template-columns: repeat(2, 1fr) !important; }
+    th { padding: 0.45rem 0.55rem; font-size: 0.62rem; }
+    td { padding: 0.5rem 0.55rem; font-size: 0.74rem; }
+    .btn { padding: 5px 10px; font-size: 0.72rem; }
+  }
   .mx-high { background: color-mix(in srgb, var(--pass) 15%, transparent); color: var(--pass); font-weight: 600; }
   .mx-mid  { background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn); font-weight: 500; }
   .mx-low  { background: color-mix(in srgb, var(--fail) 11%, transparent); color: var(--fail); font-weight: 500; }
@@ -359,6 +375,13 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const DEFAULT_COLS = Object.fromEntries(ALL_COLS.map(c => [c.key, true]));
   const [visibleCols, setVisibleCols] = useState(DEFAULT_COLS);
 
+  // Saved report templates: named snapshots of { title, cols, onlyFailing }
+  // that drive the PDF export without touching the on-screen column picker.
+  // Stored company-wide in the settings table (key 'reportTemplates').
+  const [reportTemplates, setReportTemplates] = useState([]);
+  const [showTemplateSave, setShowTemplateSave] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState({ name: '', title: '', onlyFailing: false });
+
   // Persist a settings key to Supabase
   async function saveSetting(key, value) {
     try {
@@ -385,6 +408,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         if (row.key === 'lastUpdated' && val) setLastUpdated(new Date(val));
         if (row.key === 'forecastMonth' && val) setForecastMonth(val);
         if (row.key === 'visibleCols' && val) setVisibleCols({ ...DEFAULT_COLS, ...val });
+        if (row.key === 'reportTemplates' && Array.isArray(val)) setReportTemplates(val);
       }
     } catch (err) {
       console.warn('Could not load settings:', err);
@@ -441,14 +465,30 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   // The pure calculation lives in calc.js (calcCovenantRow) so it can be unit-tested.
   const calcRow = calcCovenantRow;
 
+  // What-if scenario (ScenarioBar): null = base case; otherwise every row is
+  // computed with the shocks applied. View-layer only — never persisted.
+  const [scenario, setScenario] = useState(null);
+  const scenarioOn = isScenarioActive(scenario);
+
   const rows = useMemo(() => {
-    return properties.map(calcRow).sort((a, b) => {
+    return properties.map(p => calcRow(p, scenarioOn ? scenario : null)).sort((a, b) => {
       if (sortField === 'covenantDate') return new Date(a.covenantDate) - new Date(b.covenantDate);
       if (sortField === 'property') return a.property.localeCompare(b.property);
       if (sortField === 'satisfied') return a.satisfied - b.satisfied;
       return 0;
     });
-  }, [properties, sortField]);
+  }, [properties, sortField, scenario, scenarioOn]);
+
+  // Base-case summary shown alongside the shocked numbers while a scenario is on.
+  const baseSummary = useMemo(() => {
+    if (!scenarioOn) return null;
+    const act = properties.map(p => calcRow(p)).filter(r => !r.hidden);
+    return {
+      passing: act.filter(r => r.satisfied).length,
+      failing: act.filter(r => !r.satisfied).length,
+      totalPaydown: act.reduce((s, r) => s + r.paydown, 0),
+    };
+  }, [properties, scenarioOn]);
 
   // activeRows = the live set (hidden tests excluded). Used for summary cards,
   // exports and Doc View. visibleRows = what the dashboard table renders, which
@@ -972,9 +1012,13 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     return window.jspdf;
   }
 
-  async function exportPDF() {
+  // template (optional, from reportTemplates): { name, title, cols, onlyFailing }
+  // — overrides the on-screen column picker / row set for this export only.
+  async function exportPDF(template = null) {
     setExportMsg('Generating PDF...');
     try {
+      const reportCols = template?.cols || visibleCols;
+      const reportRows = template?.onlyFailing ? activeRows.filter(r => !r.satisfied) : activeRows;
       const { jsPDF } = await loadJsPDF();
 
       const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
@@ -995,7 +1039,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.setTextColor(...TT_ORANGE);
-      doc.text('Covenant Compliance Dashboard', 28, 20);
+      doc.text(template?.title || 'Covenant Compliance Dashboard', 28, 20);
 
       // Date
       doc.setFont('helvetica', 'normal');
@@ -1009,8 +1053,8 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       doc.text('Prepared by Kevin Ashburn  //  Updated Monthly', 28, 44);
 
       // Summary pills — top right
-      const passing = activeRows.filter(r => r.satisfied).length;
-      const failing = activeRows.filter(r => !r.satisfied).length;
+      const passing = reportRows.filter(r => r.satisfied).length;
+      const failing = reportRows.filter(r => !r.satisfied).length;
       const pillY = 14;
       let pillX = pageW - 28;
 
@@ -1139,11 +1183,11 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         },
       ];
 
-      const visibleDefs = COL_DEFS.filter(c => c.always || visibleCols[c.key]);
+      const visibleDefs = COL_DEFS.filter(c => c.always || reportCols[c.key]);
 
       // ── Table ─────────────────────────────────────────────────────────────
       const head = [visibleDefs.map(c => c.head)];
-      const body = activeRows.map(r => visibleDefs.map(c => c.cell(r)));
+      const body = reportRows.map(r => visibleDefs.map(c => c.cell(r)));
 
       // Per-row style — color result cell text by pass/fail
       const resultColIdx = visibleDefs.findIndex(c => c.key === 'result');
@@ -1179,7 +1223,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         },
         didParseCell: (data) => {
           if (data.section === 'body') {
-            const row = activeRows[data.row.index];
+            const row = reportRows[data.row.index];
             if (!row) return;
             // Result column — color by pass/fail
             if (resultColIdx !== -1 && data.column.index === resultColIdx) {
@@ -1211,7 +1255,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
         },
       });
 
-      const filename = `TT_Covenant_Dashboard_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}.pdf`;
+      const stamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const filename = template?.name
+        ? `TT_${template.name.replace(/[^\w]+/g, '_')}_${stamp}.pdf`
+        : `TT_Covenant_Dashboard_${stamp}.pdf`;
       doc.save(filename);
       setExportMsg('PDF exported!');
       setTimeout(() => setExportMsg(''), 3000);
@@ -1259,8 +1306,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           <span style={{ fontSize: '0.9rem', lineHeight: 1 }}>▦</span> Open Doc View
         </button>
       </div>
+      {/* ── Scenario Analysis (what-if shocks over the whole table) ── */}
+      <ScenarioBar scenario={scenario} setScenario={setScenario} baseSummary={baseSummary} />
       {/* ── Summary Cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div className="covenant-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
           {[
             { label: 'Total Properties', value: summary.total, color: 'var(--text)', sub: 'active tests tracked' },
             { label: 'Passing', value: summary.passing, color: summary.passing > 0 ? 'var(--pass)' : 'var(--text)', sub: 'meeting covenant' },
@@ -1444,7 +1493,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           <div style={{ position: 'relative' }}>
             <button onClick={() => setShowExportMenu(v => !v)} className="btn btn-sm" style={showExportMenu ? { borderColor: 'var(--border2)', color: 'var(--text)' } : undefined}>↓ Export ▾</button>
             {showExportMenu && (
-              <div className="menu" style={{ minWidth: 150 }}>
+              <div className="menu" style={{ minWidth: 210 }}>
                 {[
                   ['Excel', () => exportXLSX(), "Drops straight into the workbook's Covenant Dashboard Export tab"],
                   ['CSV', () => exportCSV(), ''],
@@ -1454,6 +1503,49 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     <span style={{ opacity: 0.6 }}>↓</span>{label}
                   </div>
                 ))}
+                {reportTemplates.length > 0 && <div className="menu-heading">Report Templates (PDF)</div>}
+                {reportTemplates.map((t, i) => (
+                  <div key={t.name} className="menu-item" title={`${t.title || t.name}${t.onlyFailing ? ' · failing tests only' : ''}`}
+                    onClick={() => { exportPDF(t); setShowExportMenu(false); }}>
+                    <span style={{ opacity: 0.6 }}>▦</span>
+                    <span style={{ flex: 1 }}>{t.name}{t.onlyFailing ? ' ⚠' : ''}</span>
+                    <span
+                      title="Delete template"
+                      onClick={e => { e.stopPropagation(); const next = reportTemplates.filter((_, j) => j !== i); setReportTemplates(next); saveSetting('reportTemplates', next); }}
+                      style={{ color: 'var(--faint)', padding: '0 2px' }}
+                    >✕</span>
+                  </div>
+                ))}
+                <div className="menu-item" title="Snapshot the current column picker as a named PDF report layout"
+                  onClick={() => { setTemplateDraft({ name: '', title: '', onlyFailing: false }); setShowTemplateSave(true); setShowExportMenu(false); }}>
+                  <span style={{ opacity: 0.6 }}>＋</span>Save view as template…
+                </div>
+              </div>
+            )}
+            {showTemplateSave && (
+              <div className="menu" style={{ minWidth: 250, padding: '0.6rem 0.8rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                <div style={{ fontSize: '0.66rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>New report template</div>
+                <input placeholder="Template name (e.g. Exec Summary)" value={templateDraft.name} autoFocus
+                  onChange={e => setTemplateDraft(d => ({ ...d, name: e.target.value }))} style={inputStyle} />
+                <input placeholder="Report title (optional)" value={templateDraft.title}
+                  onChange={e => setTemplateDraft(d => ({ ...d, title: e.target.value }))} style={inputStyle} />
+                <label style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', gap: '0.4rem', alignItems: 'center', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={templateDraft.onlyFailing} onChange={e => setTemplateDraft(d => ({ ...d, onlyFailing: e.target.checked }))} />
+                  Failing tests only
+                </label>
+                <div style={{ fontSize: '0.62rem', color: 'var(--faint)' }}>Captures the columns currently checked in ⊞ Columns.</div>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button className="btn btn-sm" disabled={!templateDraft.name.trim()} onClick={() => {
+                    const next = [
+                      ...reportTemplates.filter(t => t.name !== templateDraft.name.trim()),
+                      { name: templateDraft.name.trim(), title: templateDraft.title.trim() || null, onlyFailing: templateDraft.onlyFailing, cols: { ...visibleCols } },
+                    ];
+                    setReportTemplates(next);
+                    saveSetting('reportTemplates', next);
+                    setShowTemplateSave(false);
+                  }}>Save</button>
+                  <button className="btn btn-sm" onClick={() => setShowTemplateSave(false)}>Cancel</button>
+                </div>
               </div>
             )}
           </div>
@@ -2971,10 +3063,10 @@ export default function App() {
           setActiveTab('leasing');
         }}
       />
-      <div style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
+      <div className="app-main" style={{ padding: "2rem", flex: 1, position: "relative", zIndex: 1 }}>
 
         {/* ── Tab Nav ── */}
-        <div style={{ display: 'flex', borderBottom: `1px solid var(--border)`, marginBottom: '2rem', alignItems: 'flex-end', position: 'relative' }}>
+        <div className="tab-nav" style={{ display: 'flex', borderBottom: `1px solid var(--border)`, marginBottom: '2rem', alignItems: 'flex-end', position: 'relative' }}>
           {visibleTabs.calculator && <button className={`tab-btn ${activeTab === "calculator" ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("calculator")}>Calculator</button>}
           {visibleTabs.matrix     && <button className={`tab-btn ${activeTab === "matrix"     ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("matrix")}>DY / DSCR Matrix</button>}
           {visibleTabs.covenant   && <button className={`tab-btn ${activeTab === "covenant"   ? "tab-active" : "tab-inactive"}`} onClick={() => setActiveTab("covenant")}>Covenant Tracker</button>}

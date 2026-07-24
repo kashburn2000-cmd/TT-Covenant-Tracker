@@ -445,11 +445,22 @@ export function computeNOI(sheetData, incomeMonths, expenseMonths, covenantDate,
 // full calculation chain: three-prong rate selection, debt service (amortizing,
 // I/O, or T-3 rolling interest for variable loans), DSCR/DY result, required
 // NOI, and paydown-to-cure.
-export function calcCovenantRow(p) {
-  const sofr    = getSofr(p.covenantDate);
-  const ten_y   = get10Y(p.covenantDate);
-  const spread  = parseFloat(p.spread);
-  const spread10y = p.spread10y != null ? parseFloat(p.spread10y) : null;
+// scenario (optional, UI what-if only — never persisted, never mirrored to
+// the Power BI SQL views, which always compute the base case):
+//   noiPct         — shock NOI by ±% (e.g. -10 → NOI × 0.90)
+//   rateShiftBps   — parallel shift of the SOFR and 10-Yr forward curves in
+//                    basis points. Fixed sizing-rate floors do NOT shift —
+//                    they're contractual, not market rates.
+//   spreadShiftBps — shift both credit spreads in basis points (repricing).
+export function calcCovenantRow(p, scenario = null) {
+  const rateShift      = scenario?.rateShiftBps ? scenario.rateShiftBps / 10000 : 0;
+  const spreadShiftPct = scenario?.spreadShiftBps ? scenario.spreadShiftBps / 100 : 0;
+  const noiScale       = scenario?.noiPct ? 1 + scenario.noiPct / 100 : 1;
+
+  const sofr    = getSofr(p.covenantDate) + rateShift;
+  const ten_y   = get10Y(p.covenantDate) + rateShift;
+  const spread  = parseFloat(p.spread) + spreadShiftPct;
+  const spread10y = p.spread10y != null ? parseFloat(p.spread10y) + spreadShiftPct : null;
   const sizingRate = p.sizingRate != null ? parseFloat(p.sizingRate) : null;
 
   const sofrRate    = sofr + spread / 100;
@@ -466,7 +477,7 @@ export function calcCovenantRow(p) {
   const rate = winner.rate;
 
   const loan = parseFloat(p.loanAmount);
-  const noi  = parseFloat(p.noi);
+  const noi  = parseFloat(p.noi) * noiScale;
   const req  = parseFloat(p.covenantReq);
   const amort = parseInt(p.amort);
 
@@ -494,9 +505,10 @@ export function calcCovenantRow(p) {
     if (t3.length > 0) {
       const monthlyInterests = t3.map(entry => {
         const entryDateStr = entry.date.toISOString().slice(0, 10);
-        // Recompute rate for that specific month using its SOFR
-        const mSofr = getSofr(entryDateStr);
-        const mTenY = get10Y(entryDateStr);
+        // Recompute rate for that specific month using its SOFR (scenario
+        // curve shift applies here too; spreads carry the shift already)
+        const mSofr = getSofr(entryDateStr) + rateShift;
+        const mTenY = get10Y(entryDateStr) + rateShift;
         const mSofrRate = mSofr + spread / 100;
         const mTenYRate = spread10y != null ? mTenY + spread10y / 100 : null;
         const mSizing   = sizingRate != null ? sizingRate / 100 : null;
@@ -557,5 +569,7 @@ export function calcCovenantRow(p) {
       paydown = Math.max(0, base - lo);
     }
   }
-  return { ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, ads, effectiveLoan, variableLoanDetail, currentVal, satisfied, requiredNOI, noiVariance, paydown };
+  // noi is returned explicitly so scenario shocks surface in the row (in the
+  // base case this equals parseFloat(p.noi) — a no-op for numeric inputs).
+  return { ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, noi, ads, effectiveLoan, variableLoanDetail, currentVal, satisfied, requiredNOI, noiVariance, paydown };
 }

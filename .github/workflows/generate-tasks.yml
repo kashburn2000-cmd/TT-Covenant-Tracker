@@ -1,0 +1,39 @@
+name: Generate Tasks
+
+# Nightly reminder engine for the Tasks & Reminders widget: scans loans
+# (maturities, extensions), the covenant tracker (test dates), and — once set
+# up — loan_reporting_requirements, upserts tasks into Supabase, and emails a
+# digest of anything inside its reminder window via Resend.
+#
+# Setup:
+#   • Run db/tasks_setup.sql once in the Supabase SQL editor.
+#   • SUPABASE_KEY repo secret (service_role) — same one the rate pull uses.
+#   • Optional email: RESEND_API_KEY + TASK_EMAIL_TO (comma-separated) repo
+#     secrets, plus TASK_EMAIL_FROM once a sender domain is verified. Without
+#     them the job still syncs tasks and just logs the would-be digest.
+
+on:
+  schedule:
+    # Daily at 11:23 UTC (~6:23am ET) so the digest is waiting at start of
+    # day. Off-the-hour minute avoids GitHub's cron congestion.
+    - cron: '23 11 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Generate tasks and send digest
+        env:
+          SB_URL: https://ngflppgqohmkkfiljqma.supabase.co
+          # Must be the project's SECRET (service_role) key — RLS blocks the
+          # publishable key (db/security_setup.sql).
+          SB_KEY: ${{ secrets.SUPABASE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TASK_EMAIL_TO: ${{ secrets.TASK_EMAIL_TO }}
+          TASK_EMAIL_FROM: ${{ secrets.TASK_EMAIL_FROM }}
+        run: node scripts/generate-tasks.mjs

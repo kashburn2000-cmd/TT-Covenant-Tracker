@@ -3,6 +3,13 @@ import { SB_URL, SB_KEY, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
 import { LockIcon } from '../icons.jsx';
 import { slugify } from '../format.js';
+import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
+import { supabase } from '../auth.js';
+
+const DOC_CATEGORIES = {
+  loan_agreement: 'Loan Agreement', guaranty: 'Guaranty', amendment: 'Amendment',
+  closing: 'Closing', insurance: 'Insurance', hedge: 'Hedge', correspondence: 'Correspondence', other: 'Other',
+};
 
 // ── Loans Tab ───────────────────────────────────────────────────────────────
 // Queryable database of closed-loan abstracts (construction + refinance).
@@ -70,6 +77,12 @@ const LOAN_FIELD_GROUPS = [
     ['extension_test_summary', 'Extension Test', 'textarea'],
     ['extension_term_changes', 'Extension Term Changes', 'textarea'],
   ] },
+  { title: 'Conversion Option', fields: [
+    ['conversion_window_start', 'Conversion Window Opens', 'date'],
+    ['conversion_window_end', 'Conversion Window Closes', 'date'],
+    ['conversion_fee_pct', 'Conversion Fee (%)', 'number'],
+    ['conversion_terms', 'Conversion Terms', 'textarea'],
+  ] },
   { title: 'Prepayment & Other', fields: [
     ['exit_fee_pct', 'Exit Fee (%)', 'number'],
     ['prepayment_terms', 'Prepayment Terms', 'textarea'],
@@ -85,6 +98,7 @@ const LOAN_NUM_FIELDS = new Set([
   'ltc_pct', 'ltv_pct', 'lead_lender_commitment', 'completion_guaranty_pct', 'repayment_guaranty_pct',
   'min_net_worth', 'min_liquidity', 'dscr_covenant', 'debt_yield_covenant', 'lender_assumed_reserves_per_unit',
   'extension_count', 'extension_term_months', 'extension_fee_pct', 'extension_fee_amount', 'exit_fee_pct',
+  'conversion_fee_pct',
 ]);
 
 const EMPTY_LOAN = {
@@ -101,6 +115,7 @@ const EMPTY_LOAN = {
   financial_reporting_borrower: '', financial_reporting_guarantor: '',
   extension_count: '', extension_term_months: '', extension_fee_pct: '', extension_fee_amount: '',
   extension_maturity_date: '', extension_test_summary: '', extension_term_changes: '',
+  conversion_window_start: '', conversion_window_end: '', conversion_fee_pct: '', conversion_terms: '',
   exit_fee_pct: '', prepayment_open: false, prepayment_terms: '',
   miscellaneous: '', notes: '', type_specific: {}, source_doc_path: '',
 };
@@ -267,6 +282,23 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const [importJson, setImportJson] = useState('');
   const [importFile, setImportFile] = useState(null);
 
+  // Reporting requirements (structured lender deliverables — feeds the nightly
+  // Tasks & Reminders generator). reqsAvailable flips false until
+  // db/loan_reporting_setup.sql has been run, hiding the section gracefully.
+  const [reportingReqs, setReportingReqs] = useState([]);
+  const [reqsAvailable, setReqsAvailable] = useState(true);
+  const [reqDraft, setReqDraft] = useState(null); // { loanId, item, party, frequency, due_month, due_day, recipient } | null
+
+  // Amortization schedule viewer — open loan id + editable inputs (strings).
+  // Hoisted here (not in Detail) so typing survives LoansTab re-renders.
+  const [schedInputs, setSchedInputs] = useState(null); // { loanId, ratePct, amortYears, ioMonths, termMonths } | null
+
+  // Per-deal document repository (db/deal_documents_setup.sql).
+  const [dealDocs, setDealDocs] = useState([]);
+  const [docsAvailable, setDocsAvailable] = useState(true);
+  const [docCategory, setDocCategory] = useState('loan_agreement');
+  const [docBusy, setDocBusy] = useState(false);
+
   // filters + sort
   const [fType, setFType]         = useState('all');
   const [fLender, setFLender]     = useState('');
@@ -292,10 +324,111 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         if (res.ok) { const rows = await res.json(); setLoans(Array.isArray(rows) ? rows : []); }
         else { const e = await res.json().catch(() => ({})); flash('Load error: ' + (e.message || res.status), true); }
       } catch (err) { console.error('Loans load error:', err); flash('Load error: ' + err.message, true); }
+      await refreshReqs();
+      await refreshDocs();
       setLoading(false);
     }
     load();
   }, []);
+
+  async function refreshReqs() {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?order=item.asc`, { headers: SB_HEADERS });
+      if (res.ok) { setReportingReqs(await res.json()); setReqsAvailable(true); return; }
+      const body = await res.text();
+      if (res.status === 404 || /relation .* does not exist|PGRST205/.test(body)) setReqsAvailable(false);
+    } catch { /* leave as-is */ }
+  }
+
+  async function addReq() {
+    const d = reqDraft;
+    if (!d || !d.item.trim()) return;
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
+        method: 'POST', headers: SB_HEADERS,
+        body: JSON.stringify({
+          loan_id: d.loanId,
+          item: d.item.trim(),
+          party: d.party || null,
+          frequency: d.frequency,
+          due_month: d.due_month ? parseInt(d.due_month, 10) : null,
+          due_day: d.due_day ? parseInt(d.due_day, 10) : null,
+          recipient: d.recipient.trim() || null,
+        }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); flash('Save error: ' + (e.message || res.status), true); return; }
+      setReqDraft(null);
+      refreshReqs();
+    } catch (err) { flash('Save error: ' + err.message, true); }
+  }
+
+  async function deleteReq(id) {
+    try {
+      await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?id=eq.${id}`, { method: 'DELETE', headers: SB_HEADERS });
+      refreshReqs();
+    } catch (err) { flash('Delete error: ' + err.message, true); }
+  }
+
+  // ── Deal documents (repository beyond the abstract .docx) ───────────────────
+  async function refreshDocs() {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/deal_documents?order=uploaded_at.desc`, { headers: SB_HEADERS });
+      if (res.ok) { setDealDocs(await res.json()); setDocsAvailable(true); return; }
+      const body = await res.text();
+      if (res.status === 404 || /relation .* does not exist|PGRST205/.test(body)) setDocsAvailable(false);
+    } catch { /* leave as-is */ }
+  }
+
+  async function uploadDealDoc(loan, file) {
+    if (!file) return;
+    setDocBusy(true);
+    try {
+      // Timestamped path = every upload is a new version; the table rows are
+      // the version history (newest first).
+      const path = `docs/${loan.id}/${Date.now()}-${file.name.replace(/[^\w.\- ]+/g, '_')}`;
+      const up = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${encodeURI(path)}`, {
+        method: 'POST',
+        headers: { 'apikey': SB_KEY, 'Authorization': SB_HEADERS.Authorization, 'Content-Type': file.type || 'application/octet-stream' },
+        body: file,
+      });
+      if (!up.ok) { const e = await up.json().catch(() => ({})); throw new Error(e.message || `upload failed (${up.status})`); }
+      const user = (await supabase.auth.getUser()).data?.user;
+      const ins = await fetch(`${SB_URL}/rest/v1/deal_documents`, {
+        method: 'POST', headers: SB_HEADERS,
+        body: JSON.stringify({ loan_id: loan.id, category: docCategory, filename: file.name, storage_path: path, uploaded_by: user?.email || null }),
+      });
+      if (!ins.ok) { const e = await ins.json().catch(() => ({})); throw new Error(e.message || `save failed (${ins.status})`); }
+      flash('✓ Document uploaded');
+      refreshDocs();
+    } catch (err) { flash('Upload error: ' + err.message, true); }
+    setDocBusy(false);
+  }
+
+  async function deleteDealDoc(doc) {
+    setDocBusy(true);
+    try {
+      await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${encodeURI(doc.storage_path)}`, {
+        method: 'DELETE', headers: { 'apikey': SB_KEY, 'Authorization': SB_HEADERS.Authorization },
+      });
+      await fetch(`${SB_URL}/rest/v1/deal_documents?id=eq.${doc.id}`, { method: 'DELETE', headers: SB_HEADERS });
+      refreshDocs();
+    } catch (err) { flash('Delete error: ' + err.message, true); }
+    setDocBusy(false);
+  }
+
+  async function downloadDealDoc(doc) {
+    try {
+      const res = await fetch(`${SB_URL}/storage/v1/object/sign/${BUCKET}/${encodeURI(doc.storage_path)}`, {
+        method: 'POST', headers: SB_HEADERS, body: JSON.stringify({ expiresIn: 3600 }),
+      });
+      const body = await res.json();
+      if (res.ok && body.signedURL) {
+        const a = document.createElement('a');
+        a.href = `${SB_URL}/storage/v1${body.signedURL}`;
+        a.target = '_blank'; a.rel = 'noopener'; a.click();
+      } else flash('Could not generate download link', true);
+    } catch (err) { flash('Download error: ' + err.message, true); }
+  }
 
   // ── Coerce a form/import object into a DB-ready row ──────────────────────────
   function coerceBody(src) {
@@ -306,7 +439,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       else { body[k] = LOAN_INT_FIELDS.has(k) ? parseInt(v, 10) : Number(v); if (Number.isNaN(body[k])) body[k] = null; }
     });
     // dates: empty string → null
-    ['closing_date', 'maturity_date', 'extension_maturity_date'].forEach(k => { if (body[k] === '') body[k] = null; });
+    ['closing_date', 'maturity_date', 'extension_maturity_date', 'conversion_window_start', 'conversion_window_end'].forEach(k => { if (body[k] === '') body[k] = null; });
     // jsonb fields stay native objects/arrays
     body.participants = Array.isArray(body.participants) ? body.participants : [];
     if (body.type_specific == null || typeof body.type_specific !== 'object') body.type_specific = {};
@@ -376,6 +509,9 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     try { data = JSON.parse(importJson); } catch (e) { flash('Invalid JSON: ' + e.message, true); return; }
     if (!data.borrower_entity) { flash('JSON must include "borrower_entity"', true); return; }
     if (data.loan_amount == null) { flash('JSON must include "loan_amount"', true); return; }
+    // Optional child rows — not a loans column, so pull them out before coerceBody.
+    const reqRows = Array.isArray(data.reporting_requirements) ? data.reporting_requirements : null;
+    delete data.reporting_requirements;
     setSaving(true);
     try {
       let path = data.source_doc_path || null;
@@ -401,6 +537,28 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         const saved = await res.json();
         const row = Array.isArray(saved) ? saved[0] : saved;
         setLoans(prev => { const i = prev.findIndex(l => l.id === row.id); return i >= 0 ? prev.map(l => l.id === row.id ? row : l) : [...prev, row]; });
+        // Replace the loan's reporting requirements from the sidecar (re-import safe).
+        if (reqRows && reqsAvailable) {
+          const valid = reqRows.filter(r => r && r.item && ['monthly', 'quarterly', 'semiannual', 'annual'].includes(r.frequency));
+          await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?loan_id=eq.${row.id}`, { method: 'DELETE', headers: SB_HEADERS });
+          if (valid.length) {
+            await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
+              method: 'POST', headers: SB_HEADERS,
+              body: JSON.stringify(valid.map(r => ({
+                loan_id: row.id,
+                item: String(r.item),
+                party: r.party || null,
+                frequency: r.frequency,
+                due_month: r.due_month != null ? parseInt(r.due_month, 10) : null,
+                due_day: r.due_day != null ? parseInt(r.due_day, 10) : null,
+                lead_days: r.lead_days != null ? parseInt(r.lead_days, 10) : 21,
+                recipient: r.recipient || null,
+                notes: r.notes || null,
+              }))),
+            });
+          }
+          refreshReqs();
+        }
         flash('✓ Abstract imported');
         setShowImport(false); setImportJson(''); setImportFile(null);
       } else {
@@ -846,6 +1004,253 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     </th>
   );
 
+  // ── Reporting Requirements (structured deliverables → nightly reminders) ────
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const reqSchedule = (r) => {
+    const day = r.due_day || 1;
+    const mo = r.due_month ? MONTHS[r.due_month - 1] : null;
+    if (r.frequency === 'monthly') return `monthly · day ${day}`;
+    if (r.frequency === 'quarterly') return `quarterly · from ${mo || 'Jan'} ${day}`;
+    if (r.frequency === 'semiannual') return `semi-annual · from ${mo || 'Jan'} ${day}`;
+    return `annual · ${mo || 'Jan'} ${day}`;
+  };
+
+  const ReqsBlock = ({ l }) => {
+    const rows = reportingReqs.filter(r => r.loan_id === l.id);
+    const drafting = reqDraft?.loanId === l.id;
+    const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.68rem', padding: '0.25rem 0.4rem' };
+    return (
+      <div style={{ marginBottom: '0.6rem' }}>
+        <div style={{ fontSize: '0.58rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>
+          Reporting Requirements
+          <span style={{ textTransform: 'none', letterSpacing: 0, marginLeft: 6, color: 'var(--faint2)' }}>(drive nightly reminders)</span>
+        </div>
+        {rows.map(r => (
+          <div key={r.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline', padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.72rem' }}>
+            <span style={{ color: 'var(--text2)' }}>{r.item}{r.party ? ` (${r.party})` : ''}</span>
+            <span style={{ marginLeft: 'auto', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{reqSchedule(r)}</span>
+            {r.recipient && <span style={{ color: 'var(--faint3)', whiteSpace: 'nowrap' }}>→ {r.recipient}</span>}
+            {pinUnlocked && (
+              <button onClick={() => deleteReq(r.id)} title="Remove requirement"
+                style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem', padding: 0 }}>✕</button>
+            )}
+          </div>
+        ))}
+        {rows.length === 0 && !drafting && (
+          <div style={{ fontSize: '0.68rem', color: 'var(--faint)', padding: '2px 0' }}>None recorded yet.</div>
+        )}
+        {pinUnlocked && !drafting && (
+          <button
+            onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}
+            style={{ marginTop: 4, background: 'none', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', fontSize: '0.66rem', padding: '0.18rem 0.5rem', cursor: 'pointer' }}
+          >+ Add requirement</button>
+        )}
+        {drafting && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: 5, alignItems: 'center' }}>
+            <input placeholder="Deliverable (e.g. Operating statement)" value={reqDraft.item} autoFocus
+              onChange={e => setReqDraft(d => ({ ...d, item: e.target.value }))} style={{ ...inSt, flex: '2 1 150px' }} />
+            <select value={reqDraft.party} onChange={e => setReqDraft(d => ({ ...d, party: e.target.value }))} style={inSt}>
+              <option value="borrower">borrower</option><option value="guarantor">guarantor</option>
+            </select>
+            <select value={reqDraft.frequency} onChange={e => setReqDraft(d => ({ ...d, frequency: e.target.value }))} style={inSt}>
+              <option value="monthly">monthly</option><option value="quarterly">quarterly</option>
+              <option value="semiannual">semi-annual</option><option value="annual">annual</option>
+            </select>
+            {reqDraft.frequency !== 'monthly' && (
+              <select value={reqDraft.due_month} onChange={e => setReqDraft(d => ({ ...d, due_month: e.target.value }))} style={inSt} title="Anchor month">
+                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+              </select>
+            )}
+            <input type="number" min="1" max="28" value={reqDraft.due_day} title="Day of month (1–28)"
+              onChange={e => setReqDraft(d => ({ ...d, due_day: e.target.value }))} style={{ ...inSt, width: 52 }} />
+            <input placeholder="Recipient" value={reqDraft.recipient}
+              onChange={e => setReqDraft(d => ({ ...d, recipient: e.target.value }))} style={{ ...inSt, flex: '1 1 90px' }} />
+            <button onClick={addReq} disabled={!reqDraft.item.trim()}
+              style={{ ...inSt, cursor: 'pointer', fontWeight: 600 }}>Add</button>
+            <button onClick={() => setReqDraft(null)} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.68rem' }}>Cancel</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── Amortization schedule viewer (expanded loan detail) ─────────────────────
+  const AmortBlock = ({ l }) => {
+    const open = schedInputs?.loanId === l.id;
+    const toggle = () => {
+      if (open) { setSchedInputs(null); return; }
+      const d = scheduleDefaultsFromLoan(l);
+      setSchedInputs({
+        loanId: l.id,
+        ratePct: d.annualRatePct != null ? String(d.annualRatePct) : '',
+        amortYears: d.amortYears != null ? String(d.amortYears) : '30',
+        ioMonths: String(d.ioMonths || 0),
+        termMonths: d.termMonths != null ? String(d.termMonths) : '',
+      });
+    };
+    const d = open ? scheduleDefaultsFromLoan(l) : null;
+    const sched = open ? buildAmortizationSchedule({
+      loanAmount: l.loan_amount,
+      annualRatePct: schedInputs.ratePct === '' ? null : Number(schedInputs.ratePct),
+      amortYears: schedInputs.amortYears === '' ? null : Number(schedInputs.amortYears),
+      ioMonths: Number(schedInputs.ioMonths) || 0,
+      startDate: d.startDate || new Date().toISOString().slice(0, 10),
+      termMonths: schedInputs.termMonths === '' ? null : Number(schedInputs.termMonths),
+    }) : null;
+
+    const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.7rem', padding: '0.25rem 0.45rem', width: 64 };
+    const lblSt = { fontSize: '0.62rem', color: 'var(--faint3)', display: 'flex', flexDirection: 'column', gap: 2 };
+    const tile = (k, v, sub) => (
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 5, padding: '0.45rem 0.7rem', minWidth: 110 }}>
+        <div style={{ fontSize: '0.56rem', color: 'var(--faint)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{k}</div>
+        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+        {sub && <div style={{ fontSize: '0.6rem', color: 'var(--muted)' }}>{sub}</div>}
+      </div>
+    );
+
+    // Balance sparkline: one x-step per month, y scaled to the loan amount.
+    const spark = sched && sched.rows.length > 1 ? (() => {
+      const max = l.loan_amount || 1;
+      const pts = sched.rows.map((r, i) => `${(i / (sched.rows.length - 1)) * 100},${24 - (r.balance / max) * 22}`).join(' ');
+      return (
+        <svg viewBox="0 0 100 26" preserveAspectRatio="none" style={{ width: '100%', height: 44, display: 'block' }}>
+          <polyline points={`0,2 ${pts}`} fill="none" stroke={TT_ORANGE} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        </svg>
+      );
+    })() : null;
+
+    let lastYear = null;
+    return (
+      <div style={{ borderTop: '1px solid var(--border)', padding: '0.7rem 1.25rem 1rem' }}>
+        <button onClick={toggle}
+          style={{ background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, padding: 0, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          {open ? '▾' : '▸'} Amortization Schedule
+        </button>
+        {open && (
+          <div style={{ marginTop: '0.7rem', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+            <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <label style={lblSt}>Rate (%)
+                <input type="number" step="0.01" value={schedInputs.ratePct} placeholder="e.g. 6.50"
+                  onChange={e => setSchedInputs(s => ({ ...s, ratePct: e.target.value }))} style={inSt} /></label>
+              <label style={lblSt}>Amort (yrs, 0 = IO)
+                <input type="number" value={schedInputs.amortYears}
+                  onChange={e => setSchedInputs(s => ({ ...s, amortYears: e.target.value }))} style={inSt} /></label>
+              <label style={lblSt}>IO period (mo)
+                <input type="number" value={schedInputs.ioMonths}
+                  onChange={e => setSchedInputs(s => ({ ...s, ioMonths: e.target.value }))} style={inSt} /></label>
+              <label style={lblSt}>Term (mo)
+                <input type="number" value={schedInputs.termMonths}
+                  onChange={e => setSchedInputs(s => ({ ...s, termMonths: e.target.value }))} style={inSt} /></label>
+              <span style={{ fontSize: '0.62rem', color: 'var(--faint)', maxWidth: 380 }}>
+                Pre-filled from the abstract ({l.amortization_type || 'no amortization type'}
+                {l.note_rate_pct != null ? `, note rate ${l.note_rate_pct}%` : l.rate_floor_pct != null ? `, floor ${l.rate_floor_pct}%` : ', no fixed rate — enter one'}).
+                Floating-rate loans: enter the rate to model.
+              </span>
+            </div>
+            {!sched ? (
+              <div style={{ fontSize: '0.72rem', color: 'var(--warn, #d29922)' }}>Enter a rate and term to build the schedule.</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  {tile('Monthly IO', fmtFull$(sched.monthlyIO))}
+                  {tile('Monthly P&I', fmtFull$(sched.monthlyPI))}
+                  {tile('Annual Debt Service', fmtFull$(sched.annualDS))}
+                  {tile('Balloon at Maturity', fmtFull$(sched.balloon), `${((sched.balloon / l.loan_amount) * 100).toFixed(1)}% of loan`)}
+                </div>
+                {spark}
+                <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 5 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead><tr><th>#</th><th>Date</th><th style={{ textAlign: 'right' }}>Payment</th><th style={{ textAlign: 'right' }}>Interest</th><th style={{ textAlign: 'right' }}>Principal</th><th style={{ textAlign: 'right' }}>Balance</th></tr></thead>
+                    <tbody>
+                      {sched.rows.map(r => {
+                        const year = r.date.slice(0, 4);
+                        const yearHeader = year !== lastYear;
+                        lastYear = year;
+                        return (
+                          <React.Fragment key={r.month}>
+                            {yearHeader && (
+                              <tr><td colSpan={6} style={{ background: 'var(--panel2)', color: 'var(--muted)', fontSize: '0.6rem', letterSpacing: '0.06em', fontWeight: 600, padding: '0.25rem 0.7rem' }}>{year}</td></tr>
+                            )}
+                            <tr style={{ fontSize: '0.7rem' }}>
+                              <td style={{ color: 'var(--faint)' }}>{r.month}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(r.date)}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtFull$(Math.round(r.payment))}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{fmtFull$(Math.round(r.interest))}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.principal > 0 ? undefined : 'var(--faint)' }}>{fmtFull$(Math.round(r.principal))}</td>
+                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtFull$(Math.round(r.balance))}</td>
+                            </tr>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── Documents repository block (expanded loan detail) ───────────────────────
+  const DocsBlock = ({ l }) => {
+    const docs = dealDocs.filter(d => d.loan_id === l.id);
+    const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.68rem', padding: '0.25rem 0.4rem' };
+    return (
+      <div style={{ borderTop: '1px solid var(--border)', padding: '0.7rem 1.25rem 1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span style={{ color: 'var(--text2)', fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Documents{docs.length > 0 && <span style={{ color: 'var(--faint)', fontWeight: 400 }}> ({docs.length})</span>}
+          </span>
+          {pinUnlocked && (
+            <span style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center' }}>
+              <select value={docCategory} onChange={e => setDocCategory(e.target.value)} style={inSt}>
+                {Object.entries(DOC_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+              <label style={{ ...inSt, cursor: docBusy ? 'wait' : 'pointer', fontWeight: 600 }}>
+                {docBusy ? 'Uploading…' : '↑ Upload'}
+                <input type="file" disabled={docBusy} style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files[0]; e.target.value = ''; uploadDealDoc(l, f); }} />
+              </label>
+            </span>
+          )}
+          {l.source_doc_path && (
+            <button onClick={() => downloadDoc(l)} className="btn btn-sm" title="The abstract .docx attached at import">
+              ⬇ Abstract (.docx)
+            </button>
+          )}
+        </div>
+        {docs.length > 0 && (
+          <div style={{ marginTop: '0.5rem' }}>
+            {docs.map(d => (
+              <div key={d.id} style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', padding: '3px 0', borderBottom: '1px solid var(--border)', fontSize: '0.73rem' }}>
+                <span className="pill blue">{DOC_CATEGORIES[d.category] || d.category}</span>
+                <button onClick={() => downloadDealDoc(d)} title="Download via signed link"
+                  style={{ background: 'none', border: 'none', color: 'var(--text2)', cursor: 'pointer', fontSize: '0.73rem', padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                  {d.filename}
+                </button>
+                <span style={{ marginLeft: 'auto', color: 'var(--faint)', whiteSpace: 'nowrap', fontSize: '0.66rem' }}>
+                  {fmtDate(d.uploaded_at?.slice(0, 10))}{d.uploaded_by ? ` · ${d.uploaded_by}` : ''}
+                </span>
+                {pinUnlocked && (
+                  <button onClick={() => deleteDealDoc(d)} title="Delete document" disabled={docBusy}
+                    style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem', padding: 0 }}>✕</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {docs.length === 0 && (
+          <div style={{ marginTop: 4, fontSize: '0.66rem', color: 'var(--faint)' }}>
+            No documents in the repository yet{l.source_doc_path ? ' (the abstract .docx is above)' : ''}.
+            {pinUnlocked ? ' Upload the loan agreement, guaranty, amendments, closing docs, …' : ''}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Detail panel (expanded row) ──────────────────────────────────────────────
   const Detail = ({ l }) => {
     const Row = ({ k, v }) => (v == null || v === '' ? null : (
@@ -863,6 +1268,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     const ts = l.type_specific && typeof l.type_specific === 'object' ? l.type_specific : {};
     const tsEntries = Object.entries(ts).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
     return (
+      <>
       <div style={{ borderTop: '1px solid var(--border)', padding: '1.1rem 1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1.5rem' }}>
         <div>
           <div style={{ fontSize: '0.6rem', color: 'var(--faint2)', letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: '0.6rem', fontWeight: 700 }}>Loan Terms</div>
@@ -909,9 +1315,13 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           <Row k="Extension Maturity" v={l.extension_maturity_date ? fmtDate(l.extension_maturity_date) : null} />
           <Row k="Prepayment" v={l.prepayment_open ? 'Open, no penalty' : null} />
           <Row k="Exit Fee" v={l.exit_fee_pct != null ? fmtPct(l.exit_fee_pct) : null} />
+          <Row k="Conversion Window" v={l.conversion_window_start ? `${fmtDate(l.conversion_window_start)} – ${l.conversion_window_end ? fmtDate(l.conversion_window_end) : 'maturity'}` : null} />
+          <Row k="Conversion Fee" v={l.conversion_fee_pct != null ? fmtPct(l.conversion_fee_pct) : null} />
+          <Prose k="Conversion Terms" v={l.conversion_terms} />
           <Prose k="Extension Test" v={l.extension_test_summary} />
           <Prose k="Extension Term Changes" v={l.extension_term_changes} />
           <Prose k="Prepayment Terms" v={l.prepayment_terms} />
+          {reqsAvailable && <ReqsBlock l={l} />}
           <Prose k="Reporting — Borrower" v={l.financial_reporting_borrower} />
           <Prose k="Reporting — Guarantor" v={l.financial_reporting_guarantor} />
           <Prose k="Miscellaneous" v={l.miscellaneous} />
@@ -929,6 +1339,9 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           )}
         </div>
       </div>
+      <AmortBlock l={l} />
+      {docsAvailable && <DocsBlock l={l} />}
+      </>
     );
   };
 

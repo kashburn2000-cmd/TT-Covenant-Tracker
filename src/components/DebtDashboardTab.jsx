@@ -11,6 +11,10 @@ import { OVERRIDE_FIELDS, applyOverrides, fieldToInput, parseFieldInput, sameVal
 import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync, CLASSIFICATION_LABEL } from '../dealRegistry.js';
 import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
+import { TasksWidget } from './TasksWidget.jsx';
+import { buildLenderRollup, buildLenderComparison, rollupStats } from '../lenderExposure.js';
+import { capExpectedReceipts, swapMtm, hedgeSummary } from '../hedgeCalc.js';
+import { portfolioMtm } from '../loanMtm.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -762,6 +766,468 @@ function GuarantyWidget({ projects }) {
           </tbody>
         </table>
         {rows.length === 0 && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>No repayment guaranties found — upload the At Risk schedule above.</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── Lender Exposure ───────────────────────────────────────────────────────────
+// Rolls the visible schedule up by lender (name variants folded together —
+// src/lenderExposure.js) and enriches with weighted-average spread from the
+// loan abstracts. Dollars come only from the schedule, so totals tie out to
+// the Leverage Tracker and Guaranty Hub.
+function LenderExposureWidget({ projects }) {
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [loans, setLoans] = useState([]);
+  const [openKey, setOpenKey] = useState(null);
+  const [mode, setMode] = useState('exposure'); // 'exposure' | 'compare'
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${SB_URL}/rest/v1/loans?select=lead_lender,rate_spread_bps,loan_amount,loan_fee_pct,exit_fee_pct,extension_fee_pct,dscr_covenant,debt_yield_covenant,repayment_guaranty_pct,extension_count,prepayment_open`, { headers: SB_HEADERS });
+        if (res.ok) setLoans(await res.json());
+      } catch { /* abstracts are enrichment only */ }
+    })();
+  }, []);
+
+  const rollup = useMemo(
+    () => buildLenderRollup(projects.filter(p => sourceFilter === 'all' || p.source === sourceFilter), loans),
+    [projects, loans, sourceFilter],
+  );
+  const stats = useMemo(() => rollupStats(rollup), [rollup]);
+  const comparison = useMemo(() => buildLenderComparison(loans), [loans]);
+  const maxLoan = rollup[0]?.totalLoan || 1;
+
+  const modeBtn = (key, label) => (
+    <button
+      onClick={() => setMode(key)}
+      style={{
+        background: mode === key ? 'var(--panel2)' : 'none',
+        border: '1px solid ' + (mode === key ? 'var(--border)' : 'transparent'),
+        borderRadius: 5, color: mode === key ? 'var(--text)' : 'var(--muted)',
+        fontSize: '0.7rem', fontWeight: 600, padding: '0.25rem 0.6rem', cursor: 'pointer',
+      }}
+    >{label}</button>
+  );
+
+  // Terms-comparison columns: fmt renders, best marks which direction is
+  // borrower-favorable and gets the highlight.
+  const CMP_COLS = [
+    { label: 'Loans', get: c => c.loanCount, fmt: v => v, best: null },
+    { label: 'Borrowed', get: c => c.totalCommitment, fmt: v => fmtM(v), best: null },
+    { label: 'Spread', get: c => c.wAvgSpreadBps, fmt: v => `${Math.round(v)} bps`, best: 'min' },
+    { label: 'Orig Fee', get: c => c.wAvgLoanFeePct, fmt: v => `${v.toFixed(2)}%`, best: 'min' },
+    { label: 'Exit Fee', get: c => c.wAvgExitFeePct, fmt: v => `${v.toFixed(2)}%`, best: 'min' },
+    { label: 'Ext Fee', get: c => c.wAvgExtensionFeePct, fmt: v => `${v.toFixed(2)}%`, best: 'min' },
+    { label: 'DSCR Cov', get: c => c.wAvgDscrCovenant, fmt: v => `${v.toFixed(2)}x`, best: 'min' },
+    { label: 'DY Cov', get: c => c.wAvgDebtYieldCovenant, fmt: v => `${v.toFixed(2)}%`, best: 'min' },
+    { label: 'Guaranty', get: c => c.wAvgGuarantyPct, fmt: v => `${Math.round(v)}%`, best: 'min' },
+    { label: 'Extensions', get: c => c.avgExtensionCount, fmt: v => v.toFixed(1), best: 'max' },
+    { label: 'Prepay Open', get: c => c.prepayOpenShare, fmt: v => fmtPct(v, 0), best: 'max' },
+  ];
+  const bestValue = (col) => {
+    if (!col.best) return null;
+    const vals = comparison.map(col.get).filter(v => v != null);
+    if (vals.length < 2) return null; // highlighting needs something to beat
+    return col.best === 'min' ? Math.min(...vals) : Math.max(...vals);
+  };
+
+  if (mode === 'compare') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
+        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+          {modeBtn('exposure', 'Exposure')}
+          {modeBtn('compare', 'Terms Comparison')}
+          <span style={{ marginLeft: 'auto', fontSize: '0.64rem', color: 'var(--faint)' }}>
+            Loan-size-weighted terms from the loan abstracts · green = most borrower-favorable
+          </span>
+        </div>
+        <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr><th>Lender</th>{CMP_COLS.map(c => <th key={c.label} style={{ textAlign: 'right' }}>{c.label}</th>)}</tr></thead>
+            <tbody>
+              {comparison.map(c => (
+                <tr key={c.key}>
+                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{c.lender}</td>
+                  {CMP_COLS.map(col => {
+                    const v = col.get(c);
+                    const isBest = col.best && v != null && v === bestValue(col);
+                    return (
+                      <td key={col.label} style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', color: isBest ? 'var(--good, #3fb46f)' : undefined, fontWeight: isBest ? 700 : undefined }}>
+                        {v == null ? '—' : col.fmt(v)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {comparison.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>
+              No loan abstracts yet — import abstracts in the Loans tab to compare lender terms.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
+      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+        {modeBtn('exposure', 'Exposure')}
+        {modeBtn('compare', 'Terms Comparison')}
+        <div style={{ marginLeft: '0.5rem' }}><SourceFilter value={sourceFilter} onChange={setSourceFilter} /></div>
+      </div>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <StatTile label="Total debt" value={fmtM(stats.total)} sub={`across ${stats.lenderCount} lender${stats.lenderCount === 1 ? '' : 's'}`} />
+        <StatTile label="Largest relationship" value={stats.top ? fmtM(stats.top.totalLoan) : '—'} sub={stats.top ? `${stats.top.lender} · ${fmtPct(stats.top.share, 0)} of total` : ''} />
+        <StatTile label="Top-3 concentration" value={fmtPct(stats.top3Share, 0)} sub="Share of total debt" />
+      </div>
+      <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>
+            <th>Lender</th><th style={{ textAlign: 'right' }}>Deals</th><th style={{ textAlign: 'right' }}>Exposure</th>
+            <th style={{ minWidth: 90 }}>Share</th><th style={{ textAlign: 'right' }}>TTH Guaranty</th>
+            <th style={{ textAlign: 'right' }}>Wtd Spread</th><th>Next Maturity</th>
+          </tr></thead>
+          <tbody>
+            {rollup.map(r => (
+              <React.Fragment key={r.key}>
+                <tr onClick={() => setOpenKey(k => k === r.key ? null : r.key)} style={{ cursor: 'pointer' }} title="Click to list this lender's deals">
+                  <td style={{ fontWeight: 600 }}>{r.lender}{r.abstractCount > 0 && <span className="pill blue" style={{ marginLeft: 6 }} title="Loan abstracts on file">{r.abstractCount} abstract{r.abstractCount > 1 ? 's' : ''}</span>}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.dealCount}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(r.totalLoan)}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ flex: 1, height: 6, background: 'var(--panel2)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${(r.totalLoan / maxLoan) * 100}%`, height: '100%', background: TT_ORANGE, borderRadius: 3 }} />
+                      </div>
+                      <span style={{ fontSize: '0.66rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums', minWidth: 32, textAlign: 'right' }}>{fmtPct(r.share, 0)}</span>
+                    </div>
+                  </td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.totalGuaranty ? fmtM(r.totalGuaranty) : '—'}</td>
+                  <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{r.wAvgSpreadBps != null ? `${Math.round(r.wAvgSpreadBps)} bps` : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{r.nearestMaturity ? fmtDate(r.nearestMaturity) : '—'}</td>
+                </tr>
+                {openKey === r.key && r.deals.map((d, i) => (
+                  <tr key={i} style={{ background: 'var(--panel2)' }}>
+                    <td style={{ paddingLeft: '1.5rem', color: 'var(--muted)' }}>{d.name}</td>
+                    <td />
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{fmtM(d.loan_amount)}</td>
+                    <td />
+                    <td />
+                    <td style={{ textAlign: 'right', color: 'var(--faint)' }}>{SOURCE_LABEL[d.source] || d.source}</td>
+                    <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{d.maturity_date ? fmtDate(d.maturity_date) : '—'}</td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+        {rollup.length === 0 && <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>No projects yet — upload the debt schedules above.</div>}
+      </div>
+    </div>
+  );
+}
+
+// ── Hedge Tracker ─────────────────────────────────────────────────────────────
+// Interest-rate caps and swaps (public.hedges — db/hedges_setup.sql), valued
+// against the in-house SOFR forward curve (src/hedgeCalc.js): expected cap
+// receipts and payer-fixed swap MTM, both intrinsic/undiscounted monitoring
+// figures. Maturity reminders flow through the nightly task generator.
+const EMPTY_HEDGE = { deal_name: '', hedge_type: 'cap', notional: '', strike_pct: '', fixed_rate_pct: '', effective_date: '', maturity_date: '', counterparty: '', premium_paid: '' };
+
+function HedgeWidget({ pinUnlocked }) {
+  const [hedges, setHedges] = useState(null); // null = loading
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [draft, setDraft] = useState(null);   // EMPTY_HEDGE clone while adding
+  const [openId, setOpenId] = useState(null);
+
+  async function load() {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/hedges?order=maturity_date.asc`, { headers: SB_HEADERS });
+      if (!res.ok) {
+        const body = await res.text();
+        if (res.status === 404 || /relation .* does not exist|PGRST205/.test(body)) setSetupNeeded(true);
+        setHedges([]);
+        return;
+      }
+      setHedges(await res.json());
+    } catch { setHedges([]); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function saveDraft() {
+    const d = draft;
+    if (!d.deal_name.trim() || !d.notional || !d.maturity_date) return;
+    const body = {
+      deal_name: d.deal_name.trim(),
+      hedge_type: d.hedge_type,
+      notional: Number(d.notional),
+      strike_pct: d.hedge_type === 'cap' && d.strike_pct !== '' ? Number(d.strike_pct) : null,
+      fixed_rate_pct: d.hedge_type === 'swap' && d.fixed_rate_pct !== '' ? Number(d.fixed_rate_pct) : null,
+      effective_date: d.effective_date || null,
+      maturity_date: d.maturity_date,
+      counterparty: d.counterparty.trim() || null,
+      premium_paid: d.premium_paid !== '' ? Number(d.premium_paid) : null,
+    };
+    const res = await fetch(`${SB_URL}/rest/v1/hedges`, { method: 'POST', headers: SB_HEADERS, body: JSON.stringify(body) });
+    if (res.ok) { setDraft(null); load(); }
+  }
+
+  async function removeHedge(id) {
+    await fetch(`${SB_URL}/rest/v1/hedges?id=eq.${id}`, { method: 'DELETE', headers: SB_HEADERS });
+    load();
+  }
+
+  const today = todayISO();
+  const summary = useMemo(() => hedgeSummary(hedges || [], today), [hedges, today]);
+
+  const maturityPill = (iso) => {
+    const m = monthsUntil(iso);
+    if (m < 0) return ['red', 'EXPIRED'];
+    if (m < 4) return ['red', `${Math.ceil(m)} mo`];
+    if (m < 12) return ['yellow', `${Math.ceil(m)} mo`];
+    return ['green', m < 24 ? `${Math.ceil(m)} mo` : `${(m / 12).toFixed(1)} yr`];
+  };
+  const inSt = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.7rem', padding: '0.28rem 0.45rem' };
+
+  if (setupNeeded) {
+    return (
+      <div style={{ color: 'var(--muted)', fontSize: '0.78rem', lineHeight: 1.7, padding: '0.5rem' }}>
+        The hedges table hasn't been created yet — run <code>db/hedges_setup.sql</code> in the Supabase SQL editor once, then reload.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <StatTile label="Active hedges" value={summary.active} sub={`${fmtM(summary.notional)} notional`} />
+        <StatTile label="Cap value (intrinsic)" value={fmtM(summary.capValue)} sub="Expected receipts vs forwards" />
+        <StatTile label="Swap MTM" value={fmtM(summary.swapValue)} sub="Payer-fixed vs forwards, undiscounted" />
+        {pinUnlocked && !draft && (
+          <button onClick={() => setDraft({ ...EMPTY_HEDGE })} className="btn btn-sm" style={{ marginLeft: 'auto' }}>+ Add Hedge</button>
+        )}
+      </div>
+      {draft && (
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.55rem' }}>
+          <input placeholder="Deal / facility" value={draft.deal_name} onChange={e => setDraft(d => ({ ...d, deal_name: e.target.value }))} style={{ ...inSt, flex: '1.5 1 120px', background: 'var(--panel)' }} />
+          <select value={draft.hedge_type} onChange={e => setDraft(d => ({ ...d, hedge_type: e.target.value }))} style={{ ...inSt, background: 'var(--panel)' }}>
+            <option value="cap">cap</option><option value="swap">swap</option>
+          </select>
+          <input type="number" placeholder="Notional $" value={draft.notional} onChange={e => setDraft(d => ({ ...d, notional: e.target.value }))} style={{ ...inSt, width: 110, background: 'var(--panel)' }} />
+          {draft.hedge_type === 'cap'
+            ? <input type="number" step="0.05" placeholder="Strike %" value={draft.strike_pct} onChange={e => setDraft(d => ({ ...d, strike_pct: e.target.value }))} style={{ ...inSt, width: 80, background: 'var(--panel)' }} />
+            : <input type="number" step="0.05" placeholder="Fixed %" value={draft.fixed_rate_pct} onChange={e => setDraft(d => ({ ...d, fixed_rate_pct: e.target.value }))} style={{ ...inSt, width: 80, background: 'var(--panel)' }} />}
+          <input type="date" title="Effective date" value={draft.effective_date} onChange={e => setDraft(d => ({ ...d, effective_date: e.target.value }))} style={{ ...inSt, background: 'var(--panel)' }} />
+          <input type="date" title="Maturity date (required)" value={draft.maturity_date} onChange={e => setDraft(d => ({ ...d, maturity_date: e.target.value }))} style={{ ...inSt, background: 'var(--panel)' }} />
+          <input placeholder="Counterparty" value={draft.counterparty} onChange={e => setDraft(d => ({ ...d, counterparty: e.target.value }))} style={{ ...inSt, width: 110, background: 'var(--panel)' }} />
+          {draft.hedge_type === 'cap' && (
+            <input type="number" placeholder="Premium $" value={draft.premium_paid} onChange={e => setDraft(d => ({ ...d, premium_paid: e.target.value }))} style={{ ...inSt, width: 100, background: 'var(--panel)' }} />
+          )}
+          <button onClick={saveDraft} disabled={!draft.deal_name.trim() || !draft.notional || !draft.maturity_date} className="btn btn-sm">Save</button>
+          <button onClick={() => setDraft(null)} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem' }}>Cancel</button>
+        </div>
+      )}
+      <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>
+            <th>Deal</th><th>Type</th><th style={{ textAlign: 'right' }}>Notional</th><th style={{ textAlign: 'right' }}>Strike / Fixed</th>
+            <th>Counterparty</th><th>Maturity</th><th>Time left</th><th style={{ textAlign: 'right' }}>Value vs Fwds</th>{pinUnlocked && <th />}
+          </tr></thead>
+          <tbody>
+            {(hedges || []).map(h => {
+              const [cls, label] = maturityPill(h.maturity_date);
+              const cap = capExpectedReceipts(h, today);
+              const swap = swapMtm(h, today);
+              const value = cap ? cap.total : swap ? swap.total : null;
+              const isOpen = openId === h.id;
+              const months = cap ? cap.months.map(m => ({ ...m, amt: m.receipt })) : swap ? swap.months.map(m => ({ ...m, amt: m.net })) : [];
+              return (
+                <React.Fragment key={h.id}>
+                  <tr onClick={() => setOpenId(isOpen ? null : h.id)} style={{ cursor: 'pointer' }} title="Click for the month-by-month breakdown">
+                    <td style={{ fontWeight: 600 }}>{h.deal_name}</td>
+                    <td><span className={`pill ${h.hedge_type === 'cap' ? 'blue' : 'yellow'}`}>{h.hedge_type}</span></td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(h.notional)}</td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{h.strike_pct != null ? `${Number(h.strike_pct).toFixed(2)}%` : h.fixed_rate_pct != null ? `${Number(h.fixed_rate_pct).toFixed(2)}%` : '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{h.counterparty || '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(h.maturity_date)}</td>
+                    <td><span className={`pill ${cls}`}>{label}</span></td>
+                    <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: value == null ? undefined : value >= 0 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)', fontWeight: 600 }}>
+                      {value == null ? '—' : fmtM(value)}
+                    </td>
+                    {pinUnlocked && (
+                      <td style={{ textAlign: 'right' }}>
+                        <button onClick={e => { e.stopPropagation(); removeHedge(h.id); }} title="Delete hedge"
+                          style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', padding: 2 }}>✕</button>
+                      </td>
+                    )}
+                  </tr>
+                  {isOpen && months.length > 0 && (
+                    <tr style={{ background: 'var(--panel2)' }}>
+                      <td colSpan={pinUnlocked ? 9 : 8} style={{ padding: '0.5rem 0.85rem' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem 1rem', fontSize: '0.66rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>
+                          {months.map(m => (
+                            <span key={m.date}>
+                              {m.date.slice(0, 7)}: fwd {(m.fwd * 100).toFixed(2)}% → <b style={{ color: m.amt >= 0 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)' }}>{fmtM(m.amt)}</b>
+                            </span>
+                          ))}
+                        </div>
+                        <div style={{ marginTop: 4, fontSize: '0.62rem', color: 'var(--faint)' }}>
+                          Intrinsic vs the in-house SOFR forward curve, undiscounted — a monitoring figure, not a dealer valuation. Attach confirmations to the loan's Documents (category: hedge).
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+        {hedges !== null && hedges.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>
+            No hedges recorded yet{pinUnlocked ? ' — use + Add Hedge above.' : '.'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Loan Mark-to-Market ───────────────────────────────────────────────────────
+// Prices the loan abstracts against manually maintained market spreads
+// (public.market_spreads — the stand-in for JLL's proprietary loan pricing
+// database; refresh quarterly from lender quotes). Math in src/loanMtm.js.
+const SPREAD_STALE_DAYS = 120;
+
+function LoanMtmWidget({ pinUnlocked }) {
+  const [loans, setLoans] = useState([]);
+  const [spreads, setSpreads] = useState(null);   // { construction: row, refinance: row }
+  const [setupNeeded, setSetupNeeded] = useState(false);
+  const [editing, setEditing] = useState(null);   // { construction: {spread_bps, source}, refinance: {...} } | null
+
+  async function load() {
+    try {
+      const [lr, sr] = await Promise.all([
+        fetch(`${SB_URL}/rest/v1/loans?select=id,property_name,borrower_entity,loan_type,loan_amount,rate_spread_bps,note_rate_pct,amortization_type,closing_date,maturity_date,lead_lender`, { headers: SB_HEADERS }),
+        fetch(`${SB_URL}/rest/v1/market_spreads`, { headers: SB_HEADERS }),
+      ]);
+      if (lr.ok) setLoans(await lr.json());
+      if (sr.ok) {
+        const rows = await sr.json();
+        setSpreads(Object.fromEntries(rows.map(r => [r.loan_type, r])));
+      } else {
+        const body = await sr.text();
+        if (sr.status === 404 || /relation .* does not exist|PGRST205/.test(body)) setSetupNeeded(true);
+        setSpreads({});
+      }
+    } catch { setSpreads({}); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function saveSpreads() {
+    const today = todayISO();
+    const rows = ['construction', 'refinance']
+      .filter(t => editing[t]?.spread_bps !== '' && editing[t]?.spread_bps != null)
+      .map(t => ({ loan_type: t, spread_bps: parseInt(editing[t].spread_bps, 10), as_of: today, source: editing[t].source?.trim() || null, updated_at: new Date().toISOString() }));
+    if (rows.length) {
+      await fetch(`${SB_URL}/rest/v1/market_spreads?on_conflict=loan_type`, {
+        method: 'POST', headers: SB_UPSERT(), body: JSON.stringify(rows),
+      });
+    }
+    setEditing(null);
+    load();
+  }
+
+  const today = todayISO();
+  const result = useMemo(() => portfolioMtm(loans, spreads || {}, today), [loans, spreads, today]);
+  const staleTypes = Object.values(spreads || {}).filter(s => {
+    const age = (new Date(today) - new Date(s.as_of)) / 86400000;
+    return age > SPREAD_STALE_DAYS;
+  });
+  const name = l => l.property_name || l.borrower_entity || '—';
+  const inSt = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.7rem', padding: '0.28rem 0.45rem', width: 90 };
+
+  if (setupNeeded) {
+    return (
+      <div style={{ color: 'var(--muted)', fontSize: '0.78rem', lineHeight: 1.7, padding: '0.5rem' }}>
+        The market_spreads table hasn't been created yet — run <code>db/market_spreads_setup.sql</code> in the Supabase SQL editor once, then reload and enter current market spreads.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', height: '100%' }}>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <StatTile label="Par (priced loans)" value={fmtM(result.par)} sub={`${result.rows.length} of ${loans.length} abstracts priceable`} />
+        <StatTile label="Market value" value={fmtM(result.value)} sub="DCF at market spread vs forwards" />
+        <StatTile label="Premium / (Discount)" value={fmtM(result.premium)} sub={result.par ? `${((result.value / result.par - 1) * 100).toFixed(2)}% of par` : ''} />
+        {pinUnlocked && !editing && (
+          <button className="btn btn-sm" style={{ marginLeft: 'auto' }}
+            onClick={() => setEditing({
+              construction: { spread_bps: spreads?.construction?.spread_bps ?? '', source: spreads?.construction?.source || '' },
+              refinance: { spread_bps: spreads?.refinance?.spread_bps ?? '', source: spreads?.refinance?.source || '' },
+            })}>Update Market Spreads</button>
+        )}
+      </div>
+      {staleTypes.length > 0 && !editing && (
+        <div style={{ fontSize: '0.7rem', color: 'var(--warn, #d29922)' }}>
+          ⚠ Market spread{staleTypes.length > 1 ? 's' : ''} for {staleTypes.map(s => s.loan_type).join(' & ')} {staleTypes.length > 1 ? 'are' : 'is'} over {SPREAD_STALE_DAYS} days old — refresh from current lender quotes.
+        </div>
+      )}
+      {editing && (
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem' }}>
+          {['construction', 'refinance'].map(t => (
+            <div key={t} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={{ fontSize: '0.62rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t} spread (bps over SOFR)</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <input type="number" value={editing[t].spread_bps} placeholder="e.g. 275"
+                  onChange={e => setEditing(ed => ({ ...ed, [t]: { ...ed[t], spread_bps: e.target.value } }))} style={inSt} />
+                <input value={editing[t].source} placeholder="Source"
+                  onChange={e => setEditing(ed => ({ ...ed, [t]: { ...ed[t], source: e.target.value } }))} style={{ ...inSt, width: 150 }} />
+              </div>
+            </div>
+          ))}
+          <button className="btn btn-sm" onClick={saveSpreads}>Save (as of today)</button>
+          <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: '0.72rem' }}>Cancel</button>
+        </div>
+      )}
+      <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>
+            <th>Loan</th><th>Type</th><th style={{ textAlign: 'right' }}>Balance</th><th style={{ textAlign: 'right' }}>Contract</th>
+            <th style={{ textAlign: 'right' }}>Market</th><th style={{ textAlign: 'right' }}>Price (% par)</th><th style={{ textAlign: 'right' }}>Premium / (Disc)</th><th>Maturity</th>
+          </tr></thead>
+          <tbody>
+            {result.rows.map(({ loan: l, mtm, marketSpreadBps }) => (
+              <tr key={l.id}>
+                <td style={{ fontWeight: 600 }}>{name(l)}</td>
+                <td style={{ color: 'var(--muted)' }}>{l.loan_type}</td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtM(l.loan_amount)}</td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{mtm.method === 'fixed' ? `${Number(l.note_rate_pct).toFixed(2)}% fixed` : `S+${l.rate_spread_bps}`}</td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{mtm.method === 'fixed' ? `+${marketSpreadBps} bps` : `S+${marketSpreadBps}`}</td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: mtm.pricePct >= 1 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)' }}>
+                  {(mtm.pricePct * 100).toFixed(2)}%
+                </td>
+                <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: mtm.premium >= 0 ? 'var(--pass, #4fbf8f)' : 'var(--fail, #e06a6a)' }}>{fmtM(mtm.premium)}</td>
+                <td style={{ whiteSpace: 'nowrap', color: 'var(--muted)' }}>{fmtDate(l.maturity_date)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {result.rows.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--faint)', fontSize: '0.8rem' }}>
+            {Object.keys(spreads || {}).length === 0
+              ? 'Enter current market spreads (Update Market Spreads, PIN required) to price the loan book.'
+              : 'No priceable loans — abstracts need a maturity date plus either a rate spread or a note rate.'}
+          </div>
+        )}
+        <div style={{ marginTop: 6, fontSize: '0.62rem', color: 'var(--faint)' }}>
+          Floating loans: PV of (market − contract) spread over the remaining term. Fixed loans: remaining-schedule DCF at forward SOFR + market spread. No prepay/extension optionality — a monitoring figure, not a dealer quote.
+        </div>
       </div>
     </div>
   );
@@ -1593,6 +2059,10 @@ const WIDGETS = {
   maturities: { title: 'Maturity Schedule',      defaultGrid: { x: 0, y: 11, w: 6,  h: 10, minW: 4, minH: 5 } },
   guaranty:   { title: 'Repayment Guaranty Hub', defaultGrid: { x: 6, y: 11, w: 6,  h: 10, minW: 4, minH: 5 } },
   curve:      { title: 'Forward Curve Tracker',  defaultGrid: { x: 0, y: 21, w: 12, h: 10, minW: 6, minH: 6 } },
+  tasks:      { title: 'Tasks & Reminders',      defaultGrid: { x: 0, y: 31, w: 12, h: 9,  minW: 4, minH: 5 } },
+  lenders:    { title: 'Lender Exposure',        defaultGrid: { x: 0, y: 40, w: 12, h: 10, minW: 5, minH: 5 } },
+  hedges:     { title: 'Hedge Tracker',          defaultGrid: { x: 0, y: 50, w: 12, h: 9,  minW: 5, minH: 5 } },
+  loanMtm:    { title: 'Loan Mark-to-Market',    defaultGrid: { x: 0, y: 59, w: 12, h: 9,  minW: 5, minH: 5 } },
 };
 const DEFAULT_WIDGETS = Object.keys(WIDGETS);
 const DEFAULT_LAYOUT = DEFAULT_WIDGETS.map(k => ({ i: k, ...WIDGETS[k].defaultGrid }));
@@ -1853,6 +2323,10 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       );
       case 'guaranty':   return <GuarantyWidget projects={visibleProjects} />;
       case 'curve':      return <CurveWidget pinUnlocked={pinUnlocked} requirePin={requirePin} />;
+      case 'tasks':      return <TasksWidget pinUnlocked={pinUnlocked} />;
+      case 'lenders':    return <LenderExposureWidget projects={visibleProjects} />;
+      case 'hedges':     return <HedgeWidget pinUnlocked={pinUnlocked} />;
+      case 'loanMtm':    return <LoanMtmWidget pinUnlocked={pinUnlocked} />;
       default: return null;
     }
   }
