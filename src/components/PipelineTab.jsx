@@ -48,6 +48,7 @@ export function PipelineTab({ pinUnlocked = true }) {
   const [confirmDel,  setConfirmDel]  = useState(null);  // id to confirm delete
   const [parsing,     setParsing]     = useState(false); // bank package upload in flight
   const [parseInfo,   setParseInfo]   = useState(null);  // summary banner for the edit modal
+  const [hoverMonth,  setHoverMonth]  = useState(null);  // closing-timeline column under the cursor
   const packageInputRef = useRef(null);
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -355,13 +356,41 @@ export function PipelineTab({ pinUnlocked = true }) {
     return true;
   });
 
-  // 2026 closing timeline — how many deals close in each month
-  const monthCounts = Array(12).fill(0);
-  deals.forEach(d => {
-    if (!d.closing_date) return;
-    const [y, m] = String(d.closing_date).split('-').map(Number);
-    if (y === 2026 && m >= 1 && m <= 12) monthCounts[m - 1]++;
-  });
+  // ── Closing timeline ───────────────────────────────────────────────────────
+  // Buckets the visible book by closing month and stacks each column by
+  // financing stage, so a month reads as both "how many close" and "how much of
+  // that is still uncommitted". The window is derived from the data (never a
+  // hard-coded year) and always includes the current month so "now" has a spot.
+  const MONTHS_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthKey = iso => {
+    const [y, m] = String(iso || '').split('-').map(Number);
+    return y && m >= 1 && m <= 12 ? y * 12 + (m - 1) : null;
+  };
+  const timeline = (() => {
+    const today  = new Date();
+    const nowIdx = today.getFullYear() * 12 + today.getMonth();
+    const dated  = filtered.filter(d => monthKey(d.closing_date) != null);
+    const undated = filtered.length - dated.length;
+    if (!dated.length) return { months: [], nowIdx, undated, max: 1, dated: 0, budget: 0 };
+    const keys  = dated.map(d => monthKey(d.closing_date));
+    const start = Math.min(nowIdx, ...keys);
+    // Cap the axis at three years so one stray far-out date can't flatten it.
+    const end   = Math.min(Math.max(nowIdx, ...keys), start + 35);
+    const months = [];
+    for (let i = start; i <= end; i++) {
+      months.push({ idx: i, year: Math.floor(i / 12), month: i % 12, deals: [], budget: 0, byStage: {} });
+    }
+    let budget = 0;
+    dated.forEach(d => {
+      const b = months[monthKey(d.closing_date) - start];
+      if (!b) return;
+      b.deals.push(d);
+      b.budget += d.total_budget || 0;
+      b.byStage[stageOf(d)] = (b.byStage[stageOf(d)] || 0) + 1;
+      budget += d.total_budget || 0;
+    });
+    return { months, nowIdx, undated, max: Math.max(1, ...months.map(b => b.deals.length)), dated: dated.length, budget };
+  })();
 
   if (loading) return (
     <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: 12 }}>
@@ -642,20 +671,86 @@ export function PipelineTab({ pinUnlocked = true }) {
           ))}
         </div>
 
-        {/* ── 2026 closing-timeline dot strip ── */}
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 22px', marginBottom: 20 }}>
-          <div className="mono" style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: 16 }}>2026 closing timeline</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', paddingTop: 6 }}>
-            <div style={{ position: 'absolute', left: 0, right: 0, top: 11, height: 1.5, background: 'var(--border)' }} />
-            {['J','F','M','A','M','J','J','A','S','O','N','D'].map((mon, i) => (
-              <div key={i} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, flex: 1 }}>
-                <span style={{ width: 11, height: 11, borderRadius: '50%', background: monthCounts[i] ? 'var(--pass)' : 'var(--border2)', border: '2px solid var(--panel)', boxShadow: '0 0 0 1px var(--border2)', zIndex: 1 }} />
-                <span className="mono" style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--muted)' }}>{mon}</span>
-                <span className="mono" style={{ fontSize: 9, fontWeight: 600, color: 'var(--text)', minHeight: 11 }}>{monthCounts[i] || ''}</span>
-              </div>
-            ))}
+        {/* ── Closing timeline — deals per month, stacked by financing stage ── */}
+        {(() => {
+          const PLOT = 58;                       // px of plot area a full-height column fills
+          const hovered = timeline.months.find(b => b.idx === hoverMonth) || null;
+          const dealLabel = d => String(d.name || '').split(',')[0].trim();
+          // Right-hand readout: the hovered month when there is one, else the
+          // book-wide summary. Same slot, so the header never jumps.
+          const readout = hovered
+            ? `${MONTHS_ABBR[hovered.month]} ${hovered.year} · ${hovered.deals.length ? `${hovered.deals.length} deal${hovered.deals.length === 1 ? '' : 's'} · ${fmt$(hovered.budget)} · ${hovered.deals.slice(0, 3).map(dealLabel).join(', ')}${hovered.deals.length > 3 ? ` +${hovered.deals.length - 3}` : ''}` : 'no closings'}`
+            : [timeline.dated ? `${timeline.dated} dated · ${fmt$(timeline.budget)}` : null,
+               timeline.undated ? `${timeline.undated} undated` : null].filter(Boolean).join(' · ');
+          return (
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 22px 14px', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 14, marginBottom: 14 }}>
+            <span className="mono" style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Closing timeline</span>
+            <span className="mono" style={{ fontSize: 10.5, color: hovered ? 'var(--text2)' : 'var(--faint3)', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{readout}</span>
           </div>
+
+          {!timeline.months.length ? (
+            <div className="mono" style={{ fontSize: 11, color: 'var(--faint3)', padding: '6px 0 4px' }}>
+              No closing dates set{timeline.undated ? ` on ${timeline.undated} deal${timeline.undated === 1 ? '' : 's'}` : ''}.
+            </div>
+          ) : (<>
+            <div style={{ overflowX: 'auto', paddingBottom: 2 }} onMouseLeave={() => setHoverMonth(null)}>
+              {/* No gap between columns — the axis ticks butt up into one
+                  continuous rule, and the bar's own max-width does the spacing. */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', minWidth: timeline.months.length * 28 }}>
+                {timeline.months.map((b, i) => {
+                  const n       = b.deals.length;
+                  const isNow   = b.idx === timeline.nowIdx;
+                  const isPast  = b.idx < timeline.nowIdx;
+                  const isHover = b.idx === hoverMonth;
+                  // Committed sits at the base of the stack, so paint the
+                  // stages top-down in reverse order.
+                  const segs = [...STAGES].reverse().filter(s => b.byStage[s.key]);
+                  return (
+                    <div key={b.idx}
+                      onMouseEnter={() => setHoverMonth(b.idx)}
+                      title={n ? `${MONTHS_ABBR[b.month]} ${b.year} — ${b.deals.map(dealLabel).join(', ')}` : `${MONTHS_ABBR[b.month]} ${b.year} — no closings`}
+                      style={{ flex: 1, minWidth: 28, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 4, paddingBottom: 2, borderRadius: 6,
+                               background: isHover ? 'color-mix(in srgb, var(--accent) 7%, transparent)' : 'transparent' }}>
+                      {/* Count rides directly on top of the bar, not floating at the top of the panel */}
+                      <div style={{ width: '100%', maxWidth: 26, height: PLOT + 14, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', opacity: isPast ? 0.45 : 1 }}>
+                        <span className="mono" style={{ fontSize: 10, fontWeight: 600, lineHeight: '14px', textAlign: 'center', color: n ? 'var(--text)' : 'transparent' }}>{n || '0'}</span>
+                        {segs.length ? segs.map((s, si) => (
+                          <div key={s.key} style={{ height: Math.max(4, (b.byStage[s.key] / timeline.max) * PLOT),
+                                                    background: s.color, borderRadius: si === 0 ? '2px 2px 0 0' : 0,
+                                                    borderBottom: si < segs.length - 1 ? '1px solid var(--panel)' : 'none', boxSizing: 'border-box' }} />
+                        )) : (
+                          <div style={{ height: 3, background: 'var(--border2)', borderRadius: 2, opacity: 0.5 }} />
+                        )}
+                      </div>
+                      {/* Continuous axis rule; the current month gets a short accent tick on top of it */}
+                      <div style={{ width: '100%', height: 2, background: 'var(--border)', display: 'flex', justifyContent: 'center' }}>
+                        {isNow && <div style={{ width: '100%', maxWidth: 42, height: 2, background: 'var(--accent)' }} />}
+                      </div>
+                      <span className="mono" style={{ fontSize: 9.5, fontWeight: isNow ? 600 : 500, lineHeight: '14px', marginTop: 5,
+                                                      color: isNow ? 'var(--accent)' : isPast ? 'var(--faint)' : 'var(--muted)' }}>{MONTHS_ABBR[b.month]}</span>
+                      {/* Fixed height so months without a year stamp still line up on the axis */}
+                      <span className="mono" style={{ display: 'block', height: 11, fontSize: 8.5, lineHeight: '11px', letterSpacing: '0.04em', color: 'var(--faint)' }}>
+                        {i === 0 || b.month === 0 ? b.year : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Stage legend — same colors as the deal-card sections below */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+              {STAGES.map(s => (
+                <span key={s.key} className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: s.color }} />{s.label}
+                </span>
+              ))}
+            </div>
+          </>)}
         </div>
+          );
+        })()}
 
         {/* ── Deal Cards, grouped by financing stage ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
