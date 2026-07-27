@@ -660,20 +660,25 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
           const valid = reqRows.filter(r => r && r.item && ['monthly', 'quarterly', 'semiannual', 'annual'].includes(r.frequency));
           await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?loan_id=eq.${row.id}`, { method: 'DELETE', headers: SB_HEADERS });
           if (valid.length) {
-            await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
-              method: 'POST', headers: SB_HEADERS,
-              body: JSON.stringify(valid.map(r => ({
+            // days_after_period_end is the real schedule ("45 days after quarter
+            // end"); when the sidecar gives one, derive the anchor from it so
+            // both shapes agree even if the sidecar left the anchor out.
+            await insertReqs(valid.map(r => {
+              const offset = r.days_after_period_end != null ? parseInt(r.days_after_period_end, 10) : null;
+              const anchor = offset != null ? anchorFromOffset(r.frequency, offset) : {};
+              return {
                 loan_id: row.id,
                 item: String(r.item),
                 party: r.party || null,
                 frequency: r.frequency,
-                due_month: r.due_month != null ? parseInt(r.due_month, 10) : null,
-                due_day: r.due_day != null ? parseInt(r.due_day, 10) : null,
+                days_after_period_end: offset,
+                due_month: r.due_month != null ? parseInt(r.due_month, 10) : (anchor.due_month ?? null),
+                due_day: r.due_day != null ? parseInt(r.due_day, 10) : (anchor.due_day ?? null),
                 lead_days: r.lead_days != null ? parseInt(r.lead_days, 10) : 21,
                 recipient: r.recipient || null,
                 notes: r.notes || null,
-              }))),
-            });
+              };
+            }), 'Import');
           }
           refreshReqs();
         }

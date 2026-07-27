@@ -82,7 +82,10 @@ Ridge construction loan). The keys are exactly the database column names.
 
 > **Tip for your Claude project:** ask it to emit this JSON sidecar alongside
 > the `.docx` it already generates. Point it at `abstract-sidecar.example.json`
-> as the target shape.
+> as the target shape, and paste the block in
+> [`ABSTRACT_PROJECT_INSTRUCTIONS.md`](ABSTRACT_PROJECT_INSTRUCTIONS.md) into
+> its project instructions — that's what keeps the reporting requirements
+> landing as clean, dated deliverables instead of prose fragments.
 
 ### Checking the reporting requirements after an import
 
