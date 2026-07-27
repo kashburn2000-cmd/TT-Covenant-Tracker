@@ -6,6 +6,7 @@ import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSch
 import { supabase } from '../auth.js';
 import { useIsMobile } from '../useIsMobile.js';
 import { suggestDealUid } from '../dealRegistry.js';
+import { projectHolders, holdersMatch, holdersShare } from '../lenderExposure.js';
 
 const DOC_CATEGORIES = {
   loan_agreement: 'Loan Agreement', guaranty: 'Guaranty', amendment: 'Amendment',
@@ -702,9 +703,15 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
   // ── Derived: filters, sort, summary ──────────────────────────────────────────
   const years = Array.from(new Set(loans.map(l => l.maturity_date ? l.maturity_date.slice(0, 4) : null).filter(Boolean))).sort();
 
+  // A bank's loans include the ones it participates in, not just the ones it
+  // leads — matched against the lead plus every participant on the abstract.
+  const loanHolders = (l) => projectHolders({ lender: l.lead_lender }, l);
+  // Filtering to one bank shows what that bank holds, not the whole deal.
+  const lenderShare = (l) => holdersShare(loanHolders(l), fLender);
+
   const filtered = loans.filter(l => {
     if (fType !== 'all' && l.loan_type !== fType) return false;
-    if (fLender && !(l.lead_lender || '').toLowerCase().includes(fLender.toLowerCase())) return false;
+    if (fLender && !holdersMatch(loanHolders(l), fLender)) return false;
     if (fYear !== 'all' && (l.maturity_date || '').slice(0, 4) !== fYear) return false;
     if (fGuaranty !== '' && !(l.repayment_guaranty_pct != null && Number(l.repayment_guaranty_pct) >= Number(fGuaranty))) return false;
     if (fNW !== '' && !(l.min_net_worth != null && Number(l.min_net_worth) >= Number(fNW) * 1e6)) return false;
@@ -770,7 +777,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
   const calEventsShown = calEvents.filter(e => calTypes[e.type]);
 
   const thisYear = new Date().getFullYear();
-  const totalAmount = filtered.reduce((s, l) => s + (Number(l.loan_amount) || 0), 0);
+  const totalAmount = filtered.reduce((s, l) => s + (Number(l.loan_amount) || 0) * lenderShare(l), 0);
   const maturingThisYear = filtered.filter(l => (l.maturity_date || '').slice(0, 4) === String(thisYear)).length;
   const constructionCount = filtered.filter(l => l.loan_type === 'construction').length;
   const refinanceCount = filtered.filter(l => l.loan_type === 'refinance').length;
@@ -1635,6 +1642,11 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
                 {constructionCount} constr · {refinanceCount} refi{maturingThisYear ? ` · ${maturingThisYear} maturing ${thisYear}` : ''}
               </div>
+              {fLender && (
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--warn)', marginTop: 2 }}>
+                  {fLender}&apos;s share — participations included
+                </div>
+              )}
             </div>
             {!isMobile && (
             <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
@@ -1689,7 +1701,9 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
                 style={{ cursor: 'pointer', padding: '13px 22px 13px 19px', borderBottom: '1px solid var(--border)', background: sel ? 'var(--panel2)' : 'transparent', borderLeft: `3px solid ${sel ? 'var(--text)' : 'transparent'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.property_name || l.borrower_entity || '—'}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}>{fmt$(l.loan_amount)}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}
+                    title={fLender && lenderShare(l) < 1 ? `${fLender}'s share of ${fmt$(l.loan_amount)}` : undefined}>
+                    {fmt$((Number(l.loan_amount) || 0) * lenderShare(l))}</span>
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--muted)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {l.lead_lender || '—'} · {LOAN_TYPE_LABEL[l.loan_type] || l.loan_type} · {matShort(l.maturity_date)}

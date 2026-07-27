@@ -86,15 +86,50 @@ export function participationSplit(loan) {
   return null;
 }
 
-// Every lender slice of one project, as { name, share }. The lead keeps the
-// schedule row's own lender name (the schedule is authoritative on who the
-// deal is with); only the participated portion is carved out.
-function lenderSlices(project, abstract) {
+// Every bank holding a piece of one project, as { name, share, lead }. The
+// lead keeps the schedule row's own lender name (the schedule is authoritative
+// on who the deal is with); only the participated portion is carved out.
+// Shares sum to 1, so a deal is fully accounted for exactly once.
+export function projectHolders(project, abstract) {
   const split = participationSplit(abstract);
-  if (!split) return [{ name: project.lender, share: 1 }];
-  const slices = split.participants.slice();
-  if (split.leadShare > 0) slices.unshift({ name: project.lender, share: split.leadShare });
-  return slices;
+  if (!split) return [{ name: project?.lender, share: 1, lead: true }];
+  const holders = split.participants.map(p => ({ name: p.name, share: p.share, lead: false }));
+  if (split.leadShare > 0) holders.unshift({ name: project?.lender, share: split.leadShare, lead: true });
+  return holders;
+}
+
+// Does any bank on this deal answer to `query`? Substring match on the raw
+// name, same as typing into a lender filter box.
+export function holdersMatch(holders, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return true;
+  return (holders || []).some(h => String(h.name || '').toLowerCase().includes(q));
+}
+
+// The share of this deal held by the bank(s) matching `query` — the multiplier
+// that turns a deal-level dollar figure into that lender's piece of it.
+// 1 when nothing is being filtered on.
+export function holdersShare(holders, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return 1;
+  return (holders || [])
+    .filter(h => String(h.name || '').toLowerCase().includes(q))
+    .reduce((s, h) => s + h.share, 0);
+}
+
+// "BOKF" / "BOKF +1" for a table cell, with the full breakdown as the title.
+export function holdersLabel(holders) {
+  const list = (holders || []).filter(h => h.name);
+  if (!list.length) return '—';
+  const lead = list.find(h => h.lead) || list[0];
+  return list.length > 1 ? `${lead.name} +${list.length - 1}` : lead.name;
+}
+
+export function holdersTitle(holders) {
+  return (holders || [])
+    .filter(h => h.name)
+    .map(h => `${h.name} ${Math.round(h.share * 100)}%${h.lead ? ' (lead)' : ''}`)
+    .join(' · ');
 }
 
 // projects: effective debt_projects rows (visible set — hidden/removed already
@@ -133,7 +168,7 @@ export function buildLenderRollup(projects, loans = []) {
   for (const l of loans || []) if (l?.deal_uid && !abstractByDeal.has(l.deal_uid)) abstractByDeal.set(l.deal_uid, l);
 
   for (const p of projects || []) {
-    for (const slice of lenderSlices(p, p.deal_uid ? abstractByDeal.get(p.deal_uid) : null)) {
+    for (const slice of projectHolders(p, p.deal_uid ? abstractByDeal.get(p.deal_uid) : null)) {
       if (!(slice.share > 0)) continue;
       const row = get(slice.name);
       const label = (slice.name || '(no lender)').trim() || '(no lender)';

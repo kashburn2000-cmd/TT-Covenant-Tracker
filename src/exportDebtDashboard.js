@@ -11,6 +11,7 @@
 // stay on the Maturity and Guaranty tabs, labeled.
 
 import { SB_URL, SB_HEADERS } from './supabase.js';
+import { holdersLabel } from './lenderExposure.js';
 import { CLASSIFICATION_LABEL } from './dealRegistry.js';
 
 // ExcelJS (styling-capable, unlike the community SheetJS build) loaded on
@@ -206,7 +207,7 @@ function buildSummary(ws, d, uploadTimes, asOf) {
     r = bandRow(ws, r, COLS, 'CREDIT FACILITIES');
     for (const p of d.facilities) {
       kv(r, 1, facilityName(p), p.loan_amount, { numFmt: CUR });
-      kv(r, 3, p.lender || '—', toDate(p.maturity_date) || '—', { numFmt: p.maturity_date ? DATE : undefined });
+      kv(r, 3, holdersLabel(p._holders), toDate(p.maturity_date) || '—', { numFmt: p.maturity_date ? DATE : undefined });
       r++;
     }
     r++;
@@ -233,7 +234,7 @@ function buildLeverage(ws, d) {
     setCell(ws, r, 3, CATEGORY_LABEL[p.category] || '—', { align: 'center' });
     setCell(ws, r, 4, p.fund || '—', { align: 'center' });
     setCell(ws, r, 5, SOURCE_LABEL[p.source] || p.source, { align: 'center' });
-    setCell(ws, r, 6, p.lender || '—');
+    setCell(ws, r, 6, holdersLabel(p._holders));
     setCell(ws, r, 7, p.loan_amount, { align: 'right', numFmt: CUR });
     setCell(ws, r, 8, p.project_cost, { align: 'right', numFmt: CUR });
     setCell(ws, r, 9, p.appraised_value, { align: 'right', numFmt: CUR });
@@ -262,7 +263,7 @@ function buildLeverage(ws, d) {
       setCell(ws, r, 1, facilityName(p));
       setCell(ws, r, 2, p.deal_uid || '—', { align: 'center' });
       for (let i = 3; i <= 5; i++) setCell(ws, r, i, '—', { align: 'center' });
-      setCell(ws, r, 6, p.lender || '—');
+      setCell(ws, r, 6, holdersLabel(p._holders));
       setCell(ws, r, 7, p.loan_amount, { align: 'right', numFmt: CUR });
       for (let i = 8; i <= 11; i++) setCell(ws, r, i, '', {});
       setCell(ws, r, 12, toDate(p.maturity_date), { align: 'center', numFmt: p.maturity_date ? DATE : undefined });
@@ -286,7 +287,7 @@ function buildMaturities(ws, d) {
     const t = timeLeft(p.maturity_date);
     setCell(ws, r, 1, toDate(p.maturity_date), { align: 'center', numFmt: DATE });
     setCell(ws, r, 2, facilityName(p));
-    setCell(ws, r, 3, p.lender || '—');
+    setCell(ws, r, 3, holdersLabel(p._holders));
     setCell(ws, r, 4, SOURCE_LABEL[p.source] || p.source, { align: 'center' });
     setCell(ws, r, 5, p.loan_amount, { align: 'right', numFmt: CUR });
     setCell(ws, r, 6, t.label, {

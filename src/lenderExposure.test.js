@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeLenderName, buildLenderRollup, buildLenderComparison, rollupStats,
   participationSplit, UNDISCLOSED_PARTICIPANTS,
+  projectHolders, holdersMatch, holdersShare, holdersLabel, holdersTitle,
 } from './lenderExposure.js';
 
 describe('normalizeLenderName', () => {
@@ -225,5 +226,51 @@ describe('buildLenderComparison — participations', () => {
     const cmp = buildLenderComparison([{ lead_lender: 'Truist', loan_amount: 40000000, rate_spread_bps: 250 }]);
     expect(cmp).toHaveLength(1);
     expect(cmp[0].totalCommitment).toBe(40000000);
+  });
+});
+
+describe('projectHolders / holder filtering', () => {
+  const project = { lender: 'BOKF', loan_amount: 51694640 };
+
+  it('lists the lead alone when nothing is participated', () => {
+    expect(projectHolders(project, null)).toEqual([{ name: 'BOKF', share: 1, lead: true }]);
+  });
+
+  it('lists lead and participants, summing to the whole deal', () => {
+    const h = projectHolders(project, SYNDICATED);
+    expect(h.map(x => x.name)).toEqual(['BOKF', 'RCB Bank']);
+    expect(h[0].lead).toBe(true);
+    expect(h[1].lead).toBe(false);
+    expect(h.reduce((s, x) => s + x.share, 0)).toBeCloseTo(1, 10);
+  });
+
+  it('keeps the schedule row name for the lead, not the abstract spelling', () => {
+    // Abstract says "BOKF, NA"; the schedule row says "BOKF".
+    expect(projectHolders(project, SYNDICATED)[0].name).toBe('BOKF');
+  });
+
+  it('finds a deal by a participant name, not just the lead', () => {
+    const h = projectHolders(project, SYNDICATED);
+    expect(holdersMatch(h, 'RCB')).toBe(true);
+    expect(holdersMatch(h, 'BOKF')).toBe(true);
+    expect(holdersMatch(h, 'Truist')).toBe(false);
+    expect(holdersMatch(h, '')).toBe(true); // no filter matches everything
+  });
+
+  it('scales a deal to the share the searched lender holds', () => {
+    const h = projectHolders(project, SYNDICATED);
+    expect(holdersShare(h, '')).toBe(1);
+    expect(holdersShare(h, 'RCB')).toBeCloseTo(18108543 / 51694640, 10);
+    expect(holdersShare(h, 'BOKF')).toBeCloseTo(33586097 / 51694640, 10);
+    expect(holdersShare(h, 'Truist')).toBe(0);
+    // The unparticipated case is always the whole deal.
+    expect(holdersShare(projectHolders(project, null), 'BOKF')).toBe(1);
+  });
+
+  it('labels one row with every holder', () => {
+    expect(holdersLabel(projectHolders(project, null))).toBe('BOKF');
+    expect(holdersLabel(projectHolders(project, SYNDICATED))).toBe('BOKF +1');
+    expect(holdersTitle(projectHolders(project, SYNDICATED))).toBe('BOKF 65% (lead) · RCB Bank 35%');
+    expect(holdersLabel([])).toBe('—');
   });
 });
