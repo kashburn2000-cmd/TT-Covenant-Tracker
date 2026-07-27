@@ -18,9 +18,12 @@ That's it — the **Loans** tab will then work on the live site.
 
 1. Open the site, go to the **Loans** tab, click the lock to unlock editing
    (PIN `1234`), then click **⇪ Import Abstract**.
-2. Paste the **JSON sidecar** your loan-abstract assistant produced.
+2. Paste the **JSON sidecar** your loan-abstract assistant produced — or
+   attach the `.docx` and click **↳ Auto-fill fields from .docx** to build the
+   JSON from the document itself (including its reporting requirements).
 3. Attach the matching **`.docx`**.
-4. Click **Import**.
+4. Click **Import**, then check the loan's reporting requirements
+   ([below](#checking-the-reporting-requirements-after-an-import)).
 
 Re-importing the same document later just **updates** that loan — it never
 creates a duplicate (it matches on the stored document path).
@@ -49,10 +52,13 @@ Ridge construction loan). The keys are exactly the database column names.
   `conversion_window_end` (ISO dates), `conversion_fee_pct`, and
   `conversion_terms` (prose). The nightly task generator reminds 60 days
   before the window opens.
-- **Optional:** a `reporting_requirements` array turns the abstract's reporting
-  section into structured deliverables that drive the nightly Tasks & Reminders
-  digest (requires `db/loan_reporting_setup.sql`). Re-importing replaces the
-  loan's rows. Each entry:
+- **Reporting requirements are extracted automatically.** The abstract's
+  reporting prose is parsed into structured deliverables
+  ([`src/parseReporting.js`](../src/parseReporting.js)) — that's what actually
+  drives reminders, so the free-text `financial_reporting_*` fields alone are
+  not enough. Include a `reporting_requirements` array to override the parse
+  (requires `db/loan_reporting_setup.sql`); re-importing replaces the loan's
+  rows. Each entry:
 
   ```json
   "reporting_requirements": [
@@ -70,6 +76,34 @@ Ridge construction loan). The keys are exactly the database column names.
 > **Tip for your Claude project:** ask it to emit this JSON sidecar alongside
 > the `.docx` it already generates. Point it at `abstract-sidecar.example.json`
 > as the target shape.
+
+### Checking the reporting requirements after an import
+
+The parser reads the abstract's own wording, so the dates are a best-effort
+translation — worth a look on every abstract, because these rows are what the
+nightly reminders (and the accounting digest) run on.
+
+1. Open the loan in the **Loans** tab → **Reporting requirements**. Each row
+   shows the deliverable, its cadence, who it goes to, and an amber tag with
+   the anchor date the reminders fire from.
+2. The anchor is the date the deliverable is **due**, derived from the period
+   end plus the days the abstract allows — "quarterly within 65 days" anchors
+   to **Jun 4** (Mar 31 + 65 days) and steps every three months from there.
+   Fix anything the prose stated unusually: remove the row (✕) and re-add it,
+   or edit `reporting_requirements` in the sidecar and re-import.
+3. A loan showing **"⚠ Abstract text on file, nothing scheduled"** has
+   reporting obligations in the abstract that produced no rows — nothing will
+   remind anyone. Click **⚙ Extract from abstract text** to parse the stored
+   text, or add the rows by hand. The list header counts these across all
+   loans (**"⚠ N missing reporting requirements"**), and the ⚙ filter drawer
+   has a **Missing reporting requirements** checkbox — the fastest way to
+   sweep the whole book once the abstracts are uploaded.
+
+Deliverables reach the accounting team through the nightly Generate Tasks
+Action: set the `TASK_EMAIL_ACCOUNTING_TO` repo secret and they get their own
+digest of just the reporting items, by default 21 days ahead of each due date
+(`lead_days` per requirement). See the README's
+[Tasks & reminder emails](../README.md#tasks--reminder-emails).
 
 ---
 

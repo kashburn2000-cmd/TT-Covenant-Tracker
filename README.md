@@ -113,7 +113,8 @@ A queryable database of closed-loan abstracts (construction + refinance), replac
 
 - Sortable, filterable table — by lender, maturity year, loan type, repayment guaranty %, and TTH net-worth / liquidity covenant thresholds
 - Expandable per-loan detail view covering all terms, covenants, extension, prepayment, and type-specific JSON
-- **Import Abstract** form (PIN-gated): paste the JSON sidecar + attach the `.docx`; re-importing the same doc updates in place (no duplicates)
+- **Import Abstract** form (PIN-gated): paste the JSON sidecar (or auto-fill it from the attached `.docx`) + attach the `.docx`; re-importing the same doc updates in place (no duplicates)
+- **Reporting requirements pulled from the abstract**: the reporting section is parsed into structured, dated deliverables (`src/parseReporting.js`) that feed the nightly reminders and the accounting digest — loans whose abstract states reporting obligations but has nothing scheduled are flagged in the detail panel, counted in the list header, and filterable, with a one-click **⚙ Extract from abstract text** for loans imported before the parser existed
 - **Download .docx** per loan via short-lived Supabase Storage signed URL (private `loan-docs` bucket)
 - PDF export of the filtered list
 - One-time backfill script (`scripts/backfill-loans.mjs`) parses a folder of existing Word abstracts into rows and uploads the source docs
@@ -168,7 +169,7 @@ A **Deal Registry** tab (`src/components/RegistryTab.jsx`, logic in `src/dealReg
 | [`daily-curves.yml`](.github/workflows/daily-curves.yml) | Weekdays 22:47 UTC | Runs [`scripts/pull-curves.mjs`](scripts/pull-curves.mjs): stores the day's **10-Year Treasury yield** (treasury.gov, free) and **30-day Average SOFR** (NY Fed, free) into `rate_history` |
 | [`backfill-rate-history.yml`](.github/workflows/backfill-rate-history.yml) | Manual dispatch | Runs [`scripts/backfill-rate-history.mjs`](scripts/backfill-rate-history.mjs): historical backfill of both spot series from a chosen start date (default 2021-01-01); upserts, so it's safe to re-run |
 | [`keep-supabase-alive.yml`](.github/workflows/keep-supabase-alive.yml) | Daily 09:17 UTC | Pings the Supabase REST API so the free-tier project never pauses for inactivity |
-| [`generate-tasks.yml`](.github/workflows/generate-tasks.yml) | Daily 11:23 UTC | Runs [`scripts/generate-tasks.mjs`](scripts/generate-tasks.mjs): scans loans (maturities, extended maturities) and the covenant tracker (test dates) and upserts reminder rows into `tasks` for the **Tasks & Reminders** dashboard widget, then emails a digest of anything inside its reminder window (overdue included) via Resend — see [Tasks & reminder emails](#tasks--reminder-emails) |
+| [`generate-tasks.yml`](.github/workflows/generate-tasks.yml) | Daily 11:23 UTC | Runs [`scripts/generate-tasks.mjs`](scripts/generate-tasks.mjs): scans loans (maturities, extended maturities) and the covenant tracker (test dates) and upserts reminder rows into `tasks` for the **Tasks & Reminders** dashboard widget, then emails a digest of anything inside its reminder window (overdue included) via Resend — plus a reporting-only digest to accounting when `TASK_EMAIL_ACCOUNTING_TO` is set. See [Tasks & reminder emails](#tasks--reminder-emails) |
 | [`weekly-leasing-email.yml`](.github/workflows/weekly-leasing-email.yml) | Mondays 12:17 / 15:17 / 18:17 UTC | Runs [`scripts/pull-leasing-email.mjs`](scripts/pull-leasing-email.mjs): reads the Weekly Leasing Summary email from the dedicated Gmail and loads its attachment into `leasing_snapshot` — see [Weekly leasing email ingest](#weekly-leasing-email-ingest). Skips gracefully until the mailbox secrets are configured |
 | [`weekly-leasing.yml`](.github/workflows/weekly-leasing.yml) | Manual dispatch (schedule commented out) | Runs [`scripts/pull-leasing.mjs`](scripts/pull-leasing.mjs): pulls the weekly leasing summary from the company data warehouse into `leasing_snapshot`, replacing the manual Excel upload — see [Weekly leasing sync](#weekly-leasing-sync-data-warehouse). **Superseded by the email ingest** |
 
@@ -183,8 +184,9 @@ The **Tasks & Reminders** widget (Debt Dashboard → + Add Widget) is filled nig
 1. Run [`db/tasks_setup.sql`](db/tasks_setup.sql) in the Supabase SQL editor. Optionally also run [`db/loan_reporting_setup.sql`](db/loan_reporting_setup.sql) to unlock the **Reporting Requirements** section in the Loans tab detail panel — its rows (operating statements, guarantor financials, rent rolls, …) get expanded into dated reminder tasks too — and [`db/loan_conversion_setup.sql`](db/loan_conversion_setup.sql) to track floating→fixed **rate conversion options** (reminded 60 days before the window opens).
 2. The Action reuses the existing `SUPABASE_KEY` secret — the table sync works with no further setup (run the workflow manually once to fill it).
 3. **Email digest (optional):** create a free [Resend](https://resend.com) account, then add repo secrets `RESEND_API_KEY` and `TASK_EMAIL_TO` (comma-separated recipients). Until a sending domain is verified in Resend, delivery only works to the Resend account owner's address — verify a domain and add a `TASK_EMAIL_FROM` secret (e.g. `Covenant Dashboard <alerts@yourdomain.com>`) for team-wide delivery. Without these secrets the nightly run still syncs tasks and just logs what it would have sent.
+4. **Accounting digest (optional):** add a `TASK_EMAIL_ACCOUNTING_TO` secret (comma-separated) to send the accounting team a second email containing **only** the lender reporting deliverables — the recurring obligations pulled off the loan abstracts — ahead of each due date. It uses the same Resend key and sender, tracks its own 7-day cool-down (`tasks.accounting_emailed_at`), and is skipped entirely when the secret is unset.
 
-Each open task is emailed at most once every 7 days while it's inside its reminder lead window, and overdue items keep appearing until resolved.
+Each open task is emailed at most once every 7 days while it's inside its reminder lead window, and overdue items keep appearing until resolved. Reporting deliverables default to a 21-day lead (per-requirement `lead_days`), so accounting sees an item three weeks before it's due; the deliverables themselves come from each loan's [reporting requirements](#loans), so an abstract imported without them generates no reminders — the Loans tab flags that case.
 
 ### Weekly leasing email ingest
 
@@ -290,6 +292,8 @@ npm run lint      # eslint src/
 │   ├── curveParse.js             # Chatham forward-curve workbook / CSV parsing
 │   ├── parseDebtSchedules.js     # At Risk (.xlsb) / Stabilized (.xlsx) schedule parsing
 │   ├── parseBankPackage.js       # Bank-package PDF text-layer extraction (Lender Pipeline)
+│   ├── parseReporting.js         # Loan-abstract reporting prose → dated, structured deliverables
+│   ├── taskGen.js                # Reminder-task builders + email digest selection (nightly Action)
 │   ├── priorTest.js              # Which snapshot counts as the Prior Test baseline
 │   ├── projectOverrides.js       # Manual field overrides layered over schedule data
 │   ├── dealRegistry.js           # Stable deal ids (TT-001, …) + lifecycle status overrides
@@ -332,7 +336,7 @@ npm run lint      # eslint src/
 | `leasing_snapshot` | Latest Leasing Dashboard upload (single-row snapshot) | Created manually |
 | `deal_registry` | Stable deal ids (`TT-001`, …) + manual lifecycle status overrides and deal classification (`land_facility`) for the Deal Registry tab | `db/deal_registry_setup.sql` |
 | `tasks` | Reminder queue for the Tasks & Reminders widget + nightly email digest (loan maturities, covenant tests, reporting deliverables, manual tasks) | `db/tasks_setup.sql` |
-| `loan_reporting_requirements` | Structured lender deliverables per loan (operating statements, guarantor financials, …) — edited in the Loans tab detail panel, expanded into dated reminders by the nightly task generator | `db/loan_reporting_setup.sql` |
+| `loan_reporting_requirements` | Structured lender deliverables per loan (operating statements, guarantor financials, …) — parsed out of the abstract on import, edited in the Loans tab detail panel, expanded into dated reminders by the nightly task generator | `db/loan_reporting_setup.sql` |
 | `deal_documents` | Per-loan document repository (loan agreement, guaranty, amendments, …) stored in the private `loan-docs` bucket under `docs/<loan_id>/`; timestamped paths make re-uploads new versions | `db/deal_documents_setup.sql` |
 
 > **Schema coverage note:** the `db/` scripts cover the Loans, Debt Dashboard, Map, Deal Registry, security, and Power BI features. The core covenant tables (`properties`, `property_events`, `settings`, `sofr_curve`, `ten_year_curve`) and the Pipeline / Land Facility / Leasing tables were created directly in the live Supabase project and have no `CREATE TABLE` script in the repo — [`db/security_setup.sql`](db/security_setup.sql) lists all of them for RLS (skipping any that don't exist), and the SQL in [Setup](#setup) adds the columns the app expects on `properties`. Standing up a fresh Supabase project therefore requires recreating those tables by hand (or from a dump of the live project).

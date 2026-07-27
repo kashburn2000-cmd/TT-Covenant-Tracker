@@ -220,19 +220,27 @@ export function buildReportingTasks(requirements, todayISO, horizonDays = 400) {
 // ── Email digest selection ────────────────────────────────────────────────────
 // A task belongs in today's digest when it is open, inside its reminder lead
 // window (or overdue), and hasn't been emailed in the past `resendDays` days.
-export function tasksNeedingEmail(tasks, todayISO, resendDays = 7) {
+//
+// `stampField` is the column recording the last send. The team digest uses
+// emailed_at; the accounting digest (reporting deliverables only) uses
+// accounting_emailed_at, so the two lists have independent cool-downs and one
+// send never suppresses the other.
+export function tasksNeedingEmail(tasks, todayISO, resendDays = 7, stampField = 'emailed_at') {
   return (tasks || []).filter(t => {
     if (t.status !== 'open') return false;
     const delta = daysBetween(todayISO, t.due_date);
     if (delta > (t.lead_days ?? 30)) return false;
-    if (!t.emailed_at) return true;
-    const sinceEmail = daysBetween(t.emailed_at.slice(0, 10), todayISO);
+    const stamp = t[stampField];
+    if (!stamp) return true;
+    const sinceEmail = daysBetween(stamp.slice(0, 10), todayISO);
     return sinceEmail >= resendDays;
   });
 }
 
 // Render the digest as simple HTML (also used as the plain-text fallback).
-export function digestHtml(tasks, todayISO) {
+// `opts.intro` replaces the default lead-in line, `opts.footer` the closing
+// note — the accounting digest reframes both around reporting deliverables.
+export function digestHtml(tasks, todayISO, opts = {}) {
   const fmt = iso => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
   const line = t => {
     const delta = daysBetween(todayISO, t.due_date);
@@ -242,9 +250,9 @@ export function digestHtml(tasks, todayISO) {
   const overdue = tasks.filter(t => daysBetween(todayISO, t.due_date) < 0);
   const upcoming = tasks.filter(t => daysBetween(todayISO, t.due_date) >= 0);
   let html = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">';
-  html += `<p>Covenant Dashboard reminders for ${fmt(todayISO)}:</p>`;
+  html += `<p>${opts.intro || 'Covenant Dashboard reminders'} for ${fmt(todayISO)}:</p>`;
   if (overdue.length) html += `<p><b>Overdue / matured (${overdue.length})</b></p><ul>${overdue.map(line).join('')}</ul>`;
   if (upcoming.length) html += `<p><b>Upcoming (${upcoming.length})</b></p><ul>${upcoming.map(line).join('')}</ul>`;
-  html += '<p style="color:#888;font-size:12px">Mark items done in the Tasks &amp; Reminders widget on the Debt Dashboard to stop reminders for them.</p></div>';
+  html += `<p style="color:#888;font-size:12px">${opts.footer || 'Mark items done in the Tasks &amp; Reminders widget on the Debt Dashboard to stop reminders for them.'}</p></div>`;
   return html;
 }

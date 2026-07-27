@@ -11,6 +11,9 @@ name: Generate Tasks
 #   • Optional email: RESEND_API_KEY + TASK_EMAIL_TO (comma-separated) repo
 #     secrets, plus TASK_EMAIL_FROM once a sender domain is verified. Without
 #     them the job still syncs tasks and just logs the would-be digest.
+#   • Optional accounting ping: TASK_EMAIL_ACCOUNTING_TO (comma-separated)
+#     gets a second digest containing only the lender reporting deliverables,
+#     so accounting sees its own obligations ahead of each deadline.
 
 on:
   schedule:
@@ -35,5 +38,7 @@ jobs:
           SB_KEY: ${{ secrets.SUPABASE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           TASK_EMAIL_TO: ${{ secrets.TASK_EMAIL_TO }}
+          # Reporting-deliverables-only digest for the accounting team.
+          TASK_EMAIL_ACCOUNTING_TO: ${{ secrets.TASK_EMAIL_ACCOUNTING_TO }}
           TASK_EMAIL_FROM: ${{ secrets.TASK_EMAIL_FROM }}
         run: node scripts/generate-tasks.mjs

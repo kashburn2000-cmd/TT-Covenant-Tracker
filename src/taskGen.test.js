@@ -185,6 +185,15 @@ describe('tasksNeedingEmail', () => {
     expect(tasksNeedingEmail([recent], TODAY)).toHaveLength(0);
     expect(tasksNeedingEmail([stale], TODAY)).toHaveLength(1);
   });
+
+  it('tracks the accounting digest cool-down independently of the team one', () => {
+    // Emailed to the team today, never to accounting → still due for accounting.
+    const t = { ...base, due_date: '2026-08-01', emailed_at: '2026-07-24T09:00:00Z', accounting_emailed_at: null };
+    expect(tasksNeedingEmail([t], TODAY)).toHaveLength(0);
+    expect(tasksNeedingEmail([t], TODAY, 7, 'accounting_emailed_at')).toHaveLength(1);
+    const both = { ...t, accounting_emailed_at: '2026-07-22T09:00:00Z' };
+    expect(tasksNeedingEmail([both], TODAY, 7, 'accounting_emailed_at')).toHaveLength(0);
+  });
 });
 
 describe('digestHtml', () => {
@@ -197,5 +206,14 @@ describe('digestHtml', () => {
     expect(html).toContain('Upcoming (1)');
     expect(html).toContain('A — loan matures');
     expect(html).toContain('23d overdue');
+  });
+
+  it('takes a custom intro and footer for the accounting digest', () => {
+    const html = digestHtml([{ title: 'Venice — rent roll', due_date: '2026-08-10' }], TODAY, {
+      intro: 'Lender reporting deliverables coming due', footer: 'Produced from the loan abstracts.',
+    });
+    expect(html).toContain('Lender reporting deliverables coming due');
+    expect(html).toContain('Produced from the loan abstracts.');
+    expect(html).not.toContain('Covenant Dashboard reminders');
   });
 });
