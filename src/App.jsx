@@ -21,7 +21,16 @@ import { MapTab } from './components/MapTab.jsx';
 import { RegistryTab } from './components/RegistryTab.jsx';
 import { useWeeklyUploads, WeeklyUploadPill, WeeklyUploadBannerRow } from './components/WeeklyUploadBanner.jsx';
 import { useIsMobile } from './useIsMobile.js';
+import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 
+
+// Every tab, for naming the one that failed in the error boundary. NAV_ITEMS
+// can't serve here — it's filtered to the tabs the user has made visible.
+const TAB_LABELS = {
+  covenant: 'Covenant Tracker', debt: 'Debt Dashboard', pipeline: 'Lender Pipeline',
+  map: 'Project Map', loans: 'Loans', land: 'Land Facility', leasing: 'Leasing',
+  calculator: 'Calculator', matrix: 'DY / DSCR Matrix', registry: 'Deal Registry',
+};
 
 // 12 blank rows for a new variable-loan balance schedule. Never mutated in place
 // (edits build a fresh array), so it is safe to share this template by reference.
@@ -3218,6 +3227,9 @@ export default function App() {
             ? { flex: 1, overflow: 'hidden', display: 'flex', minWidth: 0, position: 'relative' }
             : { flex: 1, overflow: 'auto', padding: '24px 28px', minWidth: 0, position: 'relative' }}
         >
+          {/* Keyed by tab: a crash is scoped to the screen that caused it, and
+              navigating away and back remounts the boundary for a fresh try. */}
+          <ErrorBoundary key={activeTab} label={TAB_LABELS[activeTab] || 'This screen'}>
           {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
           {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
           {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={effPinUnlocked} requirePin={requirePin} onCurveFile={handleSofrUpload} onFailingCount={setCovFailing} />}
@@ -3228,6 +3240,7 @@ export default function App() {
           {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
           {activeTab === "map"        && <MapTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
           {activeTab === "registry"   && effPinUnlocked && <RegistryTab onOpenLoan={openLoan} />}
+          </ErrorBoundary>
         </div>
       </div>
 
