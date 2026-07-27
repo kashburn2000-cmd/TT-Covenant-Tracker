@@ -143,6 +143,62 @@ export function planRegistrySync({ registry = [], debtRows = [], deals = [], loc
   return { newEntries, links };
 }
 
+// ── Loan abstract → registry matching ────────────────────────────────────────
+// Abstracts don't carry schedule names. The abstract has a legal borrower
+// ("TTRES CO Wheat Ridge Kipling St, LLC") and a city ("Wheat Ridge"); the
+// schedule has "TTRes at Wheat Ridge, CO". nameKey() compares whole strings,
+// so it can never match these — we score shared significant tokens instead.
+// The result only ever pre-selects the import picker; the user confirms it.
+
+// Boilerplate that appears in most names and so carries no signal. Entity
+// suffixes, the TT prefixes, street-type words, and 2-letter state codes
+// (dropped separately below) would otherwise inflate every score.
+const NAME_NOISE = new Set([
+  'llc', 'lp', 'llp', 'ltd', 'inc', 'corp', 'co', 'company', 'partners', 'holdings',
+  'tt', 'tth', 'ttres', 'ttrg', 'residential', 'development', 'developments',
+  'the', 'at', 'of', 'and', 'a', 'on',
+  'apartments', 'apartment', 'apts', 'phase',
+  'street', 'st', 'road', 'rd', 'avenue', 'ave', 'blvd', 'drive', 'dr', 'lane', 'ln', 'way', 'court', 'ct',
+]);
+
+// Significant lowercase tokens of a deal/property/borrower name.
+export function nameTokens(s) {
+  const out = new Set();
+  for (const t of String(s == null ? '' : s).toLowerCase().split(/[^a-z0-9]+/)) {
+    if (t && !NAME_NOISE.has(t)) out.add(t);
+  }
+  return out;
+}
+
+// Overlap of two token sets, normalized by the smaller one so a short name
+// ("Sarasota") can fully match a longer one ("TTRes at Sarasota, FL").
+function tokenScore(a, b) {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const t of a) if (b.has(t)) shared++;
+  return shared / Math.min(a.size, b.size);
+}
+
+// Best-guess registry uid for a loan abstract, or null. Returns null when
+// nothing scores well enough AND when the top two candidates tie — two deals
+// in the same city are indistinguishable on name alone, and a confident-looking
+// wrong guess is worse than no guess when the user is confirming each one.
+export function suggestDealUid(loan, registry = []) {
+  const loanSets = [loan?.property_name, loan?.borrower_entity]
+    .map(nameTokens)
+    .filter(s => s.size);
+  if (!loanSets.length) return null;
+
+  const scored = registry
+    .map(e => ({ uid: e.uid, score: Math.max(...loanSets.map(ls => tokenScore(ls, nameTokens(e.name)))) }))
+    .filter(s => s.score >= 0.5)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) return null;
+  if (scored.length > 1 && scored[1].score === scored[0].score) return null;
+  return scored[0].uid;
+}
+
 // ── Supabase executors ───────────────────────────────────────────────────────
 
 export async function fetchRegistry() {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   nextUid, deriveDebtRowStatus, derivePipelineDealStatus, deriveStatus,
-  effectiveStatus, isLandFacility, planRegistrySync,
+  effectiveStatus, isLandFacility, planRegistrySync, nameTokens, suggestDealUid,
 } from './dealRegistry.js';
 
 describe('nextUid', () => {
@@ -122,5 +122,50 @@ describe('planRegistrySync', () => {
       ],
     });
     expect(plan.newEntries.map(e => e.uid)).toEqual(['TT-001', 'TT-002']);
+  });
+});
+
+describe('nameTokens', () => {
+  it('drops entity suffixes, TT prefixes and street words', () => {
+    expect([...nameTokens('TTRES CO Wheat Ridge Kipling St, LLC')]).toEqual(['wheat', 'ridge', 'kipling']);
+    expect([...nameTokens('TTRes at Sarasota, FL')]).toEqual(['sarasota', 'fl']);
+  });
+  it('is empty for a name made only of boilerplate', () => {
+    expect(nameTokens('TTRes, LLC').size).toBe(0);
+    expect(nameTokens(null).size).toBe(0);
+  });
+});
+
+describe('suggestDealUid', () => {
+  const reg = (uid, name) => ({ uid, name });
+
+  it('matches a city-only property name to the schedule name', () => {
+    const registry = [reg('TT-001', 'TTRes at Sarasota, FL'), reg('TT-002', 'The Stadler')];
+    expect(suggestDealUid({ property_name: 'Sarasota' }, registry)).toBe('TT-001');
+  });
+
+  it('matches on the legal borrower when the property name is missing', () => {
+    const registry = [reg('TT-004', 'TTRes at Wheat Ridge, CO')];
+    expect(suggestDealUid({ borrower_entity: 'TTRES CO Wheat Ridge Kipling St, LLC' }, registry)).toBe('TT-004');
+  });
+
+  it('returns null when two deals share a city — an ambiguous guess is worse than none', () => {
+    const registry = [reg('TT-001', 'TTRes at Sarasota Apex'), reg('TT-002', 'TTRes at Sarasota Commons')];
+    expect(suggestDealUid({ property_name: 'Sarasota' }, registry)).toBeNull();
+  });
+
+  it('returns null when nothing is close enough', () => {
+    const registry = [reg('TT-001', 'The Stadler'), reg('TT-002', 'Ocala')];
+    expect(suggestDealUid({ property_name: 'Wheat Ridge' }, registry)).toBeNull();
+  });
+
+  it('returns null on an empty registry or a nameless loan', () => {
+    expect(suggestDealUid({ property_name: 'Sarasota' }, [])).toBeNull();
+    expect(suggestDealUid({}, [reg('TT-001', 'Sarasota')])).toBeNull();
+  });
+
+  it('prefers the more specific match over a partial one', () => {
+    const registry = [reg('TT-001', 'Wheat Ridge Commons'), reg('TT-002', 'TTRes at Wheat Ridge Kipling, CO')];
+    expect(suggestDealUid({ borrower_entity: 'TTRES CO Wheat Ridge Kipling St, LLC' }, registry)).toBe('TT-002');
   });
 });

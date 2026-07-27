@@ -47,11 +47,12 @@ function StatTile({ label, value, sub }) {
   );
 }
 
-export function RegistryTab() {
+export function RegistryTab({ onOpenLoan }) {
   const [registry,  setRegistry]  = useState([]);
   const [debtRows,  setDebtRows]  = useState([]);
   const [deals,     setDeals]     = useState([]);
   const [locations, setLocations] = useState([]);
+  const [abstracts, setAbstracts] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [setupNeeded, setSetupNeeded] = useState(false);
   const [error,     setError]     = useState('');
@@ -67,14 +68,18 @@ export function RegistryTab() {
     setError('');
     try {
       const reg = await fetchRegistry();
-      const [dRes, pRes, lRes] = await Promise.all([
+      const [dRes, pRes, lRes, aRes] = await Promise.all([
         fetch(`${SB_URL}/rest/v1/debt_projects?order=source.asc,sort_order.asc`, { headers: SB_HEADERS }),
         fetch(`${SB_URL}/rest/v1/pipeline_deals?order=sort_order,name`, { headers: SB_HEADERS }),
         fetch(`${SB_URL}/rest/v1/project_locations`, { headers: SB_HEADERS }),
+        // Loan abstracts, linked by hand on import. Fails harmlessly on installs
+        // that predate the loans.deal_uid column — the chip just never lights up.
+        fetch(`${SB_URL}/rest/v1/loans?select=id,property_name,borrower_entity,deal_uid&deal_uid=not.is.null`, { headers: SB_HEADERS }),
       ]);
       let dRows = dRes.ok ? await dRes.json() : [];
       let pDeals = pRes.ok ? await pRes.json() : [];
       let locs = lRes.ok ? await lRes.json() : [];
+      setAbstracts(aRes.ok ? await aRes.json() : []);
 
       // Link anything new since the last visit — fuzzy matching happens here,
       // exactly once per row, and is repairable below via merge.
@@ -111,11 +116,12 @@ export function RegistryTab() {
 
   // ── One row per registry deal ──────────────────────────────────────────────
   const rows = useMemo(() => {
-    const byUid = new Map(registry.map(e => [e.uid, { entry: e, debt: [], deals: [], pinned: false }]));
+    const byUid = new Map(registry.map(e => [e.uid, { entry: e, debt: [], deals: [], pinned: false, abstract: null }]));
     for (const r of debtRows) byUid.get(r.deal_uid)?.debt.push(r);
     for (const d of deals) byUid.get(d.deal_uid)?.deals.push(d);
     for (const l of locations) { if (l.deal_uid && byUid.has(l.deal_uid)) byUid.get(l.deal_uid).pinned = true; }
-    return [...byUid.values()].map(({ entry, debt, deals: pDeals, pinned }) => {
+    for (const a of abstracts) { const hit = byUid.get(a.deal_uid); if (hit && !hit.abstract) hit.abstract = a; }
+    return [...byUid.values()].map(({ entry, debt, deals: pDeals, pinned, abstract }) => {
       const derived = deriveStatus(debt, pDeals);
       const status = effectiveStatus(entry, derived);
       // Figures come from the furthest-stage schedule row (with manual field
@@ -145,10 +151,11 @@ export function RegistryTab() {
         maturity: eff?.maturity_date || null,
         overridesCount: best ? Object.keys(best.overrides || {}).length : 0,
         pinned,
+        abstract,
         lastSeen,
       };
     }).sort((a, b) => a.uid.localeCompare(b.uid, undefined, { numeric: true }));
-  }, [registry, debtRows, deals, locations]);
+  }, [registry, debtRows, deals, locations, abstracts]);
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -162,6 +169,7 @@ export function RegistryTab() {
     unreviewed: rows.filter(r => !r.entry.reviewed).length,
     overridden: rows.filter(r => r.overridden).length,
     committed: rows.filter(r => r.status === 'committed').length,
+    withAbstract: rows.filter(r => r.abstract).length,
   }), [rows]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -255,6 +263,27 @@ export function RegistryTab() {
     }}>{label}</span>
   );
 
+  // Loan abstract: lit + clickable through to the Loans tab when one is linked,
+  // dim when not — so a scan down the column shows what still needs abstracting.
+  const abstractChip = (r) => {
+    const chipSt = (on) => ({
+      fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.04em',
+      padding: '1px 7px', borderRadius: 4, whiteSpace: 'nowrap',
+      border: `1px solid ${on ? 'color-mix(in srgb, var(--cat-teal) 35%, transparent)' : 'var(--border)'}`,
+      background: on ? 'color-mix(in srgb, var(--cat-teal) 11%, transparent)' : 'transparent',
+      color: on ? 'var(--cat-teal)' : 'var(--faint2)', opacity: on ? 1 : 0.45,
+    });
+    if (!r.abstract) return <span style={chipSt(false)}>Abstract</span>;
+    const label = r.abstract.property_name || r.abstract.borrower_entity || 'abstract';
+    return (
+      <button
+        onClick={() => onOpenLoan?.(r.abstract.id)}
+        title={`Open "${label}" on the Loans tab`}
+        style={{ ...chipSt(true), cursor: onOpenLoan ? 'pointer' : 'default' }}
+      >✓ Abstract</button>
+    );
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: '0.6rem' }}>
@@ -286,6 +315,7 @@ export function RegistryTab() {
         <StatTile label="Deals" value={stats.total} sub="registered across all tabs" />
         <StatTile label="New / unreviewed" value={stats.unreviewed} sub="ids minted since last review" />
         <StatTile label="Status overrides" value={stats.overridden} sub="manual status beats the sheet" />
+        <StatTile label="Loan abstracts" value={`${stats.withAbstract}/${stats.total}`} sub="deals with an abstract linked" />
         <StatTile label="Committed (not closed)" value={stats.committed} sub="effective status" />
       </div>
 
@@ -343,6 +373,7 @@ export function RegistryTab() {
                     {sourceChip('Pipeline', r.inPipeline, 'var(--cat-violet)')}
                     {sourceChip('At Risk', r.inAtRisk, 'var(--accent)')}
                     {sourceChip('Stabilized', r.inStabilized, 'var(--pass)')}
+                    {abstractChip(r)}
                     {r.pinned && sourceChip('📍', true, 'var(--muted)')}
                   </span>
                 </td>

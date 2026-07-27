@@ -2954,6 +2954,16 @@ export default function App() {
   // CovenantTab once its rows are computed (null until first visit).
   const [covFailing, setCovFailing] = useState(null);
 
+  // Loan the Loans tab should open on arrival — set when jumping from a deal's
+  // "Abstract" chip on the Deal Registry. Cleared by LoansTab once consumed.
+  const [focusLoanId, setFocusLoanId] = useState(null);
+
+  function openLoan(id) {
+    setVisibleTabs(v => (v.loans ? v : { ...v, loans: true }));
+    setFocusLoanId(id);
+    setActiveTab('loans');
+  }
+
   function openLeasing() {
     // The Leasing tab may be hidden from the shared tab config — reveal it for
     // this session only (nothing is saved) so the upload is reachable; the
@@ -3210,10 +3220,10 @@ export default function App() {
           {activeTab === "leasing"    && <LeasingTab />}
           {activeTab === "pipeline"   && <PipelineTab pinUnlocked={effPinUnlocked} />}
           {activeTab === "land"       && <LandFacilityTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
-          {activeTab === "loans"      && <LoansTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
+          {activeTab === "loans"      && <LoansTab pinUnlocked={effPinUnlocked} requirePin={requirePin} focusLoanId={focusLoanId} onFocusConsumed={() => setFocusLoanId(null)} />}
           {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
           {activeTab === "map"        && <MapTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
-          {activeTab === "registry"   && effPinUnlocked && <RegistryTab />}
+          {activeTab === "registry"   && effPinUnlocked && <RegistryTab onOpenLoan={openLoan} />}
         </div>
       </div>
 
