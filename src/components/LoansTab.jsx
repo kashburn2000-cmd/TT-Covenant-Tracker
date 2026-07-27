@@ -1528,7 +1528,10 @@ export function LoansTab({ pinUnlocked, requirePin }) {
             <div>
               <div style={{ fontSize: 19, fontWeight: 600, color: 'var(--text)' }}>Loans</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
-                {filtered.length} · {fmt$(totalAmount)} · {constructionCount} constr / {refinanceCount} refi{maturingThisYear ? ` · ${maturingThisYear} maturing ${thisYear}` : ''}
+                {filtered.length} loan{filtered.length === 1 ? '' : 's'} · {fmt$(totalAmount)}
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
+                {constructionCount} constr · {refinanceCount} refi{maturingThisYear ? ` · ${maturingThisYear} maturing ${thisYear}` : ''}
               </div>
             </div>
             {!isMobile && (
