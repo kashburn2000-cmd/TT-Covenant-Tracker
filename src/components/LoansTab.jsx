@@ -9,6 +9,8 @@ import { supabase } from '../auth.js';
 import { useIsMobile } from '../useIsMobile.js';
 import { suggestDealUid } from '../dealRegistry.js';
 import { projectHolders, holdersMatch, holdersShare } from '../lenderExposure.js';
+import { useDealLinks } from './DealLinksContext.jsx';
+import { ConnectionsPanel } from './ConnectionsPanel.jsx';
 
 const DOC_CATEGORIES = {
   loan_agreement: 'Loan Agreement', guaranty: 'Guaranty', amendment: 'Amendment',
@@ -278,7 +280,7 @@ function parseAbstractXml(xml) {
   return row;
 }
 
-export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed }) {
+export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed, dealNav, focusUid, onDealFocusConsumed }) {
   const BUCKET     = 'loan-docs';
 
   const [loans, setLoans]         = useState([]);
@@ -291,6 +293,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
   // pane takes over full-screen with a back button. Desktop shows both panes.
   const isMobile = useIsMobile();
   const [mobileDetail, setMobileDetail] = useState(false);
+  const dealLinks = useDealLinks();
   const [saving, setSaving]       = useState(false);
   const [msg, setMsg]             = useState('');
   const [confirmDel, setConfirmDel] = useState(null);
@@ -384,6 +387,15 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
     setMobileDetail(true);
     onFocusConsumed?.();
   }, [focusLoanId, onFocusConsumed]);
+
+  // Arriving from another tab by deal rather than by abstract id — open the
+  // abstract linked to that deal, if it has one.
+  useEffect(() => {
+    if (!focusUid) return;
+    const hit = loans.find(l => l.deal_uid === focusUid);
+    if (hit) { setExpandedId(hit.id); setMobileDetail(true); }
+    onDealFocusConsumed?.();
+  }, [focusUid, loans, onDealFocusConsumed]);
 
   // Registry + deal_uid column probe. Both must be present for the link picker;
   // either missing just hides it (db/deal_registry_setup.sql not run yet).
@@ -583,6 +595,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
         const saved = await res.json();
         const row = Array.isArray(saved) ? saved[0] : saved;
         setLoans(prev => isNew ? [...prev, row] : prev.map(l => l.id === row.id ? row : l));
+        dealLinks.refresh(); // the abstract's deal link feeds every other tab
         flash(isNew ? '✓ Loan added' : '✓ Saved');
         setEditId(null); setEditForm(null);
       } else {
@@ -597,7 +610,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
     setSaving(true);
     try {
       const res = await fetch(`${SB_URL}/rest/v1/loans?id=eq.${id}`, { method: 'DELETE', headers: SB_HEADERS });
-      if (res.ok) { setLoans(prev => prev.filter(l => l.id !== id)); flash('Loan deleted'); }
+      if (res.ok) { setLoans(prev => prev.filter(l => l.id !== id)); dealLinks.refresh(); flash('Loan deleted'); }
       else flash('Delete error', true);
     } catch (err) { flash('Delete error: ' + err.message, true); }
     setConfirmDel(null); setSaving(false);
@@ -655,6 +668,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
         const saved = await res.json();
         const row = Array.isArray(saved) ? saved[0] : saved;
         setLoans(prev => { const i = prev.findIndex(l => l.id === row.id); return i >= 0 ? prev.map(l => l.id === row.id ? row : l) : [...prev, row]; });
+        dealLinks.refresh();
         // Replace the loan's reporting requirements from the sidecar (re-import safe).
         if (reqRows && reqsAvailable) {
           const valid = reqRows.filter(r => r && r.item && ['monthly', 'quarterly', 'semiannual', 'annual'].includes(r.frequency));
@@ -2038,6 +2052,14 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
               </div>
               )}
             </div>
+            {/* Everything else the app knows about this deal — the schedule
+                figures, the covenant tests it backs, and how it is leasing. */}
+            {selected.deal_uid && (
+              <div style={{ padding: '18px 26px 0' }}>
+                <div className="mono" style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.11em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Connections</div>
+                <ConnectionsPanel bundle={dealLinks.bundle(selected.deal_uid)} nav={dealNav} hideSource="loans" />
+              </div>
+            )}
             {Detail({ l: selected })}
           </>
         )}

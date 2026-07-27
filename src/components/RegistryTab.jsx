@@ -8,6 +8,7 @@ import {
   fetchRegistry, planRegistrySync, executeRegistrySync,
   patchRegistryEntry, mergeRegistryEntries,
 } from '../dealRegistry.js';
+import { useDealLinks } from './DealLinksContext.jsx';
 
 // Hidden admin tab — only reachable while editing is unlocked. One row per
 // deal in the registry: the stable TT-id, every place the deal appears
@@ -47,7 +48,11 @@ function StatTile({ label, value, sub }) {
   );
 }
 
-export function RegistryTab({ onOpenLoan }) {
+export function RegistryTab({ onOpenLoan, dealNav }) {
+  // The shared join supplies the two sources the registry can't mint ids from:
+  // covenant tests (linked by name, then by properties.deal_uid) and the weekly
+  // leasing snapshot (matched by name every render).
+  const dealLinks = useDealLinks();
   const [registry,  setRegistry]  = useState([]);
   const [debtRows,  setDebtRows]  = useState([]);
   const [deals,     setDeals]     = useState([]);
@@ -88,6 +93,7 @@ export function RegistryTab({ onOpenLoan }) {
       let fullRegistry = reg;
       if (work > 0) {
         await executeRegistrySync(plan);
+        dealLinks.refresh(); // new ids can now claim covenant tests and leasing rows
         fullRegistry = [...reg, ...plan.newEntries.map(e => ({ status: null, notes: null, ...e }))];
         const debtUid = new Map(plan.links.debt.map(l => [l.id, l.deal_uid]));
         const dealUid = new Map(plan.links.pipeline.map(l => [l.id, l.deal_uid]));
@@ -131,10 +137,13 @@ export function RegistryTab({ onOpenLoan }) {
       const pipe = pDeals[0] || null;
       const sheetNames = [...new Set([...debt.map(r => r.name), ...pDeals.map(d => d.name)])];
       const lastSeen = debt.reduce((m, r) => (r.uploaded_at && (!m || r.uploaded_at > m) ? r.uploaded_at : m), null);
+      const linked = dealLinks.bundle(entry.uid);
       return {
         uid: entry.uid,
         entry,
         name: entry.name,
+        covenantTests: linked?.covenant || [],
+        leasing: linked?.leasing || null,
         aka: sheetNames.filter(n => n !== entry.name),
         derived,
         status,
@@ -155,7 +164,7 @@ export function RegistryTab({ onOpenLoan }) {
         lastSeen,
       };
     }).sort((a, b) => a.uid.localeCompare(b.uid, undefined, { numeric: true }));
-  }, [registry, debtRows, deals, locations, abstracts]);
+  }, [registry, debtRows, deals, locations, abstracts, dealLinks]);
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -170,6 +179,8 @@ export function RegistryTab({ onOpenLoan }) {
     overridden: rows.filter(r => r.overridden).length,
     committed: rows.filter(r => r.status === 'committed').length,
     withAbstract: rows.filter(r => r.abstract).length,
+    withCovenant: rows.filter(r => r.covenantTests.length > 0).length,
+    withLeasing: rows.filter(r => r.leasing).length,
   }), [rows]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -235,6 +246,7 @@ export function RegistryTab({ onOpenLoan }) {
     try {
       await mergeRegistryEntries(fromRow.uid, intoUid);
       await load();
+      dealLinks.refresh();
       setSyncNote(`Merged ${fromRow.uid} into ${intoUid}`);
     } catch (err) {
       setError('Merge failed: ' + err.message);
@@ -284,6 +296,21 @@ export function RegistryTab({ onOpenLoan }) {
     );
   };
 
+  // Covenant / leasing: same shape as the abstract chip, lit and clickable when
+  // the shared join found the deal on that screen.
+  const linkChip = (label, on, color, go, row) => {
+    const st = {
+      fontFamily: 'var(--font-mono)', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.04em',
+      padding: '1px 7px', borderRadius: 4, whiteSpace: 'nowrap',
+      border: `1px solid ${on ? `color-mix(in srgb, ${color} 35%, transparent)` : 'var(--border)'}`,
+      background: on ? `color-mix(in srgb, ${color} 11%, transparent)` : 'transparent',
+      color: on ? color : 'var(--faint2)', opacity: on ? 1 : 0.45,
+    };
+    if (!on || !go) return <span key={label} style={st}>{label}</span>;
+    const bundle = dealLinks.bundle(row.uid);
+    return <button key={label} style={{ ...st, cursor: 'pointer' }} onClick={() => bundle && go(bundle)}>✓ {label}</button>;
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: '0.6rem' }}>
@@ -316,6 +343,8 @@ export function RegistryTab({ onOpenLoan }) {
         <StatTile label="New / unreviewed" value={stats.unreviewed} sub="ids minted since last review" />
         <StatTile label="Status overrides" value={stats.overridden} sub="manual status beats the sheet" />
         <StatTile label="Loan abstracts" value={`${stats.withAbstract}/${stats.total}`} sub="deals with an abstract linked" />
+        <StatTile label="Covenant-tested" value={`${stats.withCovenant}/${stats.total}`} sub="deals on the Covenant Tracker" />
+        <StatTile label="Leasing linked" value={`${stats.withLeasing}/${stats.total}`} sub="deals in this week's report" />
         <StatTile label="Committed (not closed)" value={stats.committed} sub="effective status" />
       </div>
 
@@ -374,6 +403,8 @@ export function RegistryTab({ onOpenLoan }) {
                     {sourceChip('At Risk', r.inAtRisk, 'var(--accent)')}
                     {sourceChip('Stabilized', r.inStabilized, 'var(--pass)')}
                     {abstractChip(r)}
+                    {linkChip(`Covenant${r.covenantTests.length > 1 ? ` ${r.covenantTests.length}` : ''}`, r.covenantTests.length > 0, 'var(--warn)', dealNav?.covenant, r)}
+                    {linkChip('Leasing', !!r.leasing, 'var(--cat-violet)', dealNav?.leasing, r)}
                     {r.pinned && sourceChip('📍', true, 'var(--muted)')}
                   </span>
                 </td>

@@ -35,7 +35,7 @@ const EMPTY_DEAL = {
   highlights: '', sort_order: 0,
 };
 
-export function PipelineTab({ pinUnlocked = true }) {
+export function PipelineTab({ pinUnlocked = true, focusUid = null, onFocusConsumed }) {
 
   const [deals,       setDeals]       = useState([]);
   const [loading,     setLoading]     = useState(true);
@@ -49,6 +49,14 @@ export function PipelineTab({ pinUnlocked = true }) {
   const [parsing,     setParsing]     = useState(false); // bank package upload in flight
   const [parseInfo,   setParseInfo]   = useState(null);  // summary banner for the edit modal
   const [hoverMonth,  setHoverMonth]  = useState(null);  // closing-timeline column under the cursor
+
+  // Arriving from another tab's Pipeline chip — open that deal's card.
+  useEffect(() => {
+    if (!focusUid) return;
+    const hit = deals.find(d => d.deal_uid === focusUid);
+    if (hit) setExpandedId(hit.id);
+    onFocusConsumed?.();
+  }, [focusUid, deals, onFocusConsumed]);
   const packageInputRef = useRef(null);
 
   // ── Load ───────────────────────────────────────────────────────────────────

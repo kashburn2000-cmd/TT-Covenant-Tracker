@@ -113,7 +113,7 @@ function popupHtml(p, editMode) {
     </div>`;
 }
 
-export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
+export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn(), focusUid = null, onFocusConsumed }) {
   const [debtRows,  setDebtRows]  = useState([]);
   const [deals,     setDeals]     = useState([]);
   const [registry,  setRegistry]  = useState([]);    // deal_registry rows (status overrides)
@@ -396,6 +396,14 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
     const l = locFor(p);
     if (l) mapRef.current?.flyTo([l.lat, l.lng], Math.max(mapRef.current.getZoom(), 6));
   }
+
+  // Arriving from another tab's Map pin chip — select and fly to that deal.
+  useEffect(() => {
+    if (!focusUid) return;
+    const hit = projects.find(p => p.uid === focusUid || p.key === focusUid);
+    if (hit) pickProject(hit);
+    onFocusConsumed?.();
+  }, [focusUid, projects, onFocusConsumed]);
 
   const armedProject = armedKey ? projects.find(p => p.key === armedKey) : null;
   const sel = selectedKey ? projects.find(p => p.key === selectedKey) : null;

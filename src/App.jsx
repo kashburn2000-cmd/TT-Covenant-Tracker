@@ -19,6 +19,9 @@ import { LoansTab } from './components/LoansTab.jsx';
 import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
 import { MapTab } from './components/MapTab.jsx';
 import { RegistryTab } from './components/RegistryTab.jsx';
+import { useDealLinks } from './components/DealLinksContext.jsx';
+import { ConnectionsPanel, DealPicker } from './components/ConnectionsPanel.jsx';
+import { resolveName } from './dealLinks.js';
 import { useWeeklyUploads, WeeklyUploadPill, WeeklyUploadBannerRow } from './components/WeeklyUploadBanner.jsx';
 import { useIsMobile } from './useIsMobile.js';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
@@ -269,7 +272,7 @@ function LedgerRow({ label, value, eq, color, strong, indent }) {
   );
 }
 
-function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn(), onCurveFile, onFailingCount }) {
+function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn(), onCurveFile, onFailingCount, dealNav, focusUid, onFocusConsumed }) {
   const SOFR_MIN = getActiveSofrCurve()[0].date;
   const SOFR_MAX = getActiveSofrCurve()[getActiveSofrCurve().length - 1].date;
 
@@ -587,6 +590,39 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   }, [visibleRows, statusFilter]);
   const sel = listRows.find(r => r.id === selectedId) || listRows[0] || visibleRows[0] || null;
 
+  // ── Cross-tab links ────────────────────────────────────────────────────────
+  // Each covenant test belongs to a registry deal, so the detail pane can show
+  // what the Debt Dashboard, the loan abstract and the weekly leasing report
+  // say about the same loan. The link itself is stamped onto properties.deal_uid
+  // by DealLinksProvider the first time a row appears; the picker below repairs
+  // a bad match by hand.
+  const dealLinks = useDealLinks();
+  const selBundle = sel ? dealLinks.bundleForCovenant(sel.id) : null;
+  const selLinkedUid = useMemo(() => {
+    if (!sel) return null;
+    return dealLinks.covenantRows?.find(r => String(r.id) === String(sel.id))?.deal_uid || null;
+  }, [sel, dealLinks.covenantRows]);
+
+  // Arriving from another tab's "Covenant" chip: select that deal's test.
+  useEffect(() => {
+    if (!focusUid || !dealLinks.covenantRows?.length) return;
+    const hit = dealLinks.covenantRows.find(r => r.deal_uid === focusUid);
+    if (hit) {
+      setSelectedId(hit.id);
+      if (isMobile) setMobileDetail(true);
+    }
+    onFocusConsumed?.();
+  }, [focusUid, dealLinks.covenantRows, isMobile, onFocusConsumed]);
+
+  async function relinkCovenant(uid) {
+    if (!sel) return;
+    try {
+      await dealLinks.linkCovenantRow(sel.id, uid);
+    } catch (err) {
+      setDbError(err.message);
+    }
+  }
+
   // Prior-test snapshots power the detail pane's "prior" line, Doc View and the
   // PDF export column — prefetch events for rows we haven't loaded yet whenever
   // the Prior Test column is enabled (same lazy load the old table performed).
@@ -867,6 +903,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       }
       setForm(EMPTY_FORM);
       setShowForm(false);
+      // A new test needs a deal id before its Connections panel can show
+      // anything; re-running the join stamps it without a page reload.
+      dealLinks.refresh();
     } catch (err) {
       alert('Error saving: ' + err.message);
     }
@@ -956,6 +995,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     try {
       await fetch(`${SB_URL}/rest/v1/properties?id=eq.${id}`, { method: 'DELETE', headers: SB_HEADERS });
       setProperties(ps => ps.filter(p => p.id !== id));
+      dealLinks.refresh();
     } catch (err) {
       alert('Error deleting: ' + err.message);
     }
@@ -1438,6 +1478,19 @@ Req: ${formatCurrency(r.requiredNOI)}`,
   const selFundProps = (sel && sel.fundProperties) || [];
   const selDays = sel ? daysUntil(sel.covenantDate) : null;
   const selDF = sel ? computeDebtFundSizing(sel) : null;
+  // Fund rows test a facility, not a deal, so the row itself links to nothing.
+  // Each property inside it is a real deal though — resolve them individually
+  // so the sub-rows can carry their leasing and schedule figures.
+  const fundLinks = useMemo(() => {
+    const m = new Map();
+    if (!selIsFund) return m;
+    for (const fp of selFundProps) {
+      const uid = resolveName(fp.name, dealLinks.registry, dealLinks.index.aliases);
+      const b = uid ? dealLinks.index.byUid.get(uid) : null;
+      if (b) m.set(fp.name, b);
+    }
+    return m;
+  }, [selIsFund, selFundProps, dealLinks.registry, dealLinks.index]);
   const selEvents = sel ? (propertyEvents[sel.id] || null) : null;
   const selPrior = findPriorTest(selEvents);
 
@@ -1888,6 +1941,36 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     })()}
                   </div>
 
+                  {/* ── Connections — the same loan on every other tab ── */}
+                  {(dealLinks.ready || selIsFund) && (
+                    <div style={{ padding: '18px 26px 0' }}>
+                      <Eyebrow style={{ margin: '0 0 10px' }}>
+                        Connections{selIsFund ? ' — portfolio row, no single deal' : ''}
+                      </Eyebrow>
+                      {selIsFund ? (
+                        <div style={{ border: '1px dashed var(--border2)', borderRadius: 8, padding: '12px 14px', fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.6 }}>
+                          The {sel.property} tests a facility across {selFundProps.length} properties, so it links to no
+                          single deal. Each fund property connects on its own — open it on the Debt Dashboard or the
+                          Leasing Dashboard for its figures.
+                        </div>
+                      ) : (
+                        <ConnectionsPanel
+                          bundle={selBundle}
+                          nav={dealNav}
+                          hideSource="covenant"
+                          onRelink={pinUnlocked && dealLinks.covenantLinkAvailable ? (
+                            <DealPicker
+                              value={selLinkedUid}
+                              onChange={relinkCovenant}
+                              registry={dealLinks.registry}
+                              label="Linked deal"
+                            />
+                          ) : null}
+                        />
+                      )}
+                    </div>
+                  )}
+
                   {/* 2022 Fund — expandable per-property strip */}
                   {selIsFund && selFundProps.length > 0 && (
                     <div style={{ ...paneCard, margin: '16px 26px 0', overflow: 'hidden' }}>
@@ -1913,6 +1996,26 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                             <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--text)' }}>
                               {fp.name}
                               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)', marginLeft: 8 }}>{fpLoan ? formatCurrency(fpLoan) : 'Loan TBD'}</span>
+                              {(() => {
+                                // The fund property as its own deal: how it is
+                                // leasing, and a way through to the rest of it.
+                                const fb = fundLinks.get(fp.name);
+                                if (!fb) return null;
+                                return (
+                                  <>
+                                    {fb.leasing?.occPct != null && (
+                                      <span title="Occupancy from this week's leasing report" style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', marginLeft: 8 }}>
+                                        {(fb.leasing.occPct * 100).toFixed(1)}% occ
+                                      </span>
+                                    )}
+                                    <button
+                                      onClick={() => dealNav?.debt?.(fb)}
+                                      title={`Open ${fb.uid} — ${fb.name} on the Debt Dashboard`}
+                                      style={{ marginLeft: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--accent)' }}
+                                    >{fb.uid} →</button>
+                                  </>
+                                );
+                              })()}
                             </span>
                             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, fontSize: 12, color: fpPass === null ? 'var(--faint)' : fpPass ? 'var(--pass)' : 'var(--fail)' }}>
@@ -2977,6 +3080,30 @@ export default function App() {
     setActiveTab('loans');
   }
 
+  // ── Cross-tab deal navigation ──────────────────────────────────────────────
+  // Every screen that shows a deal can hand it to any other screen. The target
+  // tab is revealed for this session if the shared tab config hides it (same
+  // rule openLeasing follows) and receives the deal id, so it opens on that deal
+  // rather than dumping the user at the top of an unfamiliar list.
+  const [focusDeal, setFocusDeal] = useState(null); // { tab, uid }
+  function goToDeal(tab, uid) {
+    setVisibleTabs(v => (v[tab] ? v : { ...v, [tab]: true }));
+    setFocusDeal({ tab, uid });
+    setActiveTab(tab);
+  }
+  const focusFor = (tab) => (focusDeal?.tab === tab ? focusDeal.uid : null);
+  const clearFocus = () => setFocusDeal(null);
+  const dealNav = useMemo(() => ({
+    covenant: (b) => goToDeal('covenant', b.uid),
+    debt:     (b) => goToDeal('debt', b.uid),
+    leasing:  (b) => goToDeal('leasing', b.uid),
+    pipeline: (b) => goToDeal('pipeline', b.uid),
+    map:      (b) => goToDeal('map', b.uid),
+    // The Loans tab is keyed by abstract, not deal — jump straight to the
+    // abstract when the deal has one.
+    loans:    (b) => (b.abstract ? openLoan(b.abstract.id) : goToDeal('loans', b.uid)),
+  }), []);
+
   function openLeasing() {
     // The Leasing tab may be hidden from the shared tab config — reveal it for
     // this session only (nothing is saved) so the upload is reachable; the
@@ -3232,14 +3359,14 @@ export default function App() {
           <ErrorBoundary key={activeTab} label={TAB_LABELS[activeTab] || 'This screen'}>
           {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
           {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
-          {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={effPinUnlocked} requirePin={requirePin} onCurveFile={handleSofrUpload} onFailingCount={setCovFailing} />}
-          {activeTab === "leasing"    && <LeasingTab />}
-          {activeTab === "pipeline"   && <PipelineTab pinUnlocked={effPinUnlocked} />}
+          {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={effPinUnlocked} requirePin={requirePin} onCurveFile={handleSofrUpload} onFailingCount={setCovFailing} dealNav={dealNav} focusUid={focusFor('covenant')} onFocusConsumed={clearFocus} />}
+          {activeTab === "leasing"    && <LeasingTab dealNav={dealNav} pinUnlocked={effPinUnlocked} focusUid={focusFor('leasing')} onFocusConsumed={clearFocus} />}
+          {activeTab === "pipeline"   && <PipelineTab pinUnlocked={effPinUnlocked} focusUid={focusFor('pipeline')} onFocusConsumed={clearFocus} />}
           {activeTab === "land"       && <LandFacilityTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
-          {activeTab === "loans"      && <LoansTab pinUnlocked={effPinUnlocked} requirePin={requirePin} focusLoanId={focusLoanId} onFocusConsumed={() => setFocusLoanId(null)} />}
-          {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
-          {activeTab === "map"        && <MapTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
-          {activeTab === "registry"   && effPinUnlocked && <RegistryTab onOpenLoan={openLoan} />}
+          {activeTab === "loans"      && <LoansTab pinUnlocked={effPinUnlocked} requirePin={requirePin} focusLoanId={focusLoanId} onFocusConsumed={() => setFocusLoanId(null)} dealNav={dealNav} focusUid={focusFor('loans')} onDealFocusConsumed={clearFocus} />}
+          {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={effPinUnlocked} requirePin={requirePin} dealNav={dealNav} focusUid={focusFor('debt')} onFocusConsumed={clearFocus} />}
+          {activeTab === "map"        && <MapTab pinUnlocked={effPinUnlocked} requirePin={requirePin} focusUid={focusFor('map')} onFocusConsumed={clearFocus} />}
+          {activeTab === "registry"   && effPinUnlocked && <RegistryTab onOpenLoan={openLoan} dealNav={dealNav} />}
           </ErrorBoundary>
         </div>
       </div>

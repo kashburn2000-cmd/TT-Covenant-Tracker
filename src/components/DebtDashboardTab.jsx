@@ -15,6 +15,9 @@ import { buildLenderRollup, buildLenderComparison, rollupStats, projectHolders, 
 import { capExpectedReceipts, swapMtm, hedgeSummary } from '../hedgeCalc.js';
 import { portfolioMtm } from '../loanMtm.js';
 import { useIsMobile } from '../useIsMobile.js';
+import { useDealLinks } from './DealLinksContext.jsx';
+import { ConnectionsPanel, SourceChips } from './ConnectionsPanel.jsx';
+import { missingLinks } from '../dealLinks.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -228,7 +231,7 @@ const Ov = ({ p, k, type }) => (p._edited?.[k]
   : null);
 
 // ── Leverage Tracker ──────────────────────────────────────────────────────────
-function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPatch, pinUnlocked }) {
+function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPatch, pinUnlocked, dealNav, highlightUid, bundleOf }) {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [fundFilter, setFundFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -415,12 +418,31 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
             {pinUnlocked && <th />}
           </tr></thead>
           <tbody>
-            {rows.map(p => (
-              <tr key={p.id} style={p.hidden ? { opacity: 0.45 } : undefined}>
+            {rows.map(p => {
+              const bundle = bundleOf?.(p.deal_uid) || null;
+              return (
+              <tr key={p.id} style={{
+                ...(p.hidden ? { opacity: 0.45 } : null),
+                ...(highlightUid && p.deal_uid === highlightUid
+                  ? { background: 'color-mix(in srgb, var(--accent) 9%, transparent)', boxShadow: 'inset 3px 0 0 var(--accent)' }
+                  : null),
+              }}>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {p.name}
                   {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--faint2)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
                   {p._status === 'committed' && <span className="pill blue" style={{ marginLeft: 6 }}>COMMITTED</span>}
+                  {/* Where else this deal lives — click a lit chip to open it there. */}
+                  {bundle && (
+                    <div style={{ marginTop: 3 }}>
+                      <SourceChips sources={bundle.sources} compact onOpen={(key) => {
+                        if (key === 'covenant') dealNav?.covenant?.(bundle);
+                        else if (key === 'pipeline') dealNav?.pipeline?.(bundle);
+                        else if (key === 'abstract') dealNav?.loans?.(bundle);
+                        else if (key === 'leasing') dealNav?.leasing?.(bundle);
+                        else if (key === 'pin') dealNav?.map?.(bundle);
+                      }} />
+                    </div>
+                  )}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   {editingCategory === p.id ? (
@@ -511,7 +533,8 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                   </td>
                 )}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         <datalist id="tt-fund-options">{funds.map(f => <option key={f} value={f} />)}</datalist>
@@ -2130,6 +2153,127 @@ function CurveWidget({ pinUnlocked, requirePin }) {
   );
 }
 
+// ── Deal Connections ─────────────────────────────────────────────────────────
+// Every deal, and every screen that holds data on it. This is the one place
+// that answers "is this loan wired up everywhere it should be" — a row per
+// deal, lit chips for the screens it appears on, dim chips for the ones it
+// doesn't, and a click through to any of them. The tiles above count the gaps
+// so a deal missing its abstract or its leasing row is a number rather than
+// something you'd have to notice.
+//
+// Nothing here is a data problem by itself: a committed deal has no leasing to
+// report and the land facility is deliberately outside all of this. The filter
+// separates "not connected yet" from "nothing to connect".
+function ConnectionsWidget({ dealNav, focusUid }) {
+  const { index, ready, setupNeeded, loading, unlinkedCounts } = useDealLinks();
+  const [search, setSearch] = useState('');
+  const [gapsOnly, setGapsOnly] = useState(false);
+  const [openUid, setOpenUid] = useState(null);
+
+  // Follow a deal handed over from another tab straight to its expanded row.
+  useEffect(() => { if (focusUid) setOpenUid(focusUid); }, [focusUid]);
+
+  const rows = useMemo(() => index.list
+    .filter(b => b.status !== 'sold')
+    .map(b => ({ b, gaps: missingLinks(b) })), [index.list]);
+
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows
+      .filter(r => !gapsOnly || r.gaps.length > 0)
+      .filter(r => !q || r.b.uid.toLowerCase().includes(q) || r.b.name.toLowerCase().includes(q)
+        || r.b.aliases.some(n => n.toLowerCase().includes(q)));
+  }, [rows, search, gapsOnly]);
+
+  const stats = useMemo(() => ({
+    deals: rows.length,
+    full: rows.filter(r => r.gaps.length === 0).length,
+    noAbstract: rows.filter(r => r.gaps.includes('abstract')).length,
+    noLeasing: rows.filter(r => r.gaps.includes('leasing')).length,
+    covenant: rows.filter(r => r.b.sources.covenant).length,
+  }), [rows]);
+
+  if (setupNeeded) return (
+    <div style={{ fontSize: '0.78rem', color: 'var(--muted)', lineHeight: 1.7, padding: '0.5rem 0' }}>
+      Deal ids aren&apos;t set up yet — run <code>db/deal_registry_setup.sql</code> once in the Supabase SQL editor and
+      this widget will show every deal and the screens it connects to.
+    </div>
+  );
+  if (loading && !ready) return <div className="mono" style={{ fontSize: 11, color: 'var(--faint)', padding: '1rem 0' }}>Loading deal links…</div>;
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.7rem' }}>
+        <StatTile label="Deals" value={stats.deals} sub="live in the registry" />
+        <StatTile label="Fully connected" value={`${stats.full}/${stats.deals}`} sub="nothing left to link" />
+        <StatTile label="No abstract" value={stats.noAbstract} sub="closed loans without one" color={stats.noAbstract ? 'var(--warn-text)' : undefined} />
+        <StatTile label="No leasing row" value={stats.noLeasing} sub="building or stabilized" color={stats.noLeasing ? 'var(--warn-text)' : undefined} />
+        <StatTile label="Covenant-tested" value={stats.covenant} sub="deals on the tracker" />
+      </div>
+
+      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.55rem' }}>
+        <input type="text" placeholder="Search deal…" value={search} onChange={e => setSearch(e.target.value)}
+          style={{ maxWidth: 220, fontSize: '0.76rem', padding: '0.3rem 0.55rem' }} />
+        <label style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+          <input type="checkbox" checked={gapsOnly} onChange={e => setGapsOnly(e.target.checked)} />
+          Missing something ({rows.length - stats.full})
+        </label>
+        {unlinkedCounts?.leasing > 0 && (
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--warn)' }}
+            title="Leasing rows whose property name matched no deal — open the Leasing tab's link editor to point them at one">
+            {unlinkedCounts.leasing} leasing row{unlinkedCounts.leasing === 1 ? '' : 's'} unmatched
+          </span>
+        )}
+        {unlinkedCounts?.covenant > 0 && (
+          <span className="mono" style={{ fontSize: 10.5, color: 'var(--warn)' }}
+            title="Covenant tests not linked to a deal — the 2022 Fund portfolio row is expected here; anything else can be linked by hand in its detail pane">
+            {unlinkedCounts.covenant} covenant test{unlinkedCounts.covenant === 1 ? '' : 's'} unlinked
+          </span>
+        )}
+      </div>
+
+      <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>
+            <th>ID</th><th>Deal</th><th>Connected to</th><th>Lender</th>
+            <th style={{ textAlign: 'right' }}>Loan</th><th>Occupancy</th><th>Missing</th>
+          </tr></thead>
+          <tbody>
+            {shown.map(({ b, gaps }) => (
+              <React.Fragment key={b.uid}>
+                <tr onClick={() => setOpenUid(u => (u === b.uid ? null : b.uid))} style={{ cursor: 'pointer', background: openUid === b.uid ? 'var(--panel2)' : undefined }}>
+                  <td className="mono" style={{ whiteSpace: 'nowrap', fontSize: '0.72rem', color: 'var(--muted)', fontVariantNumeric: 'tabular-nums' }}>{b.uid}</td>
+                  <td style={{ minWidth: 140 }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.8rem' }}>{openUid === b.uid ? '▾' : '▸'} {b.name}</span>
+                    {b.isFacility && <span className="pill yellow" style={{ marginLeft: 6 }}>{CLASSIFICATION_LABEL[b.classification]}</span>}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}><SourceChips sources={b.sources} compact /></td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{b.debt.holders.length ? holdersLabel(b.debt.holders) : (b.pipeline?.primary_lender || '—')}</td>
+                  <td className="mono" style={{ textAlign: 'right', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{fmtM(b.debt.eff?.loan_amount ?? b.pipeline?.total_budget ?? null)}</td>
+                  <td className="mono" style={{ whiteSpace: 'nowrap', fontSize: '0.75rem' }}>{b.leasing?.occPct != null ? fmtPct(b.leasing.occPct) : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap', fontSize: '0.7rem', color: gaps.length ? 'var(--warn-text)' : 'var(--faint2)' }}>
+                    {gaps.length ? gaps.join(', ') : '—'}
+                  </td>
+                </tr>
+                {openUid === b.uid && (
+                  <tr><td colSpan={7} style={{ padding: '10px 14px 16px', background: 'var(--panel2)' }}>
+                    <ConnectionsPanel bundle={b} nav={dealNav} hideSource="debt" />
+                  </td></tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+        {shown.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '1.6rem', color: 'var(--faint)', fontSize: '0.78rem' }}>
+            {rows.length === 0 ? 'No deals in the registry yet.' : 'No deals match.'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Widget registry & sandbox page ────────────────────────────────────────────
 const WIDGETS = {
   leverage:   { title: 'Leverage Tracker',       defaultGrid: { x: 0, y: 0,  w: 12, h: 11, minW: 6, minH: 6 } },
@@ -2140,11 +2284,12 @@ const WIDGETS = {
   lenders:    { title: 'Lender Exposure',        defaultGrid: { x: 0, y: 40, w: 12, h: 10, minW: 5, minH: 5 } },
   hedges:     { title: 'Hedge Tracker',          defaultGrid: { x: 0, y: 50, w: 12, h: 9,  minW: 5, minH: 5 } },
   loanMtm:    { title: 'Loan Mark-to-Market',    defaultGrid: { x: 0, y: 59, w: 12, h: 9,  minW: 5, minH: 5 } },
+  connections:{ title: 'Deal Connections',       defaultGrid: { x: 0, y: 68, w: 12, h: 10, minW: 5, minH: 5 } },
 };
 const DEFAULT_WIDGETS = Object.keys(WIDGETS);
 const DEFAULT_LAYOUT = DEFAULT_WIDGETS.map(k => ({ i: k, ...WIDGETS[k].defaultGrid }));
 
-export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
+export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn(), dealNav, focusUid, onFocusConsumed }) {
   const [projects, setProjects] = useState([]);
   const [registry, setRegistry] = useState([]); // deal_registry rows — manual status overrides
   const [abstracts, setAbstracts] = useState([]); // loan abstracts — participation splits per deal
@@ -2158,6 +2303,15 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
   const [showAdd, setShowAdd] = useState(false);
   const { width, containerRef, mounted } = useContainerWidth();
   const saveTimer = useRef(null);
+  // Deal handed over from another tab: held locally (so the highlight survives)
+  // and released upstream immediately, matching the other screens.
+  const dealLinks = useDealLinks();
+  const [focusedDeal, setFocusedDeal] = useState(null);
+  useEffect(() => {
+    if (!focusUid) return;
+    setFocusedDeal(focusUid);
+    onFocusConsumed?.();
+  }, [focusUid, onFocusConsumed]);
   // Phone layout: the drag-and-drop grid becomes a single column of
   // collapsible sections, each showing its headline number while collapsed.
   const isMobile = useIsMobile();
@@ -2332,6 +2486,10 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       } catch (err) {
         regNote = ' · deal-id linking skipped (' + err.message + ')';
       }
+      // New schedule rows (and any new deal ids) change what the covenant tests
+      // and leasing rows can link to, so re-run the shared join.
+      dealLinks.refresh();
+
       // uidById may also cover rows from the other schedule that had never
       // been linked — stamp those locally too, not just the inserted set.
       setProjects(prev => [
@@ -2415,6 +2573,9 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
           onSetHidden={(p, hidden) => patchProject(p, { hidden })}
           onPatch={(p, patch) => patchProject(p, patch)}
           pinUnlocked={pinUnlocked}
+          dealNav={dealNav}
+          highlightUid={focusedDeal}
+          bundleOf={dealLinks.bundle}
         />
       );
       case 'maturities': return (
@@ -2431,6 +2592,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       case 'lenders':    return <LenderExposureWidget projects={visibleProjects} />;
       case 'hedges':     return <HedgeWidget pinUnlocked={pinUnlocked} />;
       case 'loanMtm':    return <LoanMtmWidget pinUnlocked={pinUnlocked} />;
+      case 'connections': return <ConnectionsWidget dealNav={dealNav} focusUid={focusedDeal} />;
       default: return null;
     }
   }
@@ -2477,6 +2639,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       lenders: `${lenders.size} lender${lenders.size === 1 ? '' : 's'}`,
       hedges: 'Caps & swaps',
       loanMtm: 'Portfolio mark-to-market',
+      connections: 'One deal across every tab',
     };
   }, [visibleProjects, headline]);
 
