@@ -43,6 +43,19 @@ ALTER TABLE debt_projects     ADD COLUMN IF NOT EXISTS deal_uid text;
 ALTER TABLE pipeline_deals    ADD COLUMN IF NOT EXISTS deal_uid text;
 ALTER TABLE project_locations ADD COLUMN IF NOT EXISTS deal_uid text;
 
+-- Loan abstracts link too, but by hand rather than by name: the abstract's
+-- names ("Sarasota", "TTRES CO Wheat Ridge Kipling St, LLC") never equal the
+-- schedule's ("TTRes at Sarasota, FL"), so the Import Abstract dialog asks
+-- which deal the abstract belongs to and stamps it here. Unlike the tables
+-- above, loans are never auto-linked by the registry sync.
+DO $$
+BEGIN
+  IF to_regclass('public.loans') IS NOT NULL THEN
+    ALTER TABLE loans ADD COLUMN IF NOT EXISTS deal_uid text;
+    CREATE INDEX IF NOT EXISTS loans_deal_uid_idx ON loans (deal_uid);
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS debt_projects_deal_uid_idx  ON debt_projects (deal_uid);
 CREATE INDEX IF NOT EXISTS pipeline_deals_deal_uid_idx ON pipeline_deals (deal_uid);
 

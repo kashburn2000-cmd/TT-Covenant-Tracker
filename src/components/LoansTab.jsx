@@ -5,6 +5,7 @@ import { slugify } from '../format.js';
 import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
 import { supabase } from '../auth.js';
 import { useIsMobile } from '../useIsMobile.js';
+import { suggestDealUid } from '../dealRegistry.js';
 
 const DOC_CATEGORIES = {
   loan_agreement: 'Loan Agreement', guaranty: 'Guaranty', amendment: 'Amendment',
@@ -269,7 +270,7 @@ function parseAbstractXml(xml) {
   return row;
 }
 
-export function LoansTab({ pinUnlocked, requirePin }) {
+export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed }) {
   const BUCKET     = 'loan-docs';
 
   const [loans, setLoans]         = useState([]);
@@ -288,6 +289,17 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const [showImport, setShowImport] = useState(false);
   const [importJson, setImportJson] = useState('');
   const [importFile, setImportFile] = useState(null);
+  // Registry deal the abstract belongs to. null = follow the name-match
+  // suggestion; a string (possibly '') is an explicit choice by the user.
+  const [importDealUid, setImportDealUid] = useState(null);
+
+  // Deal registry, for linking an abstract to its deal on import. Abstract
+  // names never equal schedule names, so this is a picker rather than an
+  // automatic name match. dealLinkAvailable probes for the loans.deal_uid
+  // column so installs that ran deal_registry_setup.sql before that column
+  // existed degrade to the old unlinked behaviour instead of erroring.
+  const [registry, setRegistry] = useState([]);
+  const [dealLinkAvailable, setDealLinkAvailable] = useState(false);
 
   // Reporting requirements (structured lender deliverables — feeds the nightly
   // Tasks & Reminders generator). reqsAvailable flips false until
@@ -324,6 +336,17 @@ export function LoansTab({ pinUnlocked, requirePin }) {
 
   function flash(text, isErr = false) { setMsg({ text, isErr }); setTimeout(() => setMsg(''), 4000); }
 
+  // Best-guess deal for whatever is currently in the import textarea. Computed
+  // here (not inside ImportModal) because the modal is re-created every render.
+  const importPreview = React.useMemo(() => {
+    try { const d = JSON.parse(importJson); return d && typeof d === 'object' ? d : null; } catch { return null; }
+  }, [importJson]);
+  const suggestedDealUid = React.useMemo(
+    () => (importPreview ? suggestDealUid(importPreview, registry) : null),
+    [importPreview, registry],
+  );
+  const importDeal = importDealUid !== null ? importDealUid : (suggestedDealUid || '');
+
   // ── Load ───────────────────────────────────────────────────────────────────
   React.useEffect(() => {
     async function load() {
@@ -334,10 +357,38 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       } catch (err) { console.error('Loans load error:', err); flash('Load error: ' + err.message, true); }
       await refreshReqs();
       await refreshDocs();
+      await refreshRegistry();
       setLoading(false);
     }
     load();
   }, []);
+
+  // Arriving from a deal's "Abstract" chip on the Deal Registry: open that loan.
+  useEffect(() => {
+    if (focusLoanId == null) return;
+    setExpandedId(focusLoanId);
+    setMobileDetail(true);
+    onFocusConsumed?.();
+  }, [focusLoanId, onFocusConsumed]);
+
+  // Registry + deal_uid column probe. Both must be present for the link picker;
+  // either missing just hides it (db/deal_registry_setup.sql not run yet).
+  async function refreshRegistry() {
+    try {
+      const [reg, probe] = await Promise.all([
+        fetch(`${SB_URL}/rest/v1/deal_registry?select=uid,name,status&order=name.asc`, { headers: SB_HEADERS }),
+        fetch(`${SB_URL}/rest/v1/loans?select=deal_uid&limit=1`, { headers: SB_HEADERS }),
+      ]);
+      if (reg.ok && probe.ok) {
+        const rows = await reg.json();
+        setRegistry(Array.isArray(rows) ? rows : []);
+        setDealLinkAvailable(true);
+      } else {
+        setRegistry([]);
+        setDealLinkAvailable(false);
+      }
+    } catch { setRegistry([]); setDealLinkAvailable(false); }
+  }
 
   async function refreshReqs() {
     try {
@@ -520,6 +571,8 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     // Optional child rows — not a loans column, so pull them out before coerceBody.
     const reqRows = Array.isArray(data.reporting_requirements) ? data.reporting_requirements : null;
     delete data.reporting_requirements;
+    // The picker below is the only source of the deal link.
+    delete data.deal_uid;
     // Same default as the .docx parser, for JSON sidecars that omit the name.
     if (!data.property_name && data.property_city) data.property_name = data.property_city;
     setSaving(true);
@@ -531,6 +584,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       }
       const body = coerceBody({
         ...EMPTY_LOAN, ...data,
+        ...(dealLinkAvailable ? { deal_uid: importDeal || null } : {}),
         source_doc_path: path,
         source_doc_uploaded_at: importFile ? new Date().toISOString() : (data.source_doc_uploaded_at || null),
         updated_at: new Date().toISOString(),
@@ -569,8 +623,8 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           }
           refreshReqs();
         }
-        flash('✓ Abstract imported');
-        setShowImport(false); setImportJson(''); setImportFile(null);
+        flash(importDeal ? `✓ Abstract imported and linked to ${importDeal}` : '✓ Abstract imported (not linked to a deal)');
+        setShowImport(false); setImportJson(''); setImportFile(null); setImportDealUid(null);
       } else {
         const e = await res.json().catch(() => ({}));
         flash('Import error: ' + (e.message || e.details || e.hint || res.status), true);
@@ -959,7 +1013,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, width: '100%', maxWidth: 720, padding: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '1rem' }}>Import Abstract</span>
-            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); setImportDealUid(null); }} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--faint2)', lineHeight: 1.5, marginBottom: '1rem' }}>
             Easiest: attach the <code>.docx</code> and click <strong>Auto-fill</strong> — the fields are read straight from the document. Review them below, then Import. (Or paste a JSON sidecar from your abstract assistant if you have one.) Re-importing the same document updates the existing record — no duplicates.
@@ -981,8 +1035,27 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           {/* Step 2 — review/paste JSON */}
           <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.4rem' }}>Step 2 — Review fields (auto-filled or pasted)</div>
           <textarea style={inputSt({ minHeight: 220, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={importJson} onChange={e => setImportJson(e.target.value)} spellCheck={false} placeholder='Click "Auto-fill" above, or paste JSON like: { "loan_type": "construction", "borrower_entity": "...", "loan_amount": 51694640 }' />
+
+          {/* Step 3 — link to the deal it belongs to */}
+          {dealLinkAvailable && (
+            <div style={{ marginTop: '1rem' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.4rem' }}>Step 3 — Link to deal</div>
+              <select style={inputSt()} value={importDeal} onChange={e => setImportDealUid(e.target.value)}>
+                <option value="">— not linked to a deal —</option>
+                {registry.map(e => <option key={e.uid} value={e.uid}>{e.uid} · {e.name}</option>)}
+              </select>
+              <div style={{ fontSize: '0.62rem', marginTop: 4, lineHeight: 1.5, color: importDeal ? 'var(--faint2)' : 'var(--warn, #c8860d)' }}>
+                {importDeal
+                  ? (importDealUid === null && suggestedDealUid
+                      ? 'Matched by name — change it if this is the wrong deal.'
+                      : 'This abstract will show on the Deal Registry under this deal.')
+                  : 'Not linked — this abstract won\'t show on the Deal Registry. Pick the deal it belongs to.'}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
+            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); setImportDealUid(null); }} style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
             <button onClick={importAbstract} disabled={saving} className="btn btn-primary" style={{ padding: '6px 20px', fontSize: '0.78rem', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Importing…' : 'Import'}</button>
           </div>
         </div>
