@@ -107,6 +107,10 @@ const SHARED_STYLES = `
   .mx-low  { background: color-mix(in srgb, var(--fail) 11%, transparent); color: var(--fail); font-weight: 500; }
   .mx-vlow { background: color-mix(in srgb, var(--fail) 24%, transparent); color: var(--fail); font-weight: 600; }
 
+  /* Ledger cards (loan detail pane): rows carry their own divider, so drop the
+     one on the last row — otherwise it reads as a rule floating above nothing. */
+  .tt-ledger > *:last-child { border-bottom: none !important; }
+
   /* ── Control system ─────────────────────────────────────────────────────
      One button vocabulary for the whole app (mono, terminal-institutional):
        .btn / .tt-btn  neutral secondary action (white card, navy text)

@@ -1147,8 +1147,8 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
       <>
         {rows.map(r => (
           <div key={r.id} title={`${reqSchedule(r)}${r.recipient ? ` → ${r.recipient}` : ''}`}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ minWidth: 0, flex: 1 }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 0', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ minWidth: 0, flex: 1, lineHeight: 1.5 }}>
               <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{r.item}{r.party ? ` (${r.party})` : ''}</span>
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', marginLeft: 8 }}>
                 {r.frequency}{r.recipient ? ` → ${r.recipient}` : ''}
@@ -1165,7 +1165,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
           reportingCoverage(l, 0) === 'gap' ? (
             // The abstract states reporting obligations but nothing is scheduled,
             // so the nightly generator has nothing to remind anyone about.
-            <div style={{ padding: '9px 0' }}>
+            <div style={{ padding: '11px 0' }}>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--warn-text)', lineHeight: 1.5 }}>
                 ⚠ Abstract text on file, nothing scheduled — no reminders will fire for this loan.
               </div>
@@ -1176,11 +1176,11 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
               )}
             </div>
           ) : (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>None recorded yet.</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '11px 0' }}>None recorded yet.</div>
           )
         )}
         {pinUnlocked && !drafting && (
-          <div style={{ padding: '9px 0' }}>
+          <div style={{ padding: '11px 0' }}>
             <button
               onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}
               style={{ background: 'none', border: 'none', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, padding: 0, cursor: 'pointer' }}
@@ -1188,7 +1188,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
           </div>
         )}
         {drafting && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '9px 0', alignItems: 'center' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '11px 0', alignItems: 'center' }}>
             <input placeholder="Deliverable (e.g. Operating statement)" value={reqDraft.item} autoFocus
               onChange={e => setReqDraft(d => ({ ...d, item: e.target.value }))} style={{ ...inSt, flex: '2 1 150px' }} />
             <select value={reqDraft.party} onChange={e => setReqDraft(d => ({ ...d, party: e.target.value }))} style={inSt}>
@@ -1382,46 +1382,66 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
   // ── Detail pane body: 2-col grid of ledger cards ─────────────────────────────
   const Detail = ({ l }) => {
     const Eyebrow = ({ children, mt }) => (
-      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, letterSpacing: '0.12em', color: 'var(--muted)', textTransform: 'uppercase', margin: mt ? '18px 0 10px' : '0 0 10px' }}>{children}</div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, letterSpacing: '0.12em', color: 'var(--muted)', textTransform: 'uppercase', margin: mt ? '22px 0 10px' : '0 0 10px' }}>{children}</div>
     );
-    const Card = ({ children, pad = '6px 16px' }) => (
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 9, padding: pad }}>{children}</div>
+    const Card = ({ children, pad = '8px 18px' }) => (
+      <div className="tt-ledger" style={{ background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 9, padding: pad }}>{children}</div>
     );
     const Row = ({ k, v, bold }) => (v == null || v === '' ? null : (
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '11px 0', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: 12, color: 'var(--text2)', flexShrink: 0 }}>{k}</span>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: bold ? 600 : 500, color: 'var(--text)', textAlign: 'right', overflowWrap: 'anywhere' }}>{v}</span>
       </div>
     ));
-    const Prose = ({ k, v }) => (!v ? null : (
-      <div style={{ padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>{k}</div>
-        <div style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v}</div>
-      </div>
-    ));
+    const proseBody = { fontSize: 12, color: 'var(--text)', lineHeight: 1.65 };
+    const Prose = ({ k, v }) => {
+      if (!v) return null;
+      // Abstract text usually carries one clause per line. Split on the hard breaks
+      // and space the clauses apart, otherwise a wrapped clause and the next clause
+      // look identical and the whole block reads as one wall of text.
+      const lines = typeof v === 'string' ? v.split('\n').map(s => s.trim()).filter(Boolean) : null;
+      return (
+        <div style={{ padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 7 }}>{k}</div>
+          {lines ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {lines.map((line, i) => <div key={i} style={proseBody}>{line}</div>)}
+            </div>
+          ) : (
+            <div style={{ ...proseBody, whiteSpace: 'pre-wrap' }}>{v}</div>
+          )}
+        </div>
+      );
+    };
     // type_specific values are free-form: strings, string arrays (checklists), or
     // small objects. Render each shape natively instead of dumping raw JSON.
     const TsValue = ({ v }) => {
       if (Array.isArray(v)) return (
-        <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {v.map((item, i) => (
-            <li key={i} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>
+            <li key={i} style={proseBody}>
               {item && typeof item === 'object' ? <TsValue v={item} /> : String(item)}
             </li>
           ))}
         </ul>
       );
       if (v && typeof v === 'object') return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {Object.entries(v).map(([k, val]) => (
-            <div key={k} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>
+            <div key={k} style={proseBody}>
               <span style={{ color: 'var(--muted)' }}>{k.replace(/_/g, ' ')}: </span>
               {val && typeof val === 'object' ? <TsValue v={val} /> : String(val)}
             </div>
           ))}
         </div>
       );
-      return <span style={{ whiteSpace: 'pre-wrap' }}>{String(v)}</span>;
+      const lines = String(v).split('\n').map(s => s.trim()).filter(Boolean);
+      if (lines.length > 1) return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {lines.map((line, i) => <div key={i} style={proseBody}>{line}</div>)}
+        </div>
+      );
+      return <span style={{ whiteSpace: 'pre-wrap' }}>{lines[0] ?? ''}</span>;
     };
     const ts = l.type_specific && typeof l.type_specific === 'object' ? l.type_specific : {};
     const tsEntries = Object.entries(ts).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
@@ -1432,7 +1452,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
     const hasConv = l.conversion_window_start || l.conversion_window_end || l.conversion_terms || l.conversion_fee_pct != null;
     const isFixed = String(l.rate_index || '').toLowerCase() === 'fixed';
     return (
-      <div style={{ padding: isMobile ? '16px 16px 24px' : '18px 26px 26px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ padding: isMobile ? '16px 16px 24px' : '18px 26px 26px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 20, alignItems: 'start' }}>
         <div style={{ minWidth: 0 }}>
           <Eyebrow>Terms</Eyebrow>
           <Card>
@@ -1462,7 +1482,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
             <Prose k="Debt yield formula" v={l.debt_yield_formula} />
             <Prose k="Significant covenants" v={l.significant_covenants} />
             {l.dscr_covenant == null && l.debt_yield_covenant == null && l.min_net_worth == null && l.min_liquidity == null && !l.significant_covenants && (
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>No financial covenants recorded.</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '11px 0' }}>No financial covenants recorded.</div>
             )}
           </Card>
           {hasGuaranty && (
@@ -1499,19 +1519,19 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
             <Prose k="Reporting — Borrower" v={l.financial_reporting_borrower} />
             <Prose k="Reporting — Guarantor" v={l.financial_reporting_guarantor} />
             {!reqsAvailable && !l.financial_reporting_borrower && !l.financial_reporting_guarantor && (
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>None recorded.</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '11px 0' }}>None recorded.</div>
             )}
           </Card>
           <Eyebrow mt>Rate conversion</Eyebrow>
-          <Card pad="14px 16px">
-            <div style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>
+          <Card pad="15px 18px">
+            <div style={proseBody}>
               {hasConv ? (
                 <>
                   {l.conversion_window_start
                     ? `Floating→fixed conversion window ${fmtDate(l.conversion_window_start)} – ${l.conversion_window_end ? fmtDate(l.conversion_window_end) : 'maturity'}.`
                     : 'Floating→fixed conversion option.'}
                   {l.conversion_fee_pct != null ? ` Conversion fee ${fmtPct(l.conversion_fee_pct)}.` : ''}
-                  {l.conversion_terms && <div style={{ marginTop: 6, whiteSpace: 'pre-wrap', color: 'var(--text2)' }}>{l.conversion_terms}</div>}
+                  {l.conversion_terms && <div style={{ marginTop: 8, whiteSpace: 'pre-wrap', color: 'var(--text2)' }}>{l.conversion_terms}</div>}
                 </>
               ) : (isFixed ? 'Fixed rate — no conversion.' : 'No rate conversion option on this loan.')}
             </div>
