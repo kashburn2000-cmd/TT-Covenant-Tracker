@@ -26,10 +26,22 @@
 --
 -- Scheduling model
 --   frequency  'monthly' | 'quarterly' | 'semiannual' | 'annual'
+--
+--   Preferred — the way abstracts actually word it:
+--   days_after_period_end  "45 days after quarter end" → 45. The generator
+--              lands each occurrence on the real period end plus this many
+--              days, so a quarterly item falls on May 15 / Aug 14 / Nov 14 /
+--              Feb 14 rather than one fixed day of the month. Periods follow
+--              the calendar fiscal year: quarters end Mar/Jun/Sep/Dec, halves
+--              end Jun/Dec, the year ends Dec 31.
+--
+--   Fallback — for deliverables tied to a calendar date ("budget due
+--   December 1"), and for rows created before the column existed:
 --   due_month  1-12 anchor month (annual: the month it's due;
 --              quarterly/semiannual: any month in the cycle; monthly: ignored)
 --   due_day    day of month it's due (values >28 are clamped to 28 by the
 --              generator to avoid month-length issues)
+--   Set days_after_period_end and it wins; leave it null to use the anchor.
 -- ════════════════════════════════════════════════════════════════════════
 
 create table if not exists public.loan_reporting_requirements (
@@ -38,6 +50,8 @@ create table if not exists public.loan_reporting_requirements (
   item       text not null,          -- e.g. 'Property operating statement'
   party      text,                   -- 'borrower' | 'guarantor' | free text
   frequency  text not null check (frequency in ('monthly','quarterly','semiannual','annual')),
+  days_after_period_end integer            -- e.g. 45 = "45 days after quarter end"
+             check (days_after_period_end is null or days_after_period_end between 0 and 365),
   due_month  integer check (due_month is null or due_month between 1 and 12),
   due_day    integer check (due_day is null or due_day between 1 and 31),
   lead_days  integer not null default 21,   -- reminder lead time
@@ -45,6 +59,12 @@ create table if not exists public.loan_reporting_requirements (
   notes      text,
   created_at timestamptz not null default now()
 );
+
+-- Added after the table shipped — safe on existing projects. Existing rows keep
+-- their due_month/due_day anchor until someone re-enters them as an offset.
+alter table public.loan_reporting_requirements
+  add column if not exists days_after_period_end integer
+  check (days_after_period_end is null or days_after_period_end between 0 and 365);
 
 create index if not exists loan_reporting_reqs_loan_idx on public.loan_reporting_requirements (loan_id);
 

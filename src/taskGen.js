@@ -196,35 +196,110 @@ export function buildCovenantTasks(properties, todayISO) {
   return out;
 }
 
+// ── Reporting period model ───────────────────────────────────────────────────
+// Deliverables are almost always written as "within N days of quarter end",
+// so that is how they're stored: days_after_period_end + frequency, and the
+// generator lands each occurrence on the real period end plus N days. That
+// beats a fixed anchor date — Mar 31 + 45 is May 15 but Jun 30 + 45 is Aug 14,
+// which one month/day anchor stepped by 3 months can't express.
+//
+// Periods follow the calendar fiscal year (Jan–Dec): quarters end Mar/Jun/
+// Sep/Dec, halves end Jun/Dec, the year ends Dec 31.
+export const PERIOD_STEP_MONTHS = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 };
+export const PERIOD_END_LABEL = {
+  monthly: 'month end', quarterly: 'quarter end',
+  semiannual: 'period end (Jun 30 / Dec 31)', annual: 'fiscal year end',
+};
+
+// Every period end for `frequency` in the given calendar year, as UTC dates.
+function periodEndsIn(year, frequency) {
+  const step = PERIOD_STEP_MONTHS[frequency];
+  const out = [];
+  for (let m = step; m <= 12; m += step) out.push(new Date(Date.UTC(year, m, 0))); // day 0 = last of month m
+  return out;
+}
+
+// Due dates for a "N days after period end" requirement, across the years that
+// can reach the reminder window.
+function periodEndDueDates(frequency, days, year) {
+  const out = [];
+  for (const y of [year - 1, year, year + 1, year + 2]) {
+    for (const end of periodEndsIn(y, frequency)) {
+      const d = new Date(end);
+      d.setUTCDate(d.getUTCDate() + days);
+      out.push(d.toISOString().slice(0, 10));
+    }
+  }
+  return out;
+}
+
+// Due dates for the older fixed-anchor shape: due_month/due_day stepped by the
+// frequency. Kept for requirements entered as a calendar date ("budget due
+// December 1") and for rows created before days_after_period_end existed.
+function anchorDueDates(r, year) {
+  const step = PERIOD_STEP_MONTHS[r.frequency];
+  const day = Math.min(Math.max(r.due_day || 1, 1), 28);
+  const anchorMonth = (r.due_month || 1) - 1;
+  const out = [];
+  for (let i = 0; i < 36; i++) {
+    const d = new Date(Date.UTC(year - 1, anchorMonth + i * step, day));
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+// Approximate fixed anchor for an offset cadence, taken from the first period
+// end of the cycle. Used when writing to a database that predates
+// days_after_period_end, and by the abstract parser so both shapes agree.
+export function anchorFromOffset(frequency, days) {
+  const n = Math.max(Number(days) || 0, 0);
+  if (frequency === 'monthly') return { due_month: null, due_day: Math.min(Math.max(n, 1), 28) };
+  if (!PERIOD_STEP_MONTHS[frequency]) return { due_month: null, due_day: null };
+  const d = periodEndsIn(2001, frequency)[0];   // 2001: non-leap, so no Feb 29
+  d.setUTCDate(d.getUTCDate() + n);
+  return { due_month: d.getUTCMonth() + 1, due_day: Math.min(d.getUTCDate(), 28) };
+}
+
+// The next occurrence on or after `todayISO` — what the Loans tab shows so the
+// schedule reads as a real date rather than an offset.
+export function nextReportingDue(r, todayISO) {
+  if (!PERIOD_STEP_MONTHS[r?.frequency]) return null;
+  const year = Number(todayISO.slice(0, 4));
+  const offset = r.days_after_period_end;
+  const dates = offset != null && offset !== ''
+    ? periodEndDueDates(r.frequency, Number(offset), year)
+    : anchorDueDates(r, year);
+  return dates.find(d => d >= todayISO) || null;
+}
+
 // ── Reporting requirements → recurring deliverable tasks ─────────────────────
-// Rows come from loan_reporting_requirements (db/loan_terms_setup.sql; the
+// Rows come from loan_reporting_requirements (db/loan_reporting_setup.sql; the
 // table may not exist yet — the caller skips this builder when it 404s).
-// frequency: 'monthly' | 'quarterly' | 'semiannual' | 'annual'
-// due_month (1-12, annual/semiannual anchor) + due_day (1-28 recommended).
+// frequency: 'monthly' | 'quarterly' | 'semiannual' | 'annual', plus either
+// days_after_period_end (preferred) or a due_month/due_day anchor.
 // Emits every occurrence from lookback through the horizon so a missed run
 // never skips a deliverable.
 export function buildReportingTasks(requirements, todayISO, horizonDays = 400) {
   const out = [];
-  const stepMonths = { monthly: 1, quarterly: 3, semiannual: 6, annual: 12 };
-  const today = new Date(todayISO + 'T00:00:00Z');
+  const year = Number(todayISO.slice(0, 4));
   for (const r of requirements || []) {
-    const step = stepMonths[r.frequency];
-    if (!step) continue;
-    const day = Math.min(Math.max(r.due_day || 1, 1), 28);
-    const anchorMonth = (r.due_month || 1) - 1; // 0-based
-    // Walk occurrences from ~KEEP_PAST_DAYS back through the horizon.
-    const start = new Date(Date.UTC(today.getUTCFullYear() - 1, anchorMonth, day));
-    for (let i = 0; i < 36; i++) {
-      const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i * step, day));
-      const iso = d.toISOString().slice(0, 10);
+    if (!PERIOD_STEP_MONTHS[r.frequency]) continue;
+    const offset = r.days_after_period_end;
+    const dates = offset != null && offset !== ''
+      ? periodEndDueDates(r.frequency, Number(offset), year)
+      : anchorDueDates(r, year);
+    for (const iso of dates) {
       const delta = daysBetween(todayISO, iso);
       if (delta < -KEEP_PAST_DAYS) continue;
-      if (delta > horizonDays) break;
+      if (delta > horizonDays) continue;
+      const cadence = offset != null && offset !== ''
+        ? `${r.frequency} · due ${offset} days after ${PERIOD_END_LABEL[r.frequency]}`
+        : `${r.frequency} deliverable`;
       out.push({
         dedupe_key: dedupeKey('reporting', 'loan_reporting_requirements', r.id, iso),
         kind: 'reporting',
         title: `${r.deal_name || r.loan_property_name || 'Loan'} — ${r.item}`,
-        detail: `${r.frequency} deliverable to ${r.recipient || r.lender || 'lender'}${r.notes ? ` · ${r.notes}` : ''}`,
+        detail: `${cadence} to ${r.recipient || r.lender || 'lender'}${r.notes ? ` · ${r.notes}` : ''}`,
         due_date: iso,
         lead_days: r.lead_days || DEFAULT_LEAD_DAYS.reporting,
         deal_name: r.deal_name || r.loan_property_name || null,

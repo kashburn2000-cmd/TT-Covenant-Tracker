@@ -63,15 +63,22 @@ Ridge construction loan). The keys are exactly the database column names.
   ```json
   "reporting_requirements": [
     { "item": "Property operating statement", "party": "borrower",
-      "frequency": "quarterly", "due_month": 1, "due_day": 15,
+      "frequency": "quarterly", "days_after_period_end": 45,
       "recipient": "Fifth Third", "lead_days": 21,
-      "notes": "within 15 days of quarter end" }
+      "notes": "within 45 days of quarter end" }
   ]
   ```
 
-  `frequency` is `monthly` / `quarterly` / `semiannual` / `annual`;
-  `due_month` (1–12) anchors the cycle (ignored for monthly); `due_day` above
-  28 is clamped to 28; `lead_days` defaults to 21.
+  `frequency` is `monthly` / `quarterly` / `semiannual` / `annual`, and
+  `days_after_period_end` is the abstract's own deadline — "45 days after
+  quarter end" is just `45`. Each occurrence lands on the real period end plus
+  those days (Mar 31 → May 15, Jun 30 → Aug 14, …), on the calendar fiscal
+  year: quarters end Mar/Jun/Sep/Dec, halves end Jun/Dec, the year ends Dec 31.
+  `lead_days` (default 21) is how far ahead the reminder starts.
+
+  For the rarer deliverable tied to a calendar date — "budget due December 1" —
+  leave `days_after_period_end` out and give `due_month` (1–12) and `due_day`
+  (above 28 is clamped to 28) instead.
 
 > **Tip for your Claude project:** ask it to emit this JSON sidecar alongside
 > the `.docx` it already generates. Point it at `abstract-sidecar.example.json`
@@ -84,13 +91,13 @@ translation — worth a look on every abstract, because these rows are what the
 nightly reminders (and the accounting digest) run on.
 
 1. Open the loan in the **Loans** tab → **Reporting requirements**. Each row
-   shows the deliverable, its cadence, who it goes to, and an amber tag with
-   the anchor date the reminders fire from.
-2. The anchor is the date the deliverable is **due**, derived from the period
-   end plus the days the abstract allows — "quarterly within 65 days" anchors
-   to **Jun 4** (Mar 31 + 65 days) and steps every three months from there.
-   Fix anything the prose stated unusually: remove the row (✕) and re-add it,
-   or edit `reporting_requirements` in the sidecar and re-import.
+   shows the deliverable, its cadence ("quarterly · 45 days after quarter
+   end"), who it goes to, and an amber tag with the **next date it's due**.
+2. Check the cadence against the abstract, not the date — the dates follow from
+   it. To correct one, remove the row (✕) and re-add it: **+ Add requirement**
+   takes the deadline the way the abstract words it (a number of days after
+   month / quarter / period / fiscal year end), and previews the next three
+   dates before you save.
 3. A loan showing **"⚠ Abstract text on file, nothing scheduled"** has
    reporting obligations in the abstract that produced no rows — nothing will
    remind anyone. Click **⚙ Extract from abstract text** to parse the stored

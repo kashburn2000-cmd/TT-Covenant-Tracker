@@ -4,6 +4,7 @@ import { TT_ORANGE } from '../theme.js';
 import { slugify } from '../format.js';
 import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
 import { reportingRequirementsFromAbstract, reportingCoverage } from '../parseReporting.js';
+import { PERIOD_END_LABEL, nextReportingDue, anchorFromOffset } from '../taskGen.js';
 import { supabase } from '../auth.js';
 import { useIsMobile } from '../useIsMobile.js';
 import { suggestDealUid } from '../dealRegistry.js';
@@ -407,26 +408,54 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
     } catch { /* leave as-is */ }
   }
 
+  // Draft row → a requirement. Offset mode ("45 days after quarter end") is the
+  // real schedule; the due_month/due_day anchor is filled in alongside it so a
+  // project that hasn't re-run db/loan_reporting_setup.sql still reminds at
+  // roughly the right time.
+  function reqFromDraft(d) {
+    const offset = d.mode === 'offset' && d.days !== '' ? parseInt(d.days, 10) : null;
+    const anchor = offset != null
+      ? anchorFromOffset(d.frequency, offset)
+      : { due_month: d.due_month ? parseInt(d.due_month, 10) : null, due_day: d.due_day ? parseInt(d.due_day, 10) : null };
+    return {
+      item: (d.item || '').trim(),
+      party: d.party || null,
+      frequency: d.frequency,
+      days_after_period_end: offset,
+      due_month: d.frequency === 'monthly' && offset == null ? null : anchor.due_month,
+      due_day: anchor.due_day,
+      recipient: (d.recipient || '').trim() || null,
+    };
+  }
+
+  // Insert requirement rows, retrying without days_after_period_end when the
+  // column isn't there yet — the anchor on each row keeps reminders firing
+  // until db/loan_reporting_setup.sql is re-run.
+  async function insertReqs(rows, label) {
+    const post = body => fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
+      method: 'POST', headers: SB_HEADERS, body: JSON.stringify(body),
+    });
+    try {
+      let res = await post(rows);
+      if (!res.ok) {
+        const text = await res.text();
+        if (!/days_after_period_end/.test(text)) { flash(`${label} error: ${text.slice(0, 120)}`, true); return false; }
+        res = await post(rows.map(r => { const c = { ...r }; delete c.days_after_period_end; return c; }));
+        if (!res.ok) { flash(`${label} error: ${(await res.text()).slice(0, 120)}`, true); return false; }
+        flash('Saved with approximate dates — re-run db/loan_reporting_setup.sql for exact "days after period end" scheduling');
+        refreshReqs();
+        return true;
+      }
+      return true;
+    } catch (err) { flash(`${label} error: ${err.message}`, true); return false; }
+  }
+
   async function addReq() {
     const d = reqDraft;
     if (!d || !d.item.trim()) return;
-    try {
-      const res = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
-        method: 'POST', headers: SB_HEADERS,
-        body: JSON.stringify({
-          loan_id: d.loanId,
-          item: d.item.trim(),
-          party: d.party || null,
-          frequency: d.frequency,
-          due_month: d.due_month ? parseInt(d.due_month, 10) : null,
-          due_day: d.due_day ? parseInt(d.due_day, 10) : null,
-          recipient: d.recipient.trim() || null,
-        }),
-      });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); flash('Save error: ' + (e.message || res.status), true); return; }
-      setReqDraft(null);
-      refreshReqs();
-    } catch (err) { flash('Save error: ' + err.message, true); }
+    if (!await insertReqs([{ ...reqFromDraft(d), loan_id: d.loanId }], 'Save')) return;
+    setReqDraft(null);
+    refreshReqs();
   }
 
   // Structure the reporting section of a loan already in the table — for
@@ -436,15 +465,9 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
   async function extractReqs(l) {
     const rows = reportingRequirementsFromAbstract(l);
     if (!rows.length) { flash('No reporting schedule found in this abstract’s text — add rows by hand', true); return; }
-    try {
-      const res = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
-        method: 'POST', headers: SB_HEADERS,
-        body: JSON.stringify(rows.map(r => ({ ...r, loan_id: l.id }))),
-      });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); flash('Extract error: ' + (e.message || res.status), true); return; }
-      flash(`✓ ${rows.length} requirement${rows.length === 1 ? '' : 's'} extracted — check the dates`);
-      refreshReqs();
-    } catch (err) { flash('Extract error: ' + err.message, true); }
+    if (!await insertReqs(rows.map(r => ({ ...r, loan_id: l.id })), 'Extract')) return;
+    flash(`✓ ${rows.length} requirement${rows.length === 1 ? '' : 's'} extracted — check the dates`);
+    refreshReqs();
   }
 
   async function deleteReq(id) {
@@ -1125,7 +1148,12 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
 
   // ── Reporting Requirements (structured deliverables → nightly reminders) ────
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+  // How the cadence reads. Offset requirements ("45 days after quarter end")
+  // are shown the way the abstract words them; fixed-date ones show the date.
   const reqSchedule = (r) => {
+    if (r.days_after_period_end != null) return `${r.frequency} · ${r.days_after_period_end} days after ${PERIOD_END_LABEL[r.frequency] || 'period end'}`;
     const day = r.due_day || 1;
     const mo = r.due_month ? MONTHS[r.due_month - 1] : null;
     if (r.frequency === 'monthly') return `monthly · day ${day}`;
@@ -1134,10 +1162,31 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
     return `annual · ${mo || 'Jan'} ${day}`;
   };
 
-  // Amber "due" tag: the anchor date each requirement is due (drives nightly reminders).
-  const reqDueTag = r => r.frequency === 'monthly'
-    ? `DAY ${r.due_day || 1}`
-    : `${(MONTHS[(r.due_month || 1) - 1] || 'Jan').toUpperCase()} ${r.due_day || 1}`;
+  // Amber tag: the next date this is actually due, so the schedule is legible
+  // without doing the arithmetic in your head.
+  const reqDueTag = (r) => {
+    const next = nextReportingDue(r, todayISO());
+    if (next) return `${MONTHS[Number(next.slice(5, 7)) - 1].toUpperCase()} ${Number(next.slice(8, 10))}`;
+    return r.frequency === 'monthly' ? `DAY ${r.due_day || 1}` : `${(MONTHS[(r.due_month || 1) - 1] || 'Jan').toUpperCase()} ${r.due_day || 1}`;
+  };
+
+  // Spell out the next few dates a draft would generate, so "45 days after
+  // quarter end" can be checked against a calendar without doing the math.
+  const reqDraftPreview = (d) => {
+    const r = reqFromDraft(d);
+    const dates = [];
+    let cursor = todayISO();
+    for (let i = 0; i < 3; i++) {
+      const next = nextReportingDue(r, cursor);
+      if (!next) break;
+      dates.push(next);
+      const after = new Date(next + 'T00:00:00Z');
+      after.setUTCDate(after.getUTCDate() + 1);
+      cursor = after.toISOString().slice(0, 10);
+    }
+    if (!dates.length) return 'Pick a cadence to see the dates.';
+    return `Next due: ${dates.map(fmtDate).join(' · ')}`;
+  };
 
   const ReqsBlock = ({ l }) => {
     const rows = reportingReqs.filter(r => r.loan_id === l.id);
@@ -1182,7 +1231,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
         {pinUnlocked && !drafting && (
           <div style={{ padding: '11px 0' }}>
             <button
-              onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}
+              onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', mode: 'offset', days: '45', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}
               style={{ background: 'none', border: 'none', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, padding: 0, cursor: 'pointer' }}
             >+ Add requirement</button>
           </div>
@@ -1198,18 +1247,38 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
               <option value="monthly">monthly</option><option value="quarterly">quarterly</option>
               <option value="semiannual">semi-annual</option><option value="annual">annual</option>
             </select>
-            {reqDraft.frequency !== 'monthly' && (
-              <select value={reqDraft.due_month} onChange={e => setReqDraft(d => ({ ...d, due_month: e.target.value }))} style={inSt} title="Anchor month">
-                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-              </select>
+            <select value={reqDraft.mode} onChange={e => setReqDraft(d => ({ ...d, mode: e.target.value }))} style={inSt} title="How the deadline is stated">
+              <option value="offset">days after period end</option>
+              <option value="date">on a fixed date</option>
+            </select>
+            {reqDraft.mode === 'offset' ? (
+              <>
+                <input type="number" min="0" max="365" value={reqDraft.days} title="Days after the period ends"
+                  onChange={e => setReqDraft(d => ({ ...d, days: e.target.value }))} style={{ ...inSt, width: 52 }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)' }}>
+                  days after {PERIOD_END_LABEL[reqDraft.frequency]}
+                </span>
+              </>
+            ) : (
+              <>
+                {reqDraft.frequency !== 'monthly' && (
+                  <select value={reqDraft.due_month} onChange={e => setReqDraft(d => ({ ...d, due_month: e.target.value }))} style={inSt} title="Month it's due">
+                    {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                  </select>
+                )}
+                <input type="number" min="1" max="28" value={reqDraft.due_day} title="Day of month (1–28)"
+                  onChange={e => setReqDraft(d => ({ ...d, due_day: e.target.value }))} style={{ ...inSt, width: 52 }} />
+              </>
             )}
-            <input type="number" min="1" max="28" value={reqDraft.due_day} title="Day of month (1–28)"
-              onChange={e => setReqDraft(d => ({ ...d, due_day: e.target.value }))} style={{ ...inSt, width: 52 }} />
             <input placeholder="Recipient" value={reqDraft.recipient}
               onChange={e => setReqDraft(d => ({ ...d, recipient: e.target.value }))} style={{ ...inSt, flex: '1 1 90px' }} />
             <button onClick={addReq} disabled={!reqDraft.item.trim()}
               style={{ ...inSt, cursor: 'pointer', fontWeight: 600 }}>Add</button>
             <button onClick={() => setReqDraft(null)} style={{ background: 'none', border: 'none', color: 'var(--faint)', fontFamily: 'var(--font-mono)', cursor: 'pointer', fontSize: 10.5 }}>Cancel</button>
+            {/* Say the dates out loud before saving — no mental arithmetic. */}
+            <div style={{ flexBasis: '100%', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', paddingTop: 2 }}>
+              {reqDraftPreview(reqDraft)}
+            </div>
           </div>
         )}
       </>
