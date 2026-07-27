@@ -30,6 +30,27 @@ export const DEFAULT_LEAD_DAYS = {
   manual: 30,
 };
 
+// ── Digest recipients ────────────────────────────────────────────────────────
+// Recipient lists are entered on the site (Tasks & Reminders widget, edit mode
+// → settings key 'taskEmailRecipients') and fall back to the TASK_EMAIL_TO /
+// TASK_EMAIL_ACCOUNTING_TO env vars. Both sources are free text, so both go
+// through here: split on commas / semicolons / whitespace, keep what looks
+// like an address, drop duplicates (case-insensitively).
+export function parseRecipients(input) {
+  const raw = Array.isArray(input) ? input : String(input == null ? '' : input).split(/[,;\s]+/);
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    const addr = String(item || '').trim().replace(/^[<]|[>]$/g, '');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(addr)) continue;
+    const key = addr.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(addr);
+  }
+  return out;
+}
+
 export function dedupeKey(kind, sourceTable, sourceId, dueDate) {
   return `${kind}|${sourceTable}|${sourceId}|${dueDate}`;
 }

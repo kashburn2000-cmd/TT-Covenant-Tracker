@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { supabase } from '../auth.js';
-import { TASK_KINDS, daysBetween } from '../taskGen.js';
+import { TASK_KINDS, daysBetween, parseRecipients } from '../taskGen.js';
 
 // ─── Tasks & Reminders widget (Debt Dashboard) ────────────────────────────────
 // Upcoming: open tasks from public.tasks (filled nightly by the Generate Tasks
@@ -40,6 +40,45 @@ export function TasksWidget({ pinUnlocked = false }) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ title: '', due_date: '', detail: '' });
 
+  // Digest recipients, stored company-wide in settings ('taskEmailRecipients')
+  // so they can be maintained here instead of as GitHub secrets. The nightly
+  // Action reads this row and falls back to TASK_EMAIL_TO /
+  // TASK_EMAIL_ACCOUNTING_TO. Only rendered in edit mode — addresses stay off
+  // the screen the rest of the time.
+  const [recips, setRecips] = useState({ team: [], accounting: [] });
+  const [showRecips, setShowRecips] = useState(false);
+  const [recipDraft, setRecipDraft] = useState(null);  // { team, accounting } strings
+  const [recipMsg, setRecipMsg] = useState('');
+
+  async function loadRecipients() {
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/settings?key=eq.taskEmailRecipients&select=value`, { headers: SB_HEADERS });
+      if (!res.ok) return;
+      const rows = await res.json();
+      if (!rows.length) return;
+      const v = JSON.parse(rows[0].value) || {};
+      setRecips({ team: parseRecipients(v.team), accounting: parseRecipients(v.accounting) });
+    } catch { /* leave empty — the Action falls back to the env vars */ }
+  }
+
+  async function saveRecipients() {
+    const next = { team: parseRecipients(recipDraft.team), accounting: parseRecipients(recipDraft.accounting) };
+    try {
+      await fetch(`${SB_URL}/rest/v1/settings?key=eq.taskEmailRecipients`, { method: 'DELETE', headers: SB_HEADERS });
+      const res = await fetch(`${SB_URL}/rest/v1/settings`, {
+        method: 'POST', headers: SB_HEADERS,
+        body: JSON.stringify({ key: 'taskEmailRecipients', value: JSON.stringify(next) }),
+      });
+      if (!res.ok) { setRecipMsg('Could not save — check access and try again'); return; }
+      setRecips(next);
+      setRecipDraft(null);
+      const dropped = [recipDraft.team, recipDraft.accounting].join(' ').split(/[,;\s]+/).filter(Boolean).length
+        - (next.team.length + next.accounting.length);
+      setRecipMsg(dropped > 0 ? `Saved — ${dropped} entr${dropped === 1 ? 'y was' : 'ies were'} not a valid address and were dropped` : 'Saved');
+      setTimeout(() => setRecipMsg(''), 4000);
+    } catch (err) { setRecipMsg('Could not save: ' + err.message); }
+  }
+
   async function loadTasks() {
     try {
       const res = await fetch(`${SB_URL}/rest/v1/tasks?order=due_date.asc&limit=500`, { headers: SB_HEADERS });
@@ -56,6 +95,7 @@ export function TasksWidget({ pinUnlocked = false }) {
 
   useEffect(() => {
     loadTasks();
+    loadRecipients();
     (async () => {
       try {
         const [evRes, propRes] = await Promise.all([
@@ -93,6 +133,12 @@ export function TasksWidget({ pinUnlocked = false }) {
     setAdding(false);
     loadTasks();
   }
+
+  // Re-locking the site closes the recipients panel and drops any half-typed
+  // list, so nothing is left on screen.
+  useEffect(() => {
+    if (!pinUnlocked) { setShowRecips(false); setRecipDraft(null); setRecipMsg(''); }
+  }, [pinUnlocked]);
 
   const open = useMemo(() => (tasks || []).filter(t => t.status === 'open'), [tasks]);
   const resolved = useMemo(
@@ -139,12 +185,56 @@ export function TasksWidget({ pinUnlocked = false }) {
       <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
         {tabBtn('upcoming', `Upcoming${open.length ? ` (${open.length})` : ''}`)}
         {tabBtn('activity', 'Activity')}
+        {pinUnlocked && (
+          <button
+            onClick={() => {
+              setRecipDraft(d => d || { team: recips.team.join(', '), accounting: recips.accounting.join(', ') });
+              setShowRecips(s => !s);
+            }}
+            className={`chip${showRecips ? ' chip-active' : ''}`}
+            title="Who gets the nightly reminder emails"
+          >✉ Recipients</button>
+        )}
         {view === 'upcoming' && (
           <label style={{ marginLeft: 'auto', fontSize: '0.66rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
             <input type="checkbox" checked={showResolved} onChange={e => setShowResolved(e.target.checked)} style={{ width: 'auto' }} /> resolved
           </label>
         )}
       </div>
+
+      {/* Edit mode only — addresses are not rendered while the site is locked. */}
+      {pinUnlocked && showRecips && (
+        <div style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          <div style={{ fontSize: '0.66rem', color: 'var(--muted)', lineHeight: 1.5 }}>
+            Who the nightly digest goes to. Comma-separated, shared company-wide.
+          </div>
+          {[
+            ['team', 'Full digest', 'maturities, covenant tests, reporting — the whole queue'],
+            ['accounting', 'Accounting digest', 'lender reporting deliverables only, 21 days ahead'],
+          ].map(([key, label, hint]) => (
+            <div key={key}>
+              <label style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--faint)', marginBottom: 3 }}>
+                {label} — {hint}
+              </label>
+              <input
+                value={recipDraft?.[key] ?? ''}
+                onChange={e => setRecipDraft(d => ({ ...d, [key]: e.target.value }))}
+                placeholder="name@thompsonthrift.com, name2@thompsonthrift.com"
+                style={{ width: '100%', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: '0.72rem', padding: '0.3rem 0.5rem' }}
+              />
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+            <button onClick={saveRecipients} className="btn btn-sm">Save</button>
+            <button onClick={() => { setRecipDraft(null); setShowRecips(false); setRecipMsg(''); }} className="btn btn-ghost btn-sm">Cancel</button>
+            {recipMsg && <span style={{ fontSize: '0.66rem', color: 'var(--muted)' }}>{recipMsg}</span>}
+          </div>
+          <div style={{ fontSize: '0.62rem', color: 'var(--faint)', lineHeight: 1.5 }}>
+            Takes effect on the next nightly run. Sending still uses the RESEND_API_KEY repo secret; only the
+            recipient lists live here, and they replace the TASK_EMAIL_TO / TASK_EMAIL_ACCOUNTING_TO secrets when set.
+          </div>
+        </div>
+      )}
 
       {adding && (
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.5rem' }}>

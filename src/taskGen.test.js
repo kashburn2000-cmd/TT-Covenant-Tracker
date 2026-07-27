@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  parseRecipients,
   buildLoanTasks,
   buildCovenantTasks,
   buildConversionTasks,
@@ -12,6 +13,21 @@ import {
 } from './taskGen.js';
 
 const TODAY = '2026-07-24';
+
+describe('parseRecipients', () => {
+  it('accepts commas, semicolons, newlines and arrays', () => {
+    expect(parseRecipients('a@x.com, b@x.com; c@x.com\nd@x.com')).toEqual(['a@x.com', 'b@x.com', 'c@x.com', 'd@x.com']);
+    expect(parseRecipients(['a@x.com', ' b@x.com '])).toEqual(['a@x.com', 'b@x.com']);
+  });
+
+  it('drops junk and duplicates, ignoring case', () => {
+    expect(parseRecipients('a@x.com, A@X.com, not-an-email, @x.com, b@x')).toEqual(['a@x.com']);
+  });
+
+  it('treats empty input as no recipients', () => {
+    for (const v of [null, undefined, '', '  ', []]) expect(parseRecipients(v)).toEqual([]);
+  });
+});
 
 describe('daysBetween', () => {
   it('counts forward and backward', () => {

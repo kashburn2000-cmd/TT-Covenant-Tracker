@@ -100,9 +100,10 @@ nightly reminders (and the accounting digest) run on.
    sweep the whole book once the abstracts are uploaded.
 
 Deliverables reach the accounting team through the nightly Generate Tasks
-Action: set the `TASK_EMAIL_ACCOUNTING_TO` repo secret and they get their own
-digest of just the reporting items, by default 21 days ahead of each due date
-(`lead_days` per requirement). See the README's
+Action. Set who gets them on the site — Debt Dashboard → **Tasks & Reminders**
+→ unlock editing → **✉ Recipients** → *Accounting digest* — and they get their
+own email of just the reporting items, by default 21 days ahead of each due
+date (`lead_days` per requirement). See the README's
 [Tasks & reminder emails](../README.md#tasks--reminder-emails).
 
 ---
