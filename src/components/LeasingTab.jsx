@@ -194,7 +194,7 @@ export function LeasingTab() {
   }
 
   const uploadLabel = (big) => (
-    <label className={`tt-btn ${big ? 'btn-tinted' : ''}`} style={big ? { padding: '9px 18px', fontSize: 12 } : undefined}>
+    <label className={`tt-btn tt-desktop-only ${big ? 'btn-tinted' : ''}`} style={big ? { padding: '9px 18px', fontSize: 12 } : undefined}>
       ↑ {big ? 'Upload Weekly Leasing Summary' : 'Upload summary'}
       <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ display: 'none' }} />
     </label>

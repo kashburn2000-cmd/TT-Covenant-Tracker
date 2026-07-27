@@ -20,6 +20,7 @@ import { DebtDashboardTab } from './components/DebtDashboardTab.jsx';
 import { MapTab } from './components/MapTab.jsx';
 import { RegistryTab } from './components/RegistryTab.jsx';
 import { useWeeklyUploads, WeeklyUploadPill, WeeklyUploadBannerRow } from './components/WeeklyUploadBanner.jsx';
+import { useIsMobile } from './useIsMobile.js';
 
 
 // 12 blank rows for a new variable-loan balance schedule. Never mutated in place
@@ -80,14 +81,21 @@ const SHARED_STYLES = `
   tbody tr:hover > td { background-color: color-mix(in srgb, var(--row-hover) 65%, transparent); }
   .section-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.11em; text-transform: uppercase;
                    color: var(--muted); font-weight: 600; margin-bottom: 1rem; }
+  /* ── App root height ─────────────────────────────────────────────────────
+     100dvh (where supported) tracks the real visible height on phones, so
+     the bottom nav is never hidden behind the browser chrome. */
+  .tt-app-root { height: 100vh; }
+  @supports (height: 100dvh) { .tt-app-root { height: 100dvh; } }
   /* ── Mobile (≤ 720px) ────────────────────────────────────────────────────
-     Light-touch responsive pass: the sidebar collapses to a dot rail, paddings
-     tighten, the covenant summary cards drop to two-up, and dense tables
-     shrink a step. Wide tables already live inside their own overflow
-     containers, so the page itself never scrolls sideways. */
+     The sidebar is replaced by a bottom nav (JS-driven via useIsMobile);
+     here we tighten paddings, shrink dense tables a step, and hide anything
+     tagged desktop-only (edit/upload/export chrome — mobile is view-only).
+     Wide tables already live inside their own overflow containers, so the
+     page itself never scrolls sideways. */
   @media (max-width: 720px) {
-    .tt-sidebar { width: 56px !important; }
-    .tt-sidebar .nav-label, .tt-sidebar .sidebar-word { display: none !important; }
+    .tt-desktop-only { display: none !important; }
+    .tt-grid-collapse { grid-template-columns: 1fr !important; }
+    .tt-grid-2col { grid-template-columns: repeat(2, 1fr) !important; }
     .app-main { padding: 0.9rem !important; }
     .covenant-summary { grid-template-columns: repeat(2, 1fr) !important; }
     th { padding: 0.45rem 0.55rem; font-size: 9px; }
@@ -358,6 +366,10 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [expandedHistory, setExpandedHistory] = useState(new Set()); // property IDs with history open
   // Console layout UI state: selected list row + popovers/overlays
   const [selectedId, setSelectedId] = useState(null);
+  // Phone drill-in: list full-width until a row is tapped, then the detail
+  // pane takes over full-screen with a back button. Desktop shows both panes.
+  const isMobile = useIsMobile();
+  const [mobileDetail, setMobileDetail] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'fail' | 'thin'
   const [listMenuOpen, setListMenuOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -1484,7 +1496,12 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           )}
 
           {/* ══ Left list column ══ */}
-          <div style={{ width: 356, flex: 'none', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 }}>
+          <div style={{
+            width: isMobile ? '100%' : 356, flex: isMobile ? 1 : 'none',
+            borderRight: isMobile ? 'none' : '1px solid var(--border)',
+            display: isMobile && mobileDetail ? 'none' : 'flex',
+            flexDirection: 'column', minHeight: 0, minWidth: 0,
+          }}>
             <div style={{ flex: 'none', padding: '18px 22px 14px', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 19, color: 'var(--text)' }}>Covenant Tracker</div>
@@ -1567,7 +1584,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 return (
                   <div
                     key={r.id}
-                    onClick={() => setSelectedId(r.id)}
+                    onClick={() => { setSelectedId(r.id); if (isMobile) setMobileDetail(true); }}
                     style={{
                       padding: '13px 22px 13px 19px', borderBottom: '1px solid var(--border)', cursor: 'pointer',
                       background: isSel ? 'var(--panel2)' : 'transparent',
@@ -1624,7 +1641,22 @@ Req: ${formatCurrency(r.requiredNOI)}`,
           </div>
 
           {/* ══ Right detail pane ══ */}
-          <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--panel3)' }}>
+          <div style={{
+            flex: 1, minWidth: 0, position: 'relative',
+            display: isMobile && !mobileDetail ? 'none' : 'flex',
+            flexDirection: 'column', overflow: 'hidden', background: 'var(--panel3)',
+          }}>
+            {isMobile && (
+              <button
+                onClick={() => setMobileDetail(false)}
+                style={{
+                  flex: 'none', display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                  padding: '12px 20px', background: 'var(--header)', border: 'none',
+                  borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--accent)',
+                }}
+              >← All covenants</button>
+            )}
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
               {dbError && (
                 <div style={{ margin: '14px 26px 0', padding: '0.7rem 0.9rem', background: 'color-mix(in srgb, var(--fail) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--fail) 25%, transparent)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -1659,7 +1691,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       {sel.note && <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--warn-text)', marginTop: 5 }}>{sel.note}</div>}
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                      {/* Export menu (incl. PDF report templates) */}
+                      {/* Export menu (incl. PDF report templates) — desktop only */}
+                      {!isMobile && (
                       <div style={{ position: 'relative' }}>
                         <button onClick={() => setShowExportMenu(v => !v)} className="tt-btn" style={showExportMenu ? { color: 'var(--text)' } : undefined}>⤓ Export ▾</button>
                         {showExportMenu && (
@@ -1719,21 +1752,24 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                           </div>
                         )}
                       </div>
+                      )}
 
-                      <button className="tt-btn" style={{ color: 'var(--text)' }} onClick={openDocView} title="View the dashboard styled like the executive Excel doc">▤ Doc View</button>
+                      {!isMobile && <button className="tt-btn" style={{ color: 'var(--text)' }} onClick={openDocView} title="View the dashboard styled like the executive Excel doc">▤ Doc View</button>}
 
                       {/* Actions menu */}
                       <div style={{ position: 'relative' }}>
                         <button className="tt-btn" onClick={() => setActionsOpen(v => !v)} style={actionsOpen ? { color: 'var(--text)' } : undefined}>⋯ Actions</button>
                         {actionsOpen && (
                           <div className="menu" style={{ minWidth: 218 }}>
-                            <div
-                              className="menu-item"
-                              onClick={() => { setActionsOpen(false); if (pinUnlocked) { setUploadPanelOpen(true); } else { requirePin(() => setUploadPanelOpen(true)); } }}
-                            >
-                              <span style={{ opacity: 0.6 }}>↑</span> Upload Forecast {!pinUnlocked && <LockIcon size={10} />}
-                            </div>
-                            {pinUnlocked ? (
+                            {!isMobile && (
+                              <div
+                                className="menu-item"
+                                onClick={() => { setActionsOpen(false); if (pinUnlocked) { setUploadPanelOpen(true); } else { requirePin(() => setUploadPanelOpen(true)); } }}
+                              >
+                                <span style={{ opacity: 0.6 }}>↑</span> Upload Forecast {!pinUnlocked && <LockIcon size={10} />}
+                              </div>
+                            )}
+                            {!isMobile && (pinUnlocked ? (
                               <label className="menu-item" style={{ cursor: 'pointer' }} title="Upload the weekly Chatham forward-curve workbook">
                                 <span style={{ opacity: 0.6 }}>↑</span> Update Curve
                                 <input
@@ -1745,7 +1781,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                               <div className="menu-item" onClick={() => { setActionsOpen(false); requirePin(() => {}); }}>
                                 <span style={{ opacity: 0.6 }}>↑</span> Update Curve <LockIcon size={10} />
                               </div>
-                            )}
+                            ))}
                             <div className="menu-item" onClick={() => { setActionsOpen(false); toggleSelHistory(); }}>
                               <span style={{ opacity: 0.7, display: 'inline-flex' }}><ClockIcon size={12} /></span> History &amp; Prior Test
                               {expandedHistory.has(sel.id) && <span style={{ marginLeft: 'auto', color: 'var(--pass)' }}>✓</span>}
@@ -2674,6 +2710,8 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 // ── Root App ──────────────────────────────────────────────────────────────────
 
 export default function App() {
+  const isMobile = useIsMobile();
+  const [moreOpen, setMoreOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("debt");
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS);
   const [tHigh, setTHigh] = useState("1.25");
@@ -2696,12 +2734,12 @@ export default function App() {
   // The Deal Registry tab lives outside visibleTabs — it exists only while
   // editing is unlocked, and locking while on it falls back the same way.
   useEffect(() => {
-    const hidden = activeTab === 'registry' ? !pinUnlocked : !visibleTabs[activeTab];
+    const hidden = activeTab === 'registry' ? (!pinUnlocked || isMobile) : !visibleTabs[activeTab];
     if (hidden) {
       const first = ['debt','covenant','loans','map','calculator','matrix','land','leasing','pipeline'].find(t => visibleTabs[t]);
       if (first) setActiveTab(first);
     }
-  }, [visibleTabs, activeTab, pinUnlocked]);
+  }, [visibleTabs, activeTab, pinUnlocked, isMobile]);
 
   // ── Light / dark theme (system default, remembered once toggled) ──
   const [theme, setTheme] = useState(() => {
@@ -2953,13 +2991,30 @@ export default function App() {
   const lockGlyph = pinUnlocked ? <UnlockIcon size={12} /> : <LockIcon size={12} />;
   const toggleLock = () => (pinUnlocked ? setPinUnlocked(false) : setShowPinModal(true));
 
+  // Mobile is a view-only surface: editing stays locked regardless of the PIN
+  // state, so every pin-gated control disappears without per-screen work.
+  const effPinUnlocked = pinUnlocked && !isMobile;
+
+  // Bottom nav: the four most-checked screens, everything else under More.
+  // Selecting a tab hidden by the desktop tab config reveals it for this
+  // session only (same behavior as openLeasing) — the phone nav should never
+  // dead-end on a config made for the desktop sidebar.
+  const MOBILE_PRIMARY = [['debt', 'Debt'], ['covenant', 'Covenants'], ['loans', 'Loans'], ['leasing', 'Leasing']];
+  const MOBILE_MORE = [['pipeline', 'Lender Pipeline'], ['map', 'Project Map'], ['land', 'Land Facility'], ['calculator', 'Calculator'], ['matrix', 'DY / DSCR Matrix']];
+  function mobileGo(key) {
+    setVisibleTabs(v => (v[key] ? v : { ...v, [key]: true }));
+    setActiveTab(key);
+    setMoreOpen(false);
+  }
+  const moreActive = MOBILE_MORE.some(([key]) => key === activeTab);
+
   return (
-    <div style={{
+    <div className="tt-app-root" style={{
       fontFamily: 'var(--font-sans)',
       background: 'var(--bg)',
-      height: '100vh',
       color: 'var(--text)',
       display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
       overflow: 'hidden',
     }}>
       <style>{SHARED_STYLES}</style>
@@ -2972,7 +3027,8 @@ export default function App() {
         />
       )}
 
-      {/* ── Sidebar ── */}
+      {/* ── Sidebar (desktop only — mobile uses the bottom nav) ── */}
+      {!isMobile && (
       <div className="tt-sidebar" style={{
         width: 196, flex: 'none', background: 'var(--sidebar-bg)',
         display: 'flex', flexDirection: 'column', padding: '22px 0', overflowY: 'auto',
@@ -3039,9 +3095,10 @@ export default function App() {
           >{userEmail ? `${userEmail} · Sign out` : 'Sign out'}</button>
         </div>
       </div>
+      )}
 
       {/* ── Main column ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--panel3)' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, background: 'var(--panel3)' }}>
 
         {/* Top utility bar */}
         <div style={{
@@ -3050,16 +3107,22 @@ export default function App() {
           position: 'relative', zIndex: 20,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-            {weekly.due ? (
+            {isMobile && (
+              <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--text)', whiteSpace: 'nowrap', flex: 'none' }}>
+                Thompson Thrift
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, fontSize: 8.5, letterSpacing: '.18em', color: 'var(--muted)', textTransform: 'uppercase', marginLeft: 8 }}>Debt Suite</span>
+              </span>
+            )}
+            {weekly.due && !isMobile ? (
               <WeeklyUploadPill dueCount={weekly.dueCount} onClick={() => setBannerOpen(v => !v)} />
-            ) : (
+            ) : !isMobile ? (
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 SOFR fwd curve · {sofrUpdated
                   ? `updated ${sofrUpdated.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
                   : 'as of 03 Mar 2026'}
               </span>
-            )}
-            {pinUnlocked && (
+            ) : null}
+            {effPinUnlocked && (
               <label className="tt-btn btn-sm" title="Upload the weekly Chatham forward-curve workbook">
                 ↑ Update Curve
                 <input type="file" accept=".xlsx,.xls,.csv,.txt" onChange={handleSofrUpload} style={{ display: 'none' }} />
@@ -3071,23 +3134,27 @@ export default function App() {
             <button className="tt-btn" onClick={toggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} aria-label="Toggle light / dark mode">
               {theme === 'dark' ? <><MoonIcon size={12} /> Dark</> : <><SunIcon size={12} /> Light</>}
             </button>
-            <button
-              className="tt-ico"
-              onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
-              title={pinUnlocked ? 'Configure visible tabs' : 'Unlock to configure tabs'}
-            >⚙</button>
-            <button
-              onClick={toggleLock}
-              title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
-              style={{
-                cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
-                padding: '7px 13px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 6,
-                color: pinUnlocked ? 'var(--pass)' : 'var(--accent)',
-                background: pinUnlocked ? 'color-mix(in srgb, var(--pass) 10%, transparent)' : 'var(--panel)',
-                border: `1px solid ${pinUnlocked ? 'color-mix(in srgb, var(--pass) 35%, transparent)' : 'var(--border2)'}`,
-                userSelect: 'none',
-              }}
-            >{lockGlyph} {lockLabel}</button>
+            {!isMobile && (
+              <>
+                <button
+                  className="tt-ico"
+                  onClick={() => pinUnlocked ? setShowTabConfig(v => !v) : requirePin(() => setShowTabConfig(v => !v))}
+                  title={pinUnlocked ? 'Configure visible tabs' : 'Unlock to configure tabs'}
+                >⚙</button>
+                <button
+                  onClick={toggleLock}
+                  title={pinUnlocked ? 'Click to lock' : 'Click to unlock editing'}
+                  style={{
+                    cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600,
+                    padding: '7px 13px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 6,
+                    color: pinUnlocked ? 'var(--pass)' : 'var(--accent)',
+                    background: pinUnlocked ? 'color-mix(in srgb, var(--pass) 10%, transparent)' : 'var(--panel)',
+                    border: `1px solid ${pinUnlocked ? 'color-mix(in srgb, var(--pass) 35%, transparent)' : 'var(--border2)'}`,
+                    userSelect: 'none',
+                  }}
+                >{lockGlyph} {lockLabel}</button>
+              </>
+            )}
           </div>
 
           {/* Tab visibility gear popover */}
@@ -3139,16 +3206,95 @@ export default function App() {
         >
           {activeTab === "calculator" && <CalculatorTab thresholds={thresholds} />}
           {activeTab === "matrix"     && <MatrixTab thresholds={thresholds} />}
-          {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={pinUnlocked} requirePin={requirePin} onCurveFile={handleSofrUpload} onFailingCount={setCovFailing} />}
+          {activeTab === "covenant"   && <CovenantTab thresholds={thresholds} pinUnlocked={effPinUnlocked} requirePin={requirePin} onCurveFile={handleSofrUpload} onFailingCount={setCovFailing} />}
           {activeTab === "leasing"    && <LeasingTab />}
-          {activeTab === "pipeline"   && <PipelineTab pinUnlocked={pinUnlocked} />}
-          {activeTab === "land"       && <LandFacilityTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-          {activeTab === "loans"      && <LoansTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-          {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-          {activeTab === "map"        && <MapTab pinUnlocked={pinUnlocked} requirePin={requirePin} />}
-          {activeTab === "registry"   && pinUnlocked && <RegistryTab />}
+          {activeTab === "pipeline"   && <PipelineTab pinUnlocked={effPinUnlocked} />}
+          {activeTab === "land"       && <LandFacilityTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
+          {activeTab === "loans"      && <LoansTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
+          {activeTab === "debt"       && <DebtDashboardTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
+          {activeTab === "map"        && <MapTab pinUnlocked={effPinUnlocked} requirePin={requirePin} />}
+          {activeTab === "registry"   && effPinUnlocked && <RegistryTab />}
         </div>
       </div>
+
+      {/* ── Mobile bottom nav ── */}
+      {isMobile && (
+        <>
+          {moreOpen && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,.45)' }} onClick={() => setMoreOpen(false)}>
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{
+                  position: 'absolute', left: 0, right: 0, bottom: 0,
+                  background: 'var(--panel)', borderTop: '1px solid var(--border2)',
+                  borderRadius: '14px 14px 0 0', padding: '10px 0 calc(10px + env(safe-area-inset-bottom))',
+                  boxShadow: 'var(--pop-shadow)',
+                }}
+              >
+                <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border2)', margin: '2px auto 10px' }} />
+                {MOBILE_MORE.map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => mobileGo(key)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+                      padding: '13px 24px', background: activeTab === key ? 'var(--panel2)' : 'none', border: 'none',
+                      cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: 14,
+                      fontWeight: activeTab === key ? 600 : 500, color: 'var(--text)',
+                    }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: activeTab === key ? 'var(--accent)' : 'var(--border2)', flex: 'none' }} />
+                    {label}
+                  </button>
+                ))}
+                <div style={{ borderTop: '1px solid var(--border)', margin: '8px 0' }} />
+                <button
+                  onClick={() => signOut()}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left', padding: '12px 24px',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)',
+                  }}
+                >{userEmail ? `${userEmail} · Sign out` : 'Sign out'}</button>
+              </div>
+            </div>
+          )}
+          <div style={{
+            flex: 'none', display: 'flex', alignItems: 'stretch',
+            background: 'var(--header)', borderTop: '1px solid var(--border2)',
+            paddingBottom: 'env(safe-area-inset-bottom)', zIndex: 250,
+          }}>
+            {[...MOBILE_PRIMARY, ['__more', 'More']].map(([key, label]) => {
+              const isMore = key === '__more';
+              const active = isMore ? moreActive : (activeTab === key && !moreOpen);
+              const failBadge = key === 'covenant' && covFailing > 0;
+              return (
+                <button
+                  key={key}
+                  onClick={() => (isMore ? setMoreOpen(v => !v) : mobileGo(key))}
+                  style={{
+                    flex: 1, minWidth: 0, padding: '10px 2px 9px', border: 'none', cursor: 'pointer',
+                    background: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                    color: active ? 'var(--text)' : 'var(--muted)', position: 'relative',
+                  }}
+                >
+                  <span style={{
+                    width: 22, height: 3, borderRadius: 2,
+                    background: active ? 'var(--accent)' : 'transparent',
+                  }} />
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 9.5, fontWeight: 600,
+                    letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap',
+                  }}>
+                    {label}
+                    {failBadge && <span style={{ color: 'var(--fail)', marginLeft: 4 }}>●{covFailing}</span>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

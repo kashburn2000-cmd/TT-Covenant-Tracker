@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { parseLatLng, mergeProjects } from '../mapProjects.js';
 import { LockIcon } from '../icons.jsx';
+import { useIsMobile } from '../useIsMobile.js';
 
 // Interactive US map of every project, pinned manually and color-coded by
 // lifecycle stage. Projects come from the same tables the other tabs use —
@@ -371,8 +372,11 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
 
   const toggleStage = (key) => setStageOn(prev => ({ ...prev, [key]: !prev[key] }));
 
+  // Phone layout: map on top, the legend/list panel stacked below it.
+  const isMobile = useIsMobile();
+
   return (
-    <div style={{ flex: 1, display: 'flex', minWidth: 0 }} className={armedKey ? 'tt-map-armed' : undefined}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: isMobile ? 'column' : 'row', minWidth: 0 }} className={armedKey ? 'tt-map-armed' : undefined}>
       <style>{`
         .leaflet-container { background: var(--panel2); font-family: inherit; }
         .leaflet-popup-content-wrapper, .leaflet-popup-tip {
@@ -404,8 +408,13 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
         .tt-map-armed .leaflet-container { cursor: crosshair; }
       `}</style>
 
-      {/* ── Left panel ── */}
-      <div style={{ width: 306, flex: 'none', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minWidth: 0, background: 'var(--panel)' }}>
+      {/* ── Left panel (below the map on phones) ── */}
+      <div style={{
+        width: isMobile ? '100%' : 306, flex: isMobile ? '0 0 45%' : 'none', order: isMobile ? 2 : 0,
+        borderRight: isMobile ? 'none' : '1px solid var(--border)',
+        borderTop: isMobile ? '1px solid var(--border)' : 'none',
+        display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, background: 'var(--panel)',
+      }}>
         <div style={{ padding: '18px 22px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
           <div>
             <div style={{ fontFamily: SANS, fontWeight: 600, fontSize: 19, color: 'var(--text)' }}>Project Map</div>
@@ -413,7 +422,7 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
               {loading ? 'loading…' : `${projects.length} projects · ${pinned.length} pinned`}
             </div>
           </div>
-          <span
+          {!isMobile && <span
             onClick={() => editMode ? (setEditMode(false), setArmedKey(null)) : requirePin(() => setEditMode(true))}
             style={{
               cursor: 'pointer', fontFamily: MONO, fontWeight: 600, fontSize: 10, padding: '6px 10px', borderRadius: 6,
@@ -423,7 +432,7 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
                 : { color: 'var(--accent)', background: 'var(--panel)', border: '1px solid var(--border2)' }),
             }}>
             {editMode ? '◎ Done pinning' : pinUnlocked ? '◎ Edit pins' : <><LockIcon size={10} /> Edit pins</>}
-          </span>
+          </span>}
         </div>
 
         {/* Stage legend — each row is a filter toggle */}
@@ -516,7 +525,7 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
       </div>
 
       {/* ── Map ── */}
-      <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+      <div style={{ flex: 1, position: 'relative', minWidth: 0, minHeight: 0, order: isMobile ? 1 : 0 }}>
         <div ref={mapDivRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
 
         {/* Notices float over the map */}

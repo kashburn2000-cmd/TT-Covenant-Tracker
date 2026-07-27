@@ -14,6 +14,7 @@ import { TasksWidget } from './TasksWidget.jsx';
 import { buildLenderRollup, buildLenderComparison, rollupStats } from '../lenderExposure.js';
 import { capExpectedReceipts, swapMtm, hedgeSummary } from '../hedgeCalc.js';
 import { portfolioMtm } from '../loanMtm.js';
+import { useIsMobile } from '../useIsMobile.js';
 
 // Upsert variant of the shared headers (PostgREST merges on the on_conflict
 // target). Must be built per-call: setAccessToken() swaps the Authorization
@@ -2114,6 +2115,12 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
   const [showAdd, setShowAdd] = useState(false);
   const { width, containerRef, mounted } = useContainerWidth();
   const saveTimer = useRef(null);
+  // Phone layout: the drag-and-drop grid becomes a single column of
+  // collapsible sections, each showing its headline number while collapsed.
+  const isMobile = useIsMobile();
+  const [openWidgets, setOpenWidgets] = useState(() => new Set());
+  const toggleWidgetOpen = (key) =>
+    setOpenWidgets(s => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
 
   useEffect(() => {
     (async () => {
@@ -2389,6 +2396,27 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
     };
   }, [visibleProjects]);
 
+  // One-line summaries shown on the collapsed mobile sections. Widgets that
+  // load their own data (curve, tasks, hedges, MTM) get a static descriptor.
+  const widgetHeadlines = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const upcoming = visibleProjects
+      .filter(p => p.maturity_date && p._status !== 'committed' && p.maturity_date >= today)
+      .sort((a, b) => a.maturity_date.localeCompare(b.maturity_date));
+    const next = upcoming[0] || null;
+    const lenders = new Set(visibleProjects.map(p => p.lender).filter(Boolean));
+    return {
+      leverage: `${fmtM(headline.total)} · ${headline.n} projects`,
+      maturities: next ? `Next ${fmtDate(next.maturity_date)}` : 'No upcoming maturities',
+      guaranty: `${fmtM(headline.guaranty)} exposure`,
+      curve: 'SOFR & 10Y forward curves',
+      tasks: 'Reminders & deadlines',
+      lenders: `${lenders.size} lender${lenders.size === 1 ? '' : 's'}`,
+      hedges: 'Caps & swaps',
+      loanMtm: 'Portfolio mark-to-market',
+    };
+  }, [visibleProjects, headline]);
+
   const fmtStamp = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const subtitle = [
     uploadTimes.atRiskUploaded && `At Risk ${fmtStamp(uploadTimes.atRiskUploaded)}`,
@@ -2404,6 +2432,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
           <div style={{ fontSize: 21, fontWeight: 600, color: 'var(--text)' }}>Debt Dashboard</div>
           <div className="mono" style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>{subtitle}</div>
         </div>
+        {!isMobile && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => setShowAdd(v => !v)} className={`tt-btn${showAdd ? ' btn-tinted' : ''}`} style={{ color: showAdd ? undefined : 'var(--text)' }}>+ Add Widget</button>
           {pinUnlocked ? (
@@ -2439,10 +2468,11 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
             className="tt-btn"
           >{exporting ? 'Generating…' : '⤓ Export Excel'}</button>
         </div>
+        )}
       </div>
 
       {/* ── Headline tiles ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(170px, 1fr))', gap: isMobile ? 10 : 14, marginBottom: 16 }}>
         <div className="card" style={{ padding: '16px 18px' }}>
           <div className="label" style={{ marginBottom: 0 }}>Portfolio LTC</div>
           <div className="metric" style={{ marginTop: 7 }}>{fmtPct(headline.ltc)}</div>
@@ -2495,7 +2525,42 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
         <div className="card" style={{ borderColor: 'var(--fail)', color: 'var(--fail)', fontSize: '0.8rem', marginBottom: '1rem' }}>{dbError}</div>
       )}
 
-      {/* Sandbox grid */}
+      {/* ── Mobile: single column of collapsible widget sections ── */}
+      {isMobile && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {widgets.map(key => {
+            const open = openWidgets.has(key);
+            return (
+              <div key={key} style={{ background: 'var(--panel)', border: '1px solid var(--border2)', borderRadius: 10, boxShadow: 'var(--shadow)', overflow: 'hidden' }}>
+                <button
+                  onClick={() => toggleWidgetOpen(key)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                    width: '100%', textAlign: 'left', padding: '13px 16px',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                  }}
+                >
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>{WIDGETS[key].title}</span>
+                    <span style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {widgetHeadlines[key]}
+                    </span>
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 600, color: 'var(--muted)', flex: 'none' }}>{open ? '−' : '+'}</span>
+                </button>
+                {open && (
+                  <div style={{ borderTop: '1px solid var(--border)', padding: '0.9rem 0.8rem', height: 460, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+                    {renderWidget(key)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Sandbox grid (desktop) */}
+      {!isMobile && (
       <div ref={containerRef}>
         {mounted && layoutLoaded && (
           <ReactGridLayout
@@ -2527,14 +2592,17 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
           </ReactGridLayout>
         )}
       </div>
+      )}
       {widgets.length === 0 && (
         <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--faint)', fontSize: '0.85rem' }}>
           All widgets removed — use "+ Add Widget" to bring them back.
         </div>
       )}
-      <div style={{ marginTop: '0.75rem', fontSize: '0.64rem', color: 'var(--faint)' }}>
-        Drag widgets by their title bar · resize from the bottom-right corner · the layout is shared and saves automatically.
-      </div>
+      {!isMobile && (
+        <div style={{ marginTop: '0.75rem', fontSize: '0.64rem', color: 'var(--faint)' }}>
+          Drag widgets by their title bar · resize from the bottom-right corner · the layout is shared and saves automatically.
+        </div>
+      )}
     </div>
   );
 }
