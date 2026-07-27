@@ -500,7 +500,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     const path = `${loanType || 'construction'}/${slug}.docx`;
     const res = await fetch(`${SB_URL}/storage/v1/object/${BUCKET}/${encodeURI(path)}`, {
       method: 'POST',
-      headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'x-upsert': 'true',
+      headers: { 'apikey': SB_KEY, 'Authorization': SB_HEADERS.Authorization, 'x-upsert': 'true',
                  'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
       body: file,
     });
