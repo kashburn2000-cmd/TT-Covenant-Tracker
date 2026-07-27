@@ -470,7 +470,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
       </div>
 
       {/* ── Summary cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 16 }}>
+      <div className="tt-grid-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 16 }}>
         {/* 12-mo peak exposure — green/red vs internal threshold */}
         <div className="card" style={{ padding: '16px 18px', borderColor: peakOver ? 'color-mix(in srgb, var(--fail) 45%, transparent)' : undefined }}>
           <div className="label" style={{ marginBottom: 0 }}>12-mo peak exposure</div>

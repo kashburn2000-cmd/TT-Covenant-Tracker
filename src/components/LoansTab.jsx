@@ -4,6 +4,7 @@ import { TT_ORANGE } from '../theme.js';
 import { slugify } from '../format.js';
 import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
 import { supabase } from '../auth.js';
+import { useIsMobile } from '../useIsMobile.js';
 
 const DOC_CATEGORIES = {
   loan_agreement: 'Loan Agreement', guaranty: 'Guaranty', amendment: 'Amendment',
@@ -274,6 +275,10 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const [editForm, setEditForm]   = useState(null);
   const [tsDraft, setTsDraft]     = useState('{}');    // type_specific JSON textarea buffer
   const [expandedId, setExpandedId] = useState(null);
+  // Phone drill-in: list full-width until a loan is tapped, then the detail
+  // pane takes over full-screen with a back button. Desktop shows both panes.
+  const isMobile = useIsMobile();
+  const [mobileDetail, setMobileDetail] = useState(false);
   const [saving, setSaving]       = useState(false);
   const [msg, setMsg]             = useState('');
   const [confirmDel, setConfirmDel] = useState(null);
@@ -1269,7 +1274,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     const hasConv = l.conversion_window_start || l.conversion_window_end || l.conversion_terms || l.conversion_fee_pct != null;
     const isFixed = String(l.rate_index || '').toLowerCase() === 'fixed';
     return (
-      <div style={{ padding: '18px 26px 26px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ padding: isMobile ? '16px 16px 24px' : '18px 26px 26px', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'start' }}>
         <div style={{ minWidth: 0 }}>
           <Eyebrow>Terms</Eyebrow>
           <Card>
@@ -1512,7 +1517,12 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       {msg && <div style={{ position: 'fixed', top: 16, right: 24, zIndex: 9999, background: msg.isErr ? 'color-mix(in srgb, var(--fail) 14%, var(--panel))' : 'color-mix(in srgb, var(--pass) 14%, var(--panel))', border: `1px solid ${msg.isErr ? 'var(--fail)' : 'var(--pass)'}`, color: msg.isErr ? 'var(--fail)' : 'var(--pass)', padding: '8px 18px', borderRadius: 6, fontSize: '0.78rem', boxShadow: 'var(--shadow)' }}>{msg.text}</div>}
 
       {/* ── Left: loan list column ── */}
-      <div style={{ width: 340, flex: 'none', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minHeight: 0, background: 'var(--panel)' }}>
+      <div style={{
+        width: isMobile ? '100%' : 340, flex: isMobile ? 1 : 'none',
+        borderRight: isMobile ? 'none' : '1px solid var(--border)',
+        display: isMobile && mobileDetail ? 'none' : 'flex',
+        flexDirection: 'column', minHeight: 0, background: 'var(--panel)',
+      }}>
         <div style={{ padding: '18px 22px 14px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
             <div>
@@ -1521,10 +1531,12 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                 {filtered.length} · {fmt$(totalAmount)} · {constructionCount} constr / {refinanceCount} refi{maturingThisYear ? ` · ${maturingThisYear} maturing ${thisYear}` : ''}
               </div>
             </div>
+            {!isMobile && (
             <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
               <button className="tt-ico" title="List + detail view" onClick={() => setViewMode('table')} style={viewMode === 'table' ? icoActive : undefined}>▤</button>
               <button className="tt-ico" title="Calendar view (closings, maturities, covenant tests)" onClick={() => setViewMode('calendar')} style={viewMode === 'calendar' ? icoActive : undefined}>▦</button>
             </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 7, marginTop: 13, flexWrap: 'wrap', alignItems: 'center' }}>
             {[['all', 'All'], ['construction', 'Construction'], ['refinance', 'Refinance']].map(([v, lbl]) => (
@@ -1568,7 +1580,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           {sorted.map(l => {
             const sel = viewMode === 'table' && selected && l.id === selected.id;
             return (
-              <div key={l.id} onClick={() => setExpandedId(l.id)}
+              <div key={l.id} onClick={() => { setExpandedId(l.id); if (isMobile) { setViewMode('table'); setMobileDetail(true); } }}
                 style={{ cursor: 'pointer', padding: '13px 22px 13px 19px', borderBottom: '1px solid var(--border)', background: sel ? 'var(--panel2)' : 'transparent', borderLeft: `3px solid ${sel ? 'var(--text)' : 'transparent'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.property_name || l.borrower_entity || '—'}</span>
@@ -1595,7 +1607,22 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       </div>
 
       {/* ── Right: detail pane / calendar ── */}
-      <div style={{ flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--panel3)' }}>
+      <div style={{
+        flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--panel3)',
+        display: isMobile && !mobileDetail ? 'none' : 'block',
+      }}>
+        {isMobile && (
+          <button
+            onClick={() => setMobileDetail(false)}
+            style={{
+              position: 'sticky', top: 0, zIndex: 5,
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+              padding: '12px 20px', background: 'var(--header)', border: 'none',
+              borderBottom: '1px solid var(--border)', cursor: 'pointer',
+              fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 600, color: 'var(--accent)',
+            }}
+          >← All loans</button>
+        )}
         {viewMode === 'calendar' ? (
           <div style={{ padding: '20px 26px' }}><CalendarView /></div>
         ) : !selected ? (
@@ -1617,6 +1644,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                   ].filter(Boolean).join(' · ')}
                 </div>
               </div>
+              {!isMobile && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: 'none' }}>
                 {selected.source_doc_path && <button className="tt-btn" onClick={() => downloadDoc(selected)} title="Download the source abstract via signed link">↓ Download .docx</button>}
                 <button className="tt-btn" onClick={exportXLSX} title="Covenant-focused workbook of the filtered loans">⤓ Export Excel</button>
@@ -1628,6 +1656,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                   </>
                 )}
               </div>
+              )}
             </div>
             {Detail({ l: selected })}
           </>

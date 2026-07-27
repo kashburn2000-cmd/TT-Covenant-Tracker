@@ -126,7 +126,7 @@ export function CalculatorTab({ thresholds }) {
               Lock one value, then enter a target DY or DSCR to back-solve the other
             </span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="tt-grid-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <div>
               <div className="label">Target Debt Yield (%)</div>
               <input type="number" value={targetDY} step={0.1} min={0} max={30} placeholder="e.g. 9.00"
@@ -166,7 +166,7 @@ export function CalculatorTab({ thresholds }) {
       )}
 
       {/* ── Inputs (left) · Outputs (right) ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 340px) 1fr', gap: 16, alignItems: 'start' }}>
+      <div className="tt-grid-collapse" style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 340px) 1fr', gap: 16, alignItems: 'start' }}>
 
         {/* Left input card */}
         <div className="card" style={{ padding: '8px 18px', height: 'max-content' }}>
@@ -224,7 +224,7 @@ export function CalculatorTab({ thresholds }) {
 
         {/* Right: output cards + sizing table */}
         <div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+          <div className="tt-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
             <div className="card" style={{ padding: '16px 18px' }}>
               <div className="label" style={{ margin: 0 }}>Debt Yield</div>
               <div className="metric" style={{ fontSize: 28, marginTop: 7 }}>{currentDY}%</div>

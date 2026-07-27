@@ -399,7 +399,7 @@ export function PipelineTab({ pinUnlocked = true }) {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.25rem' }}>
+          <div className="tt-grid-collapse" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 1.25rem' }}>
 
             {/* ── Col 1: Identity ── */}
             <div>
@@ -625,7 +625,7 @@ export function PipelineTab({ pinUnlocked = true }) {
         </div>
 
         {/* ── 5-up summary tiles ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
+        <div className="tt-grid-2col" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 14 }}>
           {[
             { label: 'Pipeline budget', value: fmt$(totalBudget) },
             { label: 'Units',           value: fmtN(totalUnits) },
@@ -674,7 +674,7 @@ export function PipelineTab({ pinUnlocked = true }) {
               </span>
             </div>
             {/* 3-up deal card grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 13, alignItems: 'start' }}>
+            <div className="tt-grid-collapse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 13, alignItems: 'start' }}>
           {stageDeals.map(d => {
             const isOpen = expandedId === d.id;
             const days = daysUntil(d.closing_date);
