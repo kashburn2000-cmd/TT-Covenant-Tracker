@@ -4,7 +4,7 @@ import { TT_ORANGE } from '../theme.js';
 import { slugify } from '../format.js';
 import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
 import { reportingRequirementsFromAbstract, reportingCoverage } from '../parseReporting.js';
-import { PERIOD_END_LABEL, nextReportingDue, anchorFromOffset } from '../taskGen.js';
+import { PERIOD_END_LABEL, nextReportingDue, anchorFromOffset, daysBetween } from '../taskGen.js';
 import { supabase } from '../auth.js';
 import { useIsMobile } from '../useIsMobile.js';
 import { suggestDealUid } from '../dealRegistry.js';
@@ -315,6 +315,11 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
   const [reportingReqs, setReportingReqs] = useState([]);
   const [reqsAvailable, setReqsAvailable] = useState(true);
   const [reqDraft, setReqDraft] = useState(null); // { loanId, item, party, frequency, due_month, due_day, recipient } | null
+  // An abstract can carry 15+ deliverables. They're grouped by due date and
+  // listed only as far out as reqHorizon (days, or 'all'); reqsOpen collapses
+  // the whole schedule. Nothing here changes what's stored or reminded on.
+  const [reqHorizon, setReqHorizon] = useState(90);
+  const [reqsOpen, setReqsOpen] = useState(true);
 
   // Amortization schedule viewer — open loan id + editable inputs (strings).
   // Hoisted here (not in Detail) so typing survives LoansTab re-renders.
@@ -655,20 +660,25 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
           const valid = reqRows.filter(r => r && r.item && ['monthly', 'quarterly', 'semiannual', 'annual'].includes(r.frequency));
           await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?loan_id=eq.${row.id}`, { method: 'DELETE', headers: SB_HEADERS });
           if (valid.length) {
-            await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
-              method: 'POST', headers: SB_HEADERS,
-              body: JSON.stringify(valid.map(r => ({
+            // days_after_period_end is the real schedule ("45 days after quarter
+            // end"); when the sidecar gives one, derive the anchor from it so
+            // both shapes agree even if the sidecar left the anchor out.
+            await insertReqs(valid.map(r => {
+              const offset = r.days_after_period_end != null ? parseInt(r.days_after_period_end, 10) : null;
+              const anchor = offset != null ? anchorFromOffset(r.frequency, offset) : {};
+              return {
                 loan_id: row.id,
                 item: String(r.item),
                 party: r.party || null,
                 frequency: r.frequency,
-                due_month: r.due_month != null ? parseInt(r.due_month, 10) : null,
-                due_day: r.due_day != null ? parseInt(r.due_day, 10) : null,
+                days_after_period_end: offset,
+                due_month: r.due_month != null ? parseInt(r.due_month, 10) : (anchor.due_month ?? null),
+                due_day: r.due_day != null ? parseInt(r.due_day, 10) : (anchor.due_day ?? null),
                 lead_days: r.lead_days != null ? parseInt(r.lead_days, 10) : 21,
                 recipient: r.recipient || null,
                 notes: r.notes || null,
-              }))),
-            });
+              };
+            }), 'Import');
           }
           refreshReqs();
         }
@@ -1162,6 +1172,26 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
     return `annual · ${mo || 'Jan'} ${day}`;
   };
 
+  // Compact cadence for a grouped row — the due date is already on the group
+  // header, so this only has to say how the deadline is derived.
+  const PERIOD_SHORT = { monthly: 'month end', quarterly: 'quarter end', semiannual: 'period end', annual: 'year end' };
+  const reqCadence = r => r.days_after_period_end != null
+    ? `${r.frequency} · ${r.days_after_period_end}d after ${PERIOD_SHORT[r.frequency] || 'period end'}`
+    : r.frequency;
+
+  // "AUG 15" for this year, "MAY 28 2027" beyond it — the year only earns its
+  // space when the date isn't in the current one.
+  const fmtDueShort = (iso) => {
+    const [y, m, d] = iso.split('-');
+    const label = `${MONTHS[Number(m) - 1].toUpperCase()} ${Number(d)}`;
+    return y === String(new Date().getFullYear()) ? label : `${label} ${y}`;
+  };
+
+  const dueInWords = (from, to) => {
+    const d = daysBetween(from, to);
+    return d < 0 ? `${-d}d overdue` : d === 0 ? 'due today' : `in ${d}d`;
+  };
+
   // Amber tag: the next date this is actually due, so the schedule is legible
   // without doing the arithmetic in your head.
   const reqDueTag = (r) => {
@@ -1192,24 +1222,96 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
     const rows = reportingReqs.filter(r => r.loan_id === l.id);
     const drafting = reqDraft?.loanId === l.id;
     const inSt = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 10.5, padding: '4px 6px' };
+
+    // A loan's deliverables cluster onto a handful of dates — one abstract can
+    // carry 15+ items that all go out on three or four days a year. Group them
+    // by the date they're actually due, and show only the dates inside the
+    // window; everything stays stored and keeps generating reminders.
+    const today = todayISO();
+    const byDate = new Map();
+    for (const r of rows) {
+      const key = nextReportingDue(r, today) || 'unscheduled';
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key).push(r);
+    }
+    const allDates = [...byDate.keys()].sort((a, b) =>
+      a === 'unscheduled' ? 1 : b === 'unscheduled' ? -1 : a.localeCompare(b));
+    const shownDates = reqHorizon === 'all'
+      ? allDates
+      : allDates.filter(d => d !== 'unscheduled' && daysBetween(today, d) <= reqHorizon);
+    const shownCount = shownDates.reduce((n, d) => n + byDate.get(d).length, 0);
+    const hiddenCount = rows.length - shownCount;
+
+    const ReqRow = ({ r }) => (
+      <div title={`${reqSchedule(r)}${r.recipient ? ` → ${r.recipient}` : ''}`}
+        style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '5px 0 5px 10px' }}>
+        <div style={{ minWidth: 0, flex: 1, lineHeight: 1.45 }}>
+          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{r.item}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', marginLeft: 8 }}>
+            {r.party ? `${r.party} · ` : ''}{reqCadence(r)}
+          </span>
+        </div>
+        {pinUnlocked && (
+          <button onClick={() => deleteReq(r.id)} title="Remove requirement"
+            style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 11, padding: 0, flex: 'none' }}>✕</button>
+        )}
+      </div>
+    );
+
     return (
       <>
-        {rows.map(r => (
-          <div key={r.id} title={`${reqSchedule(r)}${r.recipient ? ` → ${r.recipient}` : ''}`}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 0', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ minWidth: 0, flex: 1, lineHeight: 1.5 }}>
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{r.item}{r.party ? ` (${r.party})` : ''}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', marginLeft: 8 }}>
-                {r.frequency}{r.recipient ? ` → ${r.recipient}` : ''}
+        {rows.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: reqsOpen ? '1px solid var(--border)' : 'none' }}>
+            <button onClick={() => setReqsOpen(o => !o)}
+              title={reqsOpen ? 'Hide the schedule' : 'Show the schedule'}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, textAlign: 'left' }}>
+              <span style={{ color: 'var(--faint)', fontSize: 9 }}>{reqsOpen ? '▼' : '▶'}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--muted)' }}>
+                {rows.length} deliverable{rows.length === 1 ? '' : 's'}
+                {allDates[0] && allDates[0] !== 'unscheduled' ? ` · next ${fmtDate(allDates[0])}` : ''}
               </span>
-            </div>
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 9, letterSpacing: '0.04em', color: 'var(--warn-text)', background: 'color-mix(in srgb, var(--warn) 13%, transparent)', padding: '2px 7px', borderRadius: 3, whiteSpace: 'nowrap' }}>{reqDueTag(r)}</span>
-            {pinUnlocked && (
-              <button onClick={() => deleteReq(r.id)} title="Remove requirement"
-                style={{ background: 'none', border: 'none', color: 'var(--faint)', cursor: 'pointer', fontSize: 11, padding: 0 }}>✕</button>
+            </button>
+            {reqsOpen && (
+              <select value={String(reqHorizon)} onChange={e => setReqHorizon(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                title="How far ahead to list" style={{ ...inSt, fontSize: 10, padding: '2px 4px' }}>
+                <option value="30">30 days</option>
+                <option value="90">90 days</option>
+                <option value="180">180 days</option>
+                <option value="365">1 year</option>
+                <option value="all">All</option>
+              </select>
             )}
           </div>
+        )}
+
+        {reqsOpen && shownDates.map(date => (
+          <div key={date} style={{ borderBottom: '1px solid var(--border)', padding: '8px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 9, letterSpacing: '0.04em', color: 'var(--warn-text)', background: 'color-mix(in srgb, var(--warn) 13%, transparent)', padding: '2px 7px', borderRadius: 3, whiteSpace: 'nowrap' }}>
+                {date === 'unscheduled' ? 'NO DATE' : fmtDueShort(date)}
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)' }}>
+                {byDate.get(date).length} item{byDate.get(date).length === 1 ? '' : 's'}
+                {date !== 'unscheduled' ? ` · ${dueInWords(today, date)}` : ''}
+              </span>
+            </div>
+            <div style={{ marginTop: 3 }}>
+              {byDate.get(date).map(r => <ReqRow key={r.id} r={r} />)}
+            </div>
+          </div>
         ))}
+
+        {reqsOpen && rows.length > 0 && hiddenCount > 0 && (
+          <button onClick={() => setReqHorizon('all')}
+            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 10.5, padding: '9px 0', cursor: 'pointer', display: 'block', textAlign: 'left' }}
+          >+ {hiddenCount} more scheduled further out — show all</button>
+        )}
+        {reqsOpen && rows.length > 0 && shownDates.length === 0 && (
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>
+            Nothing due in the next {reqHorizon} days.
+          </div>
+        )}
+
         {rows.length === 0 && !drafting && (
           reportingCoverage(l, 0) === 'gap' ? (
             // The abstract states reporting obligations but nothing is scheduled,
@@ -1228,7 +1330,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
             <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '11px 0' }}>None recorded yet.</div>
           )
         )}
-        {pinUnlocked && !drafting && (
+        {pinUnlocked && !drafting && (reqsOpen || rows.length === 0) && (
           <div style={{ padding: '11px 0' }}>
             <button
               onClick={() => setReqDraft({ loanId: l.id, item: '', party: 'borrower', frequency: 'quarterly', mode: 'offset', days: '45', due_month: '1', due_day: '15', recipient: l.lead_lender || '' })}

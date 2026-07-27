@@ -82,7 +82,10 @@ Ridge construction loan). The keys are exactly the database column names.
 
 > **Tip for your Claude project:** ask it to emit this JSON sidecar alongside
 > the `.docx` it already generates. Point it at `abstract-sidecar.example.json`
-> as the target shape.
+> as the target shape, and paste the block in
+> [`ABSTRACT_PROJECT_INSTRUCTIONS.md`](ABSTRACT_PROJECT_INSTRUCTIONS.md) into
+> its project instructions — that's what keeps the reporting requirements
+> landing as clean, dated deliverables instead of prose fragments.
 
 ### Checking the reporting requirements after an import
 
@@ -90,9 +93,13 @@ The parser reads the abstract's own wording, so the dates are a best-effort
 translation — worth a look on every abstract, because these rows are what the
 nightly reminders (and the accounting digest) run on.
 
-1. Open the loan in the **Loans** tab → **Reporting requirements**. Each row
-   shows the deliverable, its cadence ("quarterly · 45 days after quarter
-   end"), who it goes to, and an amber tag with the **next date it's due**.
+1. Open the loan in the **Loans** tab → **Reporting requirements**. Deliverables
+   are grouped under the **date they're next due** — one abstract's fifteen
+   items usually land on three or four dates a year — and each row shows its
+   cadence ("quarterly · 45d after quarter end"). The list runs 90 days ahead
+   by default; the dropdown next to the count goes out to a year or **All**,
+   and the ▼ toggle collapses the whole schedule. This only affects what's
+   listed: every requirement stays stored and keeps generating reminders.
 2. Check the cadence against the abstract, not the date — the dates follow from
    it. To correct one, remove the row (✕) and re-add it: **+ Add requirement**
    takes the deadline the way the abstract words it (a number of days after
