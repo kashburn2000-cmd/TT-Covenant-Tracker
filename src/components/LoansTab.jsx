@@ -1221,7 +1221,12 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
   const ReqsBlock = ({ l }) => {
     const rows = reportingReqs.filter(r => r.loan_id === l.id);
     const drafting = reqDraft?.loanId === l.id;
-    const inSt = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 10.5, padding: '4px 6px' };
+    // width:auto is load-bearing — the app-wide `select { width: 100% }` rule
+    // (src/App.jsx) otherwise stretches every select here across its whole row,
+    // pushing the neighbouring text underneath it. Selects also need room on
+    // the right for the chevron that rule paints (padding-right is !important).
+    const inSt = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 10.5, padding: '4px 6px', width: 'auto' };
+    const selSt = { ...inSt, flex: 'none', maxWidth: '100%', paddingLeft: 7 };
 
     // A loan's deliverables cluster onto a handful of dates — one abstract can
     // carry 15+ items that all go out on three or four days a year. Group them
@@ -1265,15 +1270,15 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
             <button onClick={() => setReqsOpen(o => !o)}
               title={reqsOpen ? 'Hide the schedule' : 'Show the schedule'}
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, textAlign: 'left' }}>
-              <span style={{ color: 'var(--faint)', fontSize: 9 }}>{reqsOpen ? '▼' : '▶'}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--muted)' }}>
+              <span style={{ color: 'var(--faint)', fontSize: 9, flex: 'none' }}>{reqsOpen ? '▼' : '▶'}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {rows.length} deliverable{rows.length === 1 ? '' : 's'}
                 {allDates[0] && allDates[0] !== 'unscheduled' ? ` · next ${fmtDate(allDates[0])}` : ''}
               </span>
             </button>
             {reqsOpen && (
               <select value={String(reqHorizon)} onChange={e => setReqHorizon(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                title="How far ahead to list" style={{ ...inSt, fontSize: 10, padding: '2px 4px' }}>
+                title="How far ahead to list" style={selSt}>
                 <option value="30">30 days</option>
                 <option value="90">90 days</option>
                 <option value="180">180 days</option>
@@ -1302,13 +1307,17 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
         ))}
 
         {reqsOpen && rows.length > 0 && hiddenCount > 0 && (
-          <button onClick={() => setReqHorizon('all')}
-            style={{ background: 'none', border: 'none', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 10.5, padding: '9px 0', cursor: 'pointer', display: 'block', textAlign: 'left' }}
-          >+ {hiddenCount} more scheduled further out — show all</button>
-        )}
-        {reqsOpen && rows.length > 0 && shownDates.length === 0 && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>
-            Nothing due in the next {reqHorizon} days.
+          <div style={{ padding: '9px 0', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6 }}>
+            {shownDates.length === 0 && (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)' }}>
+                Nothing due in the next {reqHorizon} days.
+              </span>
+            )}
+            <button onClick={() => setReqHorizon('all')}
+              style={{ background: 'none', border: 'none', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 10.5, padding: 0, cursor: 'pointer', textAlign: 'left' }}
+            >{shownDates.length === 0
+              ? `Show all ${hiddenCount} scheduled`
+              : `+ ${hiddenCount} more scheduled further out — show all`}</button>
           </div>
         )}
 
@@ -1342,14 +1351,14 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '11px 0', alignItems: 'center' }}>
             <input placeholder="Deliverable (e.g. Operating statement)" value={reqDraft.item} autoFocus
               onChange={e => setReqDraft(d => ({ ...d, item: e.target.value }))} style={{ ...inSt, flex: '2 1 150px' }} />
-            <select value={reqDraft.party} onChange={e => setReqDraft(d => ({ ...d, party: e.target.value }))} style={inSt}>
+            <select value={reqDraft.party} onChange={e => setReqDraft(d => ({ ...d, party: e.target.value }))} style={selSt}>
               <option value="borrower">borrower</option><option value="guarantor">guarantor</option>
             </select>
-            <select value={reqDraft.frequency} onChange={e => setReqDraft(d => ({ ...d, frequency: e.target.value }))} style={inSt}>
+            <select value={reqDraft.frequency} onChange={e => setReqDraft(d => ({ ...d, frequency: e.target.value }))} style={selSt}>
               <option value="monthly">monthly</option><option value="quarterly">quarterly</option>
               <option value="semiannual">semi-annual</option><option value="annual">annual</option>
             </select>
-            <select value={reqDraft.mode} onChange={e => setReqDraft(d => ({ ...d, mode: e.target.value }))} style={inSt} title="How the deadline is stated">
+            <select value={reqDraft.mode} onChange={e => setReqDraft(d => ({ ...d, mode: e.target.value }))} style={selSt} title="How the deadline is stated">
               <option value="offset">days after period end</option>
               <option value="date">on a fixed date</option>
             </select>
@@ -1364,7 +1373,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
             ) : (
               <>
                 {reqDraft.frequency !== 'monthly' && (
-                  <select value={reqDraft.due_month} onChange={e => setReqDraft(d => ({ ...d, due_month: e.target.value }))} style={inSt} title="Month it's due">
+                  <select value={reqDraft.due_month} onChange={e => setReqDraft(d => ({ ...d, due_month: e.target.value }))} style={selSt} title="Month it's due">
                     {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
                   </select>
                 )}
