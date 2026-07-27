@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseRecipients,
+  anchorFromOffset,
+  nextReportingDue,
   buildLoanTasks,
   buildCovenantTasks,
   buildConversionTasks,
@@ -161,6 +163,46 @@ describe('buildConversionTasks', () => {
   it('skips loans without a window and long-past windows', () => {
     expect(buildConversionTasks([{ ...loan, conversion_window_start: null }], TODAY)).toHaveLength(0);
     expect(buildConversionTasks([{ ...loan, conversion_window_start: '2026-01-01' }], TODAY)).toHaveLength(0);
+  });
+});
+
+describe('buildReportingTasks — "N days after period end"', () => {
+  const base = { id: 9, deal_name: 'Venice', recipient: 'Fifth Third', item: 'Operating statement' };
+
+  it('lands each quarter on its own period end plus the offset', () => {
+    const tasks = buildReportingTasks([{ ...base, frequency: 'quarterly', days_after_period_end: 45 }], TODAY, 400);
+    // Jun 30 +45 = Aug 14, Sep 30 +45 = Nov 14, Dec 31 +45 = Feb 14, Mar 31 +45 = May 15.
+    expect(tasks.map(t => t.due_date)).toEqual(['2026-08-14', '2026-11-14', '2027-02-14', '2027-05-15', '2027-08-14']);
+    expect(tasks[0].detail).toContain('45 days after quarter end');
+  });
+
+  it('handles monthly, semiannual and annual periods on the calendar fiscal year', () => {
+    const monthly = buildReportingTasks([{ ...base, frequency: 'monthly', days_after_period_end: 20 }], TODAY, 70);
+    expect(monthly.map(t => t.due_date)).toEqual(['2026-06-20', '2026-07-20', '2026-08-20', '2026-09-20']);
+    const semi = buildReportingTasks([{ ...base, frequency: 'semiannual', days_after_period_end: 30 }], TODAY, 400);
+    expect(semi.map(t => t.due_date)).toEqual(['2026-07-30', '2027-01-30', '2027-07-30']);
+    const annual = buildReportingTasks([{ ...base, frequency: 'annual', days_after_period_end: 120 }], TODAY, 400);
+    expect(annual.map(t => t.due_date)).toEqual(['2027-04-30']);  // Dec 31 + 120, no day-28 clamp
+  });
+
+  it('treats a zero offset as due on the period end itself', () => {
+    const tasks = buildReportingTasks([{ ...base, frequency: 'quarterly', days_after_period_end: 0 }], TODAY, 120);
+    // Jun 30 is inside the 60-day lookback, so it stays visible alongside Sep 30.
+    expect(tasks.map(t => t.due_date)).toEqual(['2026-06-30', '2026-09-30']);
+  });
+});
+
+describe('anchorFromOffset / nextReportingDue', () => {
+  it('derives a fallback anchor from the first period end of the cycle', () => {
+    expect(anchorFromOffset('quarterly', 45)).toEqual({ due_month: 5, due_day: 15 });
+    expect(anchorFromOffset('annual', 120)).toEqual({ due_month: 4, due_day: 28 });   // Apr 30 → clamped
+    expect(anchorFromOffset('monthly', 20)).toEqual({ due_month: null, due_day: 20 });
+  });
+
+  it('reports the next occurrence for both scheduling shapes', () => {
+    expect(nextReportingDue({ frequency: 'quarterly', days_after_period_end: 45 }, TODAY)).toBe('2026-08-14');
+    expect(nextReportingDue({ frequency: 'quarterly', due_month: 1, due_day: 15 }, TODAY)).toBe('2026-10-15');
+    expect(nextReportingDue({ frequency: 'weekly' }, TODAY)).toBeNull();
   });
 });
 

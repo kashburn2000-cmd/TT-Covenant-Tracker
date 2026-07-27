@@ -94,10 +94,28 @@ describe('parseReportingRequirements', () => {
     expect(reqs[0].due_month).toBe(12);
   });
 
-  it('recognises semiannual phrasings and anchors them to the Dec 31 cycle', () => {
+  it('recognises semiannual phrasings', () => {
     const [r] = parseReportingRequirements('Semi-annual rent roll within 30 days');
     expect(r.frequency).toBe('semiannual');
-    expect([r.due_month, r.due_day]).toEqual([1, 28]);   // Dec 31 + 30 days = Jan 30 → clamped to 28
+    expect(r.days_after_period_end).toBe(30);
+  });
+
+  it('stores the deadline as days after period end, the way abstracts word it', () => {
+    const [q] = parseReportingRequirements('Quarterly operating statement within 45 days of quarter end');
+    expect(q.days_after_period_end).toBe(45);
+    // The anchor is filled in too, as a fallback for the older scheduling shape.
+    expect([q.due_month, q.due_day]).toEqual([5, 15]);   // Mar 31 + 45 = May 15
+  });
+
+  it('falls back to the frequency default offset when the abstract states no deadline', () => {
+    const [a] = parseReportingRequirements('Annual audited financial statements');
+    expect(a.days_after_period_end).toBe(120);
+  });
+
+  it('uses a fixed date, not an offset, when the abstract names one', () => {
+    const [r] = parseReportingRequirements('Annual operating budget due December 1 each year');
+    expect(r.days_after_period_end).toBeNull();
+    expect([r.due_month, r.due_day]).toEqual([12, 1]);
   });
 
   it('still records a dated row when no deliverable can be named', () => {

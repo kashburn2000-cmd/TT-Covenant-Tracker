@@ -22,6 +22,8 @@
 // Used by src/components/LoansTab.jsx and scripts/backfill-loans.mjs,
 // unit-tested in parseReporting.test.js.
 
+import { anchorFromOffset } from './taskGen.js';
+
 // Frequency keywords → the four values the table's check constraint allows.
 // Matched case-insensitively, so "quarter end" and "fiscal year-end" (period
 // anchors, not frequencies) don't match.
@@ -47,11 +49,6 @@ const PHRASE_RE = /\b(?:(?:each|every)\s+(?:quarter|month|year)|per\s+year|twice
 // doesn't say. Deliberately conservative — a too-early reminder is noise, a
 // too-late one is a missed covenant.
 const DEFAULT_WITHIN_DAYS = { monthly: 20, quarterly: 45, semiannual: 60, annual: 120 };
-
-// Period ends the due date is measured from (month is 0-based, 2001 = non-leap
-// so the arithmetic never lands on Feb 29). Monthly is handled separately: its
-// due_day is simply "this many days into the following month".
-const PERIOD_END = { quarterly: [2, 31], semiannual: [11, 31], annual: [11, 31] };
 
 const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june',
   'july', 'august', 'september', 'october', 'november', 'december'];
@@ -152,16 +149,6 @@ function explicitDate(clause) {
   return { month: MONTH_NAMES.indexOf(m[1].toLowerCase()) + 1, day: Number(m[2]) };
 }
 
-// Period end + N days → the anchor date the generator steps from. due_day is
-// clamped to 28 (as the generator does) so no cycle skips a short month.
-function dueDate(frequency, days) {
-  if (frequency === 'monthly') return { due_month: null, due_day: Math.min(Math.max(days, 1), 28) };
-  const [mo, day] = PERIOD_END[frequency];
-  const d = new Date(Date.UTC(2001, mo, day));
-  d.setUTCDate(d.getUTCDate() + days);
-  return { due_month: d.getUTCMonth() + 1, due_day: Math.min(d.getUTCDate(), 28) };
-}
-
 // Strip the scheduling language out of a clause, leaving the deliverables.
 function deliverablesText(clause) {
   let t = clause;
@@ -239,7 +226,12 @@ export function parseReportingRequirements(text, opts = {}) {
     const days = withinDays(clause.text);
     const when = explicit
       ? { due_month: explicit.month, due_day: Math.min(Math.max(explicit.day, 1), 28) }
-      : dueDate(clause.frequency, days ?? DEFAULT_WITHIN_DAYS[clause.frequency]);
+      : anchorFromOffset(clause.frequency, days ?? DEFAULT_WITHIN_DAYS[clause.frequency]);
+    // "within 45 days of quarter end" is stored as the offset itself — the
+    // generator lands it on each real period end + 45. due_month/due_day are
+    // filled in too, as an approximate anchor for anyone reading the row
+    // through the older shape.
+    const daysAfter = explicit ? null : (days ?? DEFAULT_WITHIN_DAYS[clause.frequency]);
     const items = itemsIn(clause.text, maxItems);
     // "…by December 1 each year" is a cadence restated for a deliverable
     // already captured, not a second obligation: a clause that names nothing
@@ -259,6 +251,7 @@ export function parseReportingRequirements(text, opts = {}) {
         item,
         party,
         frequency: clause.frequency,
+        days_after_period_end: daysAfter,
         due_month: when.due_month,
         due_day: when.due_day,
         lead_days: leadDays,
