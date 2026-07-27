@@ -177,7 +177,10 @@ function parseAbstractXml(xml) {
   if (locSeg) { const [c, st] = locSeg.split(','); property_city = c.trim(); property_state = (st || '').trim().slice(0, 2); }
   const closing_date = firstDate(segs.find(s => /Closed/i.test(s)) || get('closing date') || '');
 
-  const row = { loan_type, borrower_entity, property_city, property_state, unit_count, closing_date, property_name: null, type_specific: {} };
+  // Abstracts don't carry a separate project name, and the borrower entity is a
+  // legal name ("TTRes Wheatridge, Kipling Street, LLC"). The city off the
+  // description line is the name people actually use, so seed it from there.
+  const row = { loan_type, borrower_entity, property_city, property_state, unit_count, closing_date, property_name: property_city, type_specific: {} };
 
   const amt = get('loan amount');
   if (amt) { row.loan_amount = money(amt); const ltc = amt.match(/([\d.]+)%\s*LTC/i); const ltv = amt.match(/([\d.]+)%\s*LTV/i); if (ltc) row.ltc_pct = +ltc[1]; if (ltv) row.ltv_pct = +ltv[1]; }
@@ -517,6 +520,8 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     // Optional child rows — not a loans column, so pull them out before coerceBody.
     const reqRows = Array.isArray(data.reporting_requirements) ? data.reporting_requirements : null;
     delete data.reporting_requirements;
+    // Same default as the .docx parser, for JSON sidecars that omit the name.
+    if (!data.property_name && data.property_city) data.property_name = data.property_city;
     setSaving(true);
     try {
       let path = data.source_doc_path || null;
@@ -1265,6 +1270,30 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         <div style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v}</div>
       </div>
     ));
+    // type_specific values are free-form: strings, string arrays (checklists), or
+    // small objects. Render each shape natively instead of dumping raw JSON.
+    const TsValue = ({ v }) => {
+      if (Array.isArray(v)) return (
+        <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {v.map((item, i) => (
+            <li key={i} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>
+              {item && typeof item === 'object' ? <TsValue v={item} /> : String(item)}
+            </li>
+          ))}
+        </ul>
+      );
+      if (v && typeof v === 'object') return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {Object.entries(v).map(([k, val]) => (
+            <div key={k} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>
+              <span style={{ color: 'var(--muted)' }}>{k.replace(/_/g, ' ')}: </span>
+              {val && typeof val === 'object' ? <TsValue v={val} /> : String(val)}
+            </div>
+          ))}
+        </div>
+      );
+      return <span style={{ whiteSpace: 'pre-wrap' }}>{String(v)}</span>;
+    };
     const ts = l.type_specific && typeof l.type_specific === 'object' ? l.type_specific : {};
     const tsEntries = Object.entries(ts).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
     const hasGuaranty = l.completion_guaranty_pct != null || l.repayment_guaranty_pct != null || l.guarantor_entity || l.guaranty_reduction_terms;
@@ -1378,7 +1407,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                 <Prose k="Notes" v={l.notes} />
                 {tsEntries.map(([k, v]) => (
                   <Prose key={k} k={`${LOAN_TYPE_LABEL[l.loan_type] || ''} · ${k.replace(/_/g, ' ')}`}
-                    v={typeof v === 'object' ? JSON.stringify(v, null, 1) : String(v)} />
+                    v={<TsValue v={v} />} />
                 ))}
               </Card>
             </>
