@@ -15,11 +15,17 @@
 // Put your .docx files in the folder you pass (default ./abstracts). If a
 // matching <name>.json sidecar sits beside a .docx, its values win over the
 // text parsed from the document — so you can hand-correct anything.
+//
+// The abstract's reporting section is also parsed into structured deliverables
+// (src/parseReporting.js) and written to loan_reporting_requirements, which is
+// what drives the nightly reminders — dates are a best-effort read of the
+// prose, so review them in the Loans tab afterwards.
 // ────────────────────────────────────────────────────────────────────────────
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import AdmZip from 'adm-zip';
+import { reportingRequirementsFromAbstract } from '../src/parseReporting.js';
 
 const SB_URL  = process.env.SUPABASE_URL || 'https://ngflppgqohmkkfiljqma.supabase.co';
 const SB_KEY  = process.env.SUPABASE_SERVICE_KEY;
@@ -199,6 +205,12 @@ function parseAbstract(file) {
 
   // clean empty type_specific values
   for (const k of Object.keys(row.type_specific)) if (row.type_specific[k] == null || row.type_specific[k] === '') delete row.type_specific[k];
+
+  // Reporting prose → structured deliverables (src/parseReporting.js). Not a
+  // `loans` column: main() splits this off and writes it to
+  // loan_reporting_requirements, which is what drives the nightly reminders.
+  const reqs = reportingRequirementsFromAbstract(row);
+  if (reqs.length) row.reporting_requirements = reqs;
   return row;
 }
 
@@ -224,6 +236,22 @@ async function upsert(row) {
   return (await res.json())[0];
 }
 
+// Replace a loan's reporting requirements (re-run safe, same as the website's
+// Import Abstract). Skips quietly when db/loan_reporting_setup.sql hasn't been
+// run — the loan still imports, it just has no scheduled deliverables yet.
+async function replaceReqs(loanId, reqs) {
+  if (!reqs.length) return 0;
+  const del = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements?loan_id=eq.${loanId}`, { method: 'DELETE', headers: HEADERS });
+  if (del.status === 404) { console.log('  · loan_reporting_requirements not set up — run db/loan_reporting_setup.sql to schedule deliverables'); return 0; }
+  const res = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
+    method: 'POST',
+    headers: { ...HEADERS, 'Content-Type': 'application/json' },
+    body: JSON.stringify(reqs.map(r => ({ ...r, loan_id: loanId }))),
+  });
+  if (!res.ok) throw new Error('reporting requirements: ' + (await res.text()));
+  return reqs.length;
+}
+
 // ── main ─────────────────────────────────────────────────────────────────────
 async function main() {
   const DIR = process.argv[2] || './abstracts';
@@ -245,11 +273,18 @@ async function main() {
         console.log(`  · ${f}: merged sidecar ${path.basename(sidecar)}`);
       }
       if (!row.borrower_entity || row.loan_amount == null) throw new Error('could not parse borrower_entity / loan_amount — add a .json sidecar');
+      // Child rows, not a `loans` column — write them after the loan exists.
+      const reqs = Array.isArray(row.reporting_requirements) ? row.reporting_requirements : [];
+      delete row.reporting_requirements;
       const slug = slugify(row.borrower_entity || row.property_name || path.basename(f, '.docx'));
       row.source_doc_path = row.source_doc_path || await uploadDoc(row.loan_type, slug, full);
       row.source_doc_uploaded_at = new Date().toISOString();
       const saved = await upsert(row);
-      console.log(`✓ ${f}  →  ${saved.property_name || saved.borrower_entity}  [${saved.loan_type}]  ${saved.source_doc_path}`);
+      const nReqs = await replaceReqs(saved.id, reqs);
+      console.log(`✓ ${f}  →  ${saved.property_name || saved.borrower_entity}  [${saved.loan_type}]  ${saved.source_doc_path}${nReqs ? `  · ${nReqs} reporting requirement${nReqs === 1 ? '' : 's'}` : ''}`);
+      if (!nReqs && (saved.financial_reporting_borrower || saved.financial_reporting_guarantor)) {
+        console.log('  ⚠ reporting section present but nothing could be scheduled — add rows in the Loans tab');
+      }
       ok++;
     } catch (e) { console.error(`✗ ${f}: ${e.message}`); fail++; }
   }

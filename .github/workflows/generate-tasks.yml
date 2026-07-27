@@ -8,9 +8,15 @@ name: Generate Tasks
 # Setup:
 #   • Run db/tasks_setup.sql once in the Supabase SQL editor.
 #   • SUPABASE_KEY repo secret (service_role) — same one the rate pull uses.
-#   • Optional email: RESEND_API_KEY + TASK_EMAIL_TO (comma-separated) repo
-#     secrets, plus TASK_EMAIL_FROM once a sender domain is verified. Without
-#     them the job still syncs tasks and just logs the would-be digest.
+#   • Optional email: RESEND_API_KEY repo secret (a credential — keep it here),
+#     plus TASK_EMAIL_FROM once a sender domain is verified. Without a key the
+#     job still syncs tasks and just logs the would-be digest.
+#   • Recipients are normally set on the site: Debt Dashboard → Tasks &
+#     Reminders → unlock → ✉ Recipients (settings.taskEmailRecipients). The
+#     TASK_EMAIL_TO / TASK_EMAIL_ACCOUNTING_TO secrets below are the fallback
+#     for whichever list the site leaves empty.
+#   • Accounting ping: the accounting list gets a second digest containing only
+#     the lender reporting deliverables, ahead of each deadline.
 
 on:
   schedule:
@@ -34,6 +40,8 @@ jobs:
           # publishable key (db/security_setup.sql).
           SB_KEY: ${{ secrets.SUPABASE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          # Fallbacks only — the site's ✉ Recipients panel wins when set.
           TASK_EMAIL_TO: ${{ secrets.TASK_EMAIL_TO }}
+          TASK_EMAIL_ACCOUNTING_TO: ${{ secrets.TASK_EMAIL_ACCOUNTING_TO }}
           TASK_EMAIL_FROM: ${{ secrets.TASK_EMAIL_FROM }}
         run: node scripts/generate-tasks.mjs

@@ -60,6 +60,28 @@
 
   "financial_reporting_borrower": "Quarterly (within 65 days, beginning quarter of Substantial Completion): internally prepared BS and IS, Compliance Certificate, rent roll + occupancy info upon commencement of leasing. Annual (until quarterly kicks in; within 125 days of fiscal year-end beginning 12/31/25): internally prepared BS",
   "financial_reporting_guarantor": "Quarterly (within 65 days): CPA-reviewed financial statements, global real estate schedule, brokerage statements, contingent debt schedules. Annual: federal tax return within 30 days of filing",
+
+  "reporting_requirements": [
+    { "item": "Internally prepared balance sheet and income statement", "party": "borrower",
+      "frequency": "quarterly", "due_month": 6, "due_day": 4, "recipient": "BOKF, NA",
+      "notes": "within 65 days of quarter end, beginning the quarter of Substantial Completion" },
+    { "item": "Compliance Certificate", "party": "borrower",
+      "frequency": "quarterly", "due_month": 6, "due_day": 4, "recipient": "BOKF, NA",
+      "notes": "within 65 days of quarter end" },
+    { "item": "Rent roll and occupancy report", "party": "borrower",
+      "frequency": "quarterly", "due_month": 6, "due_day": 4, "recipient": "BOKF, NA",
+      "notes": "within 65 days of quarter end, upon commencement of leasing" },
+    { "item": "Internally prepared balance sheet", "party": "borrower",
+      "frequency": "annual", "due_month": 5, "due_day": 5, "recipient": "BOKF, NA",
+      "notes": "within 125 days of fiscal year-end, beginning 12/31/25; until quarterly reporting starts" },
+    { "item": "CPA-reviewed financial statements, global real estate schedule, brokerage and contingent debt schedules", "party": "guarantor",
+      "frequency": "quarterly", "due_month": 6, "due_day": 4, "recipient": "BOKF, NA",
+      "notes": "within 65 days of quarter end" },
+    { "item": "Federal tax return", "party": "guarantor",
+      "frequency": "annual", "due_month": 10, "due_day": 15, "recipient": "BOKF, NA",
+      "lead_days": 30, "notes": "within 30 days of filing — anchored to the extended filing deadline" }
+  ],
+
   "miscellaneous": "Equity Deposit: $23,278,603.99 to be deposited with BOKF within 10 BDs of Closing; usable only for Approved Project Costs. All operating/deposit accounts maintained with BOKF; treasury management services required. Retainage: 10% initial, reducible to 5% upon 50% of hard costs billed. HVCRE compliance required at all times. Late fee: 5% of payment if 15+ days late",
   "notes": null,
 

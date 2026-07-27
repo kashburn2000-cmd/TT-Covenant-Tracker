@@ -3,6 +3,7 @@ import { SB_URL, SB_KEY, SB_HEADERS } from '../supabase.js';
 import { TT_ORANGE } from '../theme.js';
 import { slugify } from '../format.js';
 import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSchedule.js';
+import { reportingRequirementsFromAbstract, reportingCoverage } from '../parseReporting.js';
 import { supabase } from '../auth.js';
 import { useIsMobile } from '../useIsMobile.js';
 import { suggestDealUid } from '../dealRegistry.js';
@@ -268,6 +269,11 @@ function parseAbstractXml(xml) {
   for (const k of Object.keys(row.type_specific)) if (row.type_specific[k] == null || row.type_specific[k] === '') delete row.type_specific[k];
   // drop null/empty keys so the auto-filled JSON stays readable
   for (const k of Object.keys(row)) if (row[k] == null && k !== 'type_specific') delete row[k];
+  // Reporting prose → structured deliverables (src/parseReporting.js). Without
+  // this the abstract's reporting section imports as text only and no reminder
+  // ever fires for it; Import writes these into loan_reporting_requirements.
+  const reqs = reportingRequirementsFromAbstract(row);
+  if (reqs.length) row.reporting_requirements = reqs;
   return row;
 }
 
@@ -326,6 +332,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
   const [fGuaranty, setFGuaranty] = useState('');   // ≥ %, repayment guaranty
   const [fNW, setFNW]             = useState('');    // ≥ $M, TTH net worth
   const [fLiq, setFLiq]           = useState('');    // ≥ $M, TTH liquidity
+  const [fReqGap, setFReqGap]     = useState(false); // only loans missing structured reporting
   const [sortField, setSortField] = useState('maturity_date');
   const [sortDir, setSortDir]     = useState('asc');
 
@@ -420,6 +427,24 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
       setReqDraft(null);
       refreshReqs();
     } catch (err) { flash('Save error: ' + err.message, true); }
+  }
+
+  // Structure the reporting section of a loan already in the table — for
+  // abstracts imported before the parser existed, or whose sidecar carried no
+  // reporting_requirements array. Only offered when the loan has none, so this
+  // never overwrites rows the team hand-tuned.
+  async function extractReqs(l) {
+    const rows = reportingRequirementsFromAbstract(l);
+    if (!rows.length) { flash('No reporting schedule found in this abstract’s text — add rows by hand', true); return; }
+    try {
+      const res = await fetch(`${SB_URL}/rest/v1/loan_reporting_requirements`, {
+        method: 'POST', headers: SB_HEADERS,
+        body: JSON.stringify(rows.map(r => ({ ...r, loan_id: l.id }))),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); flash('Extract error: ' + (e.message || res.status), true); return; }
+      flash(`✓ ${rows.length} requirement${rows.length === 1 ? '' : 's'} extracted — check the dates`);
+      refreshReqs();
+    } catch (err) { flash('Extract error: ' + err.message, true); }
   }
 
   async function deleteReq(id) {
@@ -703,6 +728,14 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
   // ── Derived: filters, sort, summary ──────────────────────────────────────────
   const years = Array.from(new Set(loans.map(l => l.maturity_date ? l.maturity_date.slice(0, 4) : null).filter(Boolean))).sort();
 
+  // Reporting coverage — a loan whose abstract states reporting obligations but
+  // has no structured rows generates no reminders at all, which is invisible
+  // without this. Counted in the list header and filterable, so gaps surface
+  // while abstracts are being uploaded rather than at a missed deadline.
+  const reqCountByLoan = reportingReqs.reduce((m, r) => { m[r.loan_id] = (m[r.loan_id] || 0) + 1; return m; }, {});
+  const hasReqGap = l => reportingCoverage(l, reqCountByLoan[l.id] || 0) === 'gap';
+  const reqGapCount = reqsAvailable ? loans.filter(hasReqGap).length : 0;
+
   // A bank's loans include the ones it participates in, not just the ones it
   // leads — matched against the lead plus every participant on the abstract.
   const loanHolders = (l) => projectHolders({ lender: l.lead_lender }, l);
@@ -716,6 +749,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
     if (fGuaranty !== '' && !(l.repayment_guaranty_pct != null && Number(l.repayment_guaranty_pct) >= Number(fGuaranty))) return false;
     if (fNW !== '' && !(l.min_net_worth != null && Number(l.min_net_worth) >= Number(fNW) * 1e6)) return false;
     if (fLiq !== '' && !(l.min_liquidity != null && Number(l.min_liquidity) >= Number(fLiq) * 1e6)) return false;
+    if (fReqGap && !hasReqGap(l)) return false;
     return true;
   });
 
@@ -731,7 +765,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
     if (sortField === f) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(f); setSortDir('asc'); }
   }
-  function clearFilters() { setFType('all'); setFLender(''); setFYear('all'); setFGuaranty(''); setFNW(''); setFLiq(''); }
+  function clearFilters() { setFType('all'); setFLender(''); setFYear('all'); setFGuaranty(''); setFNW(''); setFLiq(''); setFReqGap(false); }
 
   // ── Calendar event model ─────────────────────────────────────────────────────
   // Each calendar event is { iso:'YYYY-MM-DD', type, loan, name }. Maturities, closings
@@ -1128,7 +1162,22 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
           </div>
         ))}
         {rows.length === 0 && !drafting && (
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>None recorded yet.</div>
+          reportingCoverage(l, 0) === 'gap' ? (
+            // The abstract states reporting obligations but nothing is scheduled,
+            // so the nightly generator has nothing to remind anyone about.
+            <div style={{ padding: '9px 0' }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--warn-text)', lineHeight: 1.5 }}>
+                ⚠ Abstract text on file, nothing scheduled — no reminders will fire for this loan.
+              </div>
+              {pinUnlocked && (
+                <button onClick={() => extractReqs(l)}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 11, padding: '6px 0 0', cursor: 'pointer' }}
+                >⚙ Extract from abstract text</button>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', padding: '9px 0' }}>None recorded yet.</div>
+          )
         )}
         {pinUnlocked && !drafting && (
           <div style={{ padding: '9px 0' }}>
@@ -1610,7 +1659,7 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
 
   // Selected loan for the detail pane — falls back to the first visible row.
   const selected = loans.find(l => l.id === expandedId) || sorted[0] || null;
-  const advFilterCount = (fLender ? 1 : 0) + (fYear !== 'all' ? 1 : 0) + (fGuaranty !== '' ? 1 : 0) + (fNW !== '' ? 1 : 0) + (fLiq !== '' ? 1 : 0);
+  const advFilterCount = (fLender ? 1 : 0) + (fYear !== 'all' ? 1 : 0) + (fGuaranty !== '' ? 1 : 0) + (fNW !== '' ? 1 : 0) + (fLiq !== '' ? 1 : 0) + (fReqGap ? 1 : 0);
   const icoActive = { background: 'var(--text)', color: 'var(--panel)', borderColor: 'var(--text)' };
   const listAddRow = { cursor: 'pointer', padding: '14px 22px', fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12, color: 'var(--accent)' };
 
@@ -1645,6 +1694,12 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
               {fLender && (
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--warn)', marginTop: 2 }}>
                   {fLender}&apos;s share — participations included
+                </div>
+              )}
+              {reqGapCount > 0 && (
+                <div onClick={() => { setFReqGap(g => !g); setShowFilters(true); }} title="Abstract states reporting obligations, but nothing is scheduled — click to filter"
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--warn-text)', marginTop: 2, cursor: 'pointer' }}>
+                  ⚠ {reqGapCount} missing reporting requirements
                 </div>
               )}
             </div>
@@ -1689,6 +1744,12 @@ export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed
               <div><label style={labelSt}>Repay guar ≥ %</label><input style={inputSt()} type="number" value={fGuaranty} onChange={e => setFGuaranty(e.target.value)} placeholder="35" /></div>
               <div><label style={labelSt}>TTH NW ≥ $M</label><input style={inputSt()} type="number" value={fNW} onChange={e => setFNW(e.target.value)} placeholder="75" /></div>
               <div><label style={labelSt}>TTH Liq ≥ $M</label><input style={inputSt()} type="number" value={fLiq} onChange={e => setFLiq(e.target.value)} placeholder="15" /></div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ ...labelSt, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={fReqGap} onChange={e => setFReqGap(e.target.checked)} />
+                  Missing reporting requirements{reqGapCount ? ` (${reqGapCount})` : ''}
+                </label>
+              </div>
               <div style={{ alignSelf: 'end' }}><button onClick={clearFilters} className="btn btn-sm btn-ghost">Clear filters</button></div>
             </div>
           )}

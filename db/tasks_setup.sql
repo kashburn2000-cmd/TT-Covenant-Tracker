@@ -19,6 +19,9 @@
 --   emailed_at records the last digest that included the task; the generator
 --   re-includes a task after a 7-day cool-down while it remains open inside
 --   its lead window.
+--   accounting_emailed_at does the same for the separate accounting digest
+--   (reporting deliverables only, sent when TASK_EMAIL_ACCOUNTING_TO is set),
+--   so the two lists have independent cool-downs.
 -- ════════════════════════════════════════════════════════════════════════
 
 create table if not exists public.tasks (
@@ -38,12 +41,16 @@ create table if not exists public.tasks (
   source_table  text,
   source_id     text,
   assignee_email text,
-  emailed_at    timestamptz,                   -- last time a digest included this task
+  emailed_at    timestamptz,                   -- last time the team digest included this task
+  accounting_emailed_at timestamptz,           -- last time the accounting digest did
   completed_at  timestamptz,
   completed_by  text,                          -- email of the user who resolved it
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
+
+-- Added after the table shipped — safe on existing projects.
+alter table public.tasks add column if not exists accounting_emailed_at timestamptz;
 
 create index if not exists tasks_due_date_idx on public.tasks (due_date);
 create index if not exists tasks_status_idx   on public.tasks (status);

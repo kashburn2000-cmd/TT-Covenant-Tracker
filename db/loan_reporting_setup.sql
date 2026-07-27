@@ -11,12 +11,18 @@
 --
 -- Where it's used
 --   • Loans tab → expanded loan detail → "Reporting Requirements" section
---     (add/remove rows, PIN required).
---   • Import Abstract accepts an optional "reporting_requirements" array in
---     the JSON sidecar (see ingest/README.md) and replaces the loan's rows.
+--     (add/remove rows, PIN required). A loan whose abstract has reporting
+--     text but no rows here is flagged in that section and counted in the
+--     list header — that combination means nobody gets reminded.
+--   • Import Abstract fills these automatically: the abstract's reporting
+--     prose is parsed into rows by src/parseReporting.js, and an explicit
+--     "reporting_requirements" array in the JSON sidecar overrides it
+--     (see ingest/README.md). Re-importing replaces the loan's rows.
+--     scripts/backfill-loans.mjs does the same for bulk .docx loads.
 --   • The nightly Generate Tasks Action (scripts/generate-tasks.mjs) expands
 --     each row into dated tasks on the Tasks & Reminders widget and the
---     email digest (default 21-day reminder lead).
+--     email digest (default 21-day reminder lead), plus the separate
+--     accounting digest when TASK_EMAIL_ACCOUNTING_TO is configured.
 --
 -- Scheduling model
 --   frequency  'monthly' | 'quarterly' | 'semiannual' | 'annual'
