@@ -6,6 +6,8 @@ import { buildAmortizationSchedule, scheduleDefaultsFromLoan } from '../amortSch
 import { reportingRequirementsFromAbstract, reportingCoverage } from '../parseReporting.js';
 import { supabase } from '../auth.js';
 import { useIsMobile } from '../useIsMobile.js';
+import { suggestDealUid } from '../dealRegistry.js';
+import { projectHolders, holdersMatch, holdersShare } from '../lenderExposure.js';
 
 const DOC_CATEGORIES = {
   loan_agreement: 'Loan Agreement', guaranty: 'Guaranty', amendment: 'Amendment',
@@ -178,7 +180,10 @@ function parseAbstractXml(xml) {
   if (locSeg) { const [c, st] = locSeg.split(','); property_city = c.trim(); property_state = (st || '').trim().slice(0, 2); }
   const closing_date = firstDate(segs.find(s => /Closed/i.test(s)) || get('closing date') || '');
 
-  const row = { loan_type, borrower_entity, property_city, property_state, unit_count, closing_date, property_name: null, type_specific: {} };
+  // Abstracts don't carry a separate project name, and the borrower entity is a
+  // legal name ("TTRes Wheatridge, Kipling Street, LLC"). The city off the
+  // description line is the name people actually use, so seed it from there.
+  const row = { loan_type, borrower_entity, property_city, property_state, unit_count, closing_date, property_name: property_city, type_specific: {} };
 
   const amt = get('loan amount');
   if (amt) { row.loan_amount = money(amt); const ltc = amt.match(/([\d.]+)%\s*LTC/i); const ltv = amt.match(/([\d.]+)%\s*LTV/i); if (ltc) row.ltc_pct = +ltc[1]; if (ltv) row.ltv_pct = +ltv[1]; }
@@ -272,7 +277,7 @@ function parseAbstractXml(xml) {
   return row;
 }
 
-export function LoansTab({ pinUnlocked, requirePin }) {
+export function LoansTab({ pinUnlocked, requirePin, focusLoanId, onFocusConsumed }) {
   const BUCKET     = 'loan-docs';
 
   const [loans, setLoans]         = useState([]);
@@ -291,6 +296,17 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const [showImport, setShowImport] = useState(false);
   const [importJson, setImportJson] = useState('');
   const [importFile, setImportFile] = useState(null);
+  // Registry deal the abstract belongs to. null = follow the name-match
+  // suggestion; a string (possibly '') is an explicit choice by the user.
+  const [importDealUid, setImportDealUid] = useState(null);
+
+  // Deal registry, for linking an abstract to its deal on import. Abstract
+  // names never equal schedule names, so this is a picker rather than an
+  // automatic name match. dealLinkAvailable probes for the loans.deal_uid
+  // column so installs that ran deal_registry_setup.sql before that column
+  // existed degrade to the old unlinked behaviour instead of erroring.
+  const [registry, setRegistry] = useState([]);
+  const [dealLinkAvailable, setDealLinkAvailable] = useState(false);
 
   // Reporting requirements (structured lender deliverables — feeds the nightly
   // Tasks & Reminders generator). reqsAvailable flips false until
@@ -328,6 +344,17 @@ export function LoansTab({ pinUnlocked, requirePin }) {
 
   function flash(text, isErr = false) { setMsg({ text, isErr }); setTimeout(() => setMsg(''), 4000); }
 
+  // Best-guess deal for whatever is currently in the import textarea. Computed
+  // here (not inside ImportModal) because the modal is re-created every render.
+  const importPreview = React.useMemo(() => {
+    try { const d = JSON.parse(importJson); return d && typeof d === 'object' ? d : null; } catch { return null; }
+  }, [importJson]);
+  const suggestedDealUid = React.useMemo(
+    () => (importPreview ? suggestDealUid(importPreview, registry) : null),
+    [importPreview, registry],
+  );
+  const importDeal = importDealUid !== null ? importDealUid : (suggestedDealUid || '');
+
   // ── Load ───────────────────────────────────────────────────────────────────
   React.useEffect(() => {
     async function load() {
@@ -338,10 +365,38 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       } catch (err) { console.error('Loans load error:', err); flash('Load error: ' + err.message, true); }
       await refreshReqs();
       await refreshDocs();
+      await refreshRegistry();
       setLoading(false);
     }
     load();
   }, []);
+
+  // Arriving from a deal's "Abstract" chip on the Deal Registry: open that loan.
+  useEffect(() => {
+    if (focusLoanId == null) return;
+    setExpandedId(focusLoanId);
+    setMobileDetail(true);
+    onFocusConsumed?.();
+  }, [focusLoanId, onFocusConsumed]);
+
+  // Registry + deal_uid column probe. Both must be present for the link picker;
+  // either missing just hides it (db/deal_registry_setup.sql not run yet).
+  async function refreshRegistry() {
+    try {
+      const [reg, probe] = await Promise.all([
+        fetch(`${SB_URL}/rest/v1/deal_registry?select=uid,name,status&order=name.asc`, { headers: SB_HEADERS }),
+        fetch(`${SB_URL}/rest/v1/loans?select=deal_uid&limit=1`, { headers: SB_HEADERS }),
+      ]);
+      if (reg.ok && probe.ok) {
+        const rows = await reg.json();
+        setRegistry(Array.isArray(rows) ? rows : []);
+        setDealLinkAvailable(true);
+      } else {
+        setRegistry([]);
+        setDealLinkAvailable(false);
+      }
+    } catch { setRegistry([]); setDealLinkAvailable(false); }
+  }
 
   async function refreshReqs() {
     try {
@@ -542,6 +597,10 @@ export function LoansTab({ pinUnlocked, requirePin }) {
     // Optional child rows — not a loans column, so pull them out before coerceBody.
     const reqRows = Array.isArray(data.reporting_requirements) ? data.reporting_requirements : null;
     delete data.reporting_requirements;
+    // The picker below is the only source of the deal link.
+    delete data.deal_uid;
+    // Same default as the .docx parser, for JSON sidecars that omit the name.
+    if (!data.property_name && data.property_city) data.property_name = data.property_city;
     setSaving(true);
     try {
       let path = data.source_doc_path || null;
@@ -551,6 +610,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
       }
       const body = coerceBody({
         ...EMPTY_LOAN, ...data,
+        ...(dealLinkAvailable ? { deal_uid: importDeal || null } : {}),
         source_doc_path: path,
         source_doc_uploaded_at: importFile ? new Date().toISOString() : (data.source_doc_uploaded_at || null),
         updated_at: new Date().toISOString(),
@@ -589,8 +649,8 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           }
           refreshReqs();
         }
-        flash('✓ Abstract imported');
-        setShowImport(false); setImportJson(''); setImportFile(null);
+        flash(importDeal ? `✓ Abstract imported and linked to ${importDeal}` : '✓ Abstract imported (not linked to a deal)');
+        setShowImport(false); setImportJson(''); setImportFile(null); setImportDealUid(null);
       } else {
         const e = await res.json().catch(() => ({}));
         flash('Import error: ' + (e.message || e.details || e.hint || res.status), true);
@@ -676,9 +736,15 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const hasReqGap = l => reportingCoverage(l, reqCountByLoan[l.id] || 0) === 'gap';
   const reqGapCount = reqsAvailable ? loans.filter(hasReqGap).length : 0;
 
+  // A bank's loans include the ones it participates in, not just the ones it
+  // leads — matched against the lead plus every participant on the abstract.
+  const loanHolders = (l) => projectHolders({ lender: l.lead_lender }, l);
+  // Filtering to one bank shows what that bank holds, not the whole deal.
+  const lenderShare = (l) => holdersShare(loanHolders(l), fLender);
+
   const filtered = loans.filter(l => {
     if (fType !== 'all' && l.loan_type !== fType) return false;
-    if (fLender && !(l.lead_lender || '').toLowerCase().includes(fLender.toLowerCase())) return false;
+    if (fLender && !holdersMatch(loanHolders(l), fLender)) return false;
     if (fYear !== 'all' && (l.maturity_date || '').slice(0, 4) !== fYear) return false;
     if (fGuaranty !== '' && !(l.repayment_guaranty_pct != null && Number(l.repayment_guaranty_pct) >= Number(fGuaranty))) return false;
     if (fNW !== '' && !(l.min_net_worth != null && Number(l.min_net_worth) >= Number(fNW) * 1e6)) return false;
@@ -745,7 +811,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
   const calEventsShown = calEvents.filter(e => calTypes[e.type]);
 
   const thisYear = new Date().getFullYear();
-  const totalAmount = filtered.reduce((s, l) => s + (Number(l.loan_amount) || 0), 0);
+  const totalAmount = filtered.reduce((s, l) => s + (Number(l.loan_amount) || 0) * lenderShare(l), 0);
   const maturingThisYear = filtered.filter(l => (l.maturity_date || '').slice(0, 4) === String(thisYear)).length;
   const constructionCount = filtered.filter(l => l.loan_type === 'construction').length;
   const refinanceCount = filtered.filter(l => l.loan_type === 'refinance').length;
@@ -988,7 +1054,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 6, width: '100%', maxWidth: 720, padding: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
             <span style={{ fontWeight: 700, color: 'var(--text2)', fontSize: '1rem' }}>Import Abstract</span>
-            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
+            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); setImportDealUid(null); }} style={{ background: 'none', border: 'none', color: 'var(--faint3)', cursor: 'pointer', fontSize: '1.1rem' }}>✕</button>
           </div>
           <div style={{ fontSize: '0.72rem', color: 'var(--faint2)', lineHeight: 1.5, marginBottom: '1rem' }}>
             Easiest: attach the <code>.docx</code> and click <strong>Auto-fill</strong> — the fields are read straight from the document. Review them below, then Import. (Or paste a JSON sidecar from your abstract assistant if you have one.) Re-importing the same document updates the existing record — no duplicates.
@@ -1010,8 +1076,27 @@ export function LoansTab({ pinUnlocked, requirePin }) {
           {/* Step 2 — review/paste JSON */}
           <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.4rem' }}>Step 2 — Review fields (auto-filled or pasted)</div>
           <textarea style={inputSt({ minHeight: 220, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.72rem' })} value={importJson} onChange={e => setImportJson(e.target.value)} spellCheck={false} placeholder='Click "Auto-fill" above, or paste JSON like: { "loan_type": "construction", "borrower_entity": "...", "loan_amount": 51694640 }' />
+
+          {/* Step 3 — link to the deal it belongs to */}
+          {dealLinkAvailable && (
+            <div style={{ marginTop: '1rem' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--text2)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.4rem' }}>Step 3 — Link to deal</div>
+              <select style={inputSt()} value={importDeal} onChange={e => setImportDealUid(e.target.value)}>
+                <option value="">— not linked to a deal —</option>
+                {registry.map(e => <option key={e.uid} value={e.uid}>{e.uid} · {e.name}</option>)}
+              </select>
+              <div style={{ fontSize: '0.62rem', marginTop: 4, lineHeight: 1.5, color: importDeal ? 'var(--faint2)' : 'var(--warn, #c8860d)' }}>
+                {importDeal
+                  ? (importDealUid === null && suggestedDealUid
+                      ? 'Matched by name — change it if this is the wrong deal.'
+                      : 'This abstract will show on the Deal Registry under this deal.')
+                  : 'Not linked — this abstract won\'t show on the Deal Registry. Pick the deal it belongs to.'}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); }} style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
+            <button onClick={() => { setShowImport(false); setImportJson(''); setImportFile(null); setImportDealUid(null); }} style={{ padding: '7px 18px', borderRadius: 4, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit' }}>Cancel</button>
             <button onClick={importAbstract} disabled={saving} className="btn btn-primary" style={{ padding: '6px 20px', fontSize: '0.78rem', cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Importing…' : 'Import'}</button>
           </div>
         </div>
@@ -1314,6 +1399,30 @@ export function LoansTab({ pinUnlocked, requirePin }) {
         <div style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{v}</div>
       </div>
     ));
+    // type_specific values are free-form: strings, string arrays (checklists), or
+    // small objects. Render each shape natively instead of dumping raw JSON.
+    const TsValue = ({ v }) => {
+      if (Array.isArray(v)) return (
+        <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {v.map((item, i) => (
+            <li key={i} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>
+              {item && typeof item === 'object' ? <TsValue v={item} /> : String(item)}
+            </li>
+          ))}
+        </ul>
+      );
+      if (v && typeof v === 'object') return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {Object.entries(v).map(([k, val]) => (
+            <div key={k} style={{ fontSize: 11.5, color: 'var(--text)', lineHeight: 1.5 }}>
+              <span style={{ color: 'var(--muted)' }}>{k.replace(/_/g, ' ')}: </span>
+              {val && typeof val === 'object' ? <TsValue v={val} /> : String(val)}
+            </div>
+          ))}
+        </div>
+      );
+      return <span style={{ whiteSpace: 'pre-wrap' }}>{String(v)}</span>;
+    };
     const ts = l.type_specific && typeof l.type_specific === 'object' ? l.type_specific : {};
     const tsEntries = Object.entries(ts).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
     const hasGuaranty = l.completion_guaranty_pct != null || l.repayment_guaranty_pct != null || l.guarantor_entity || l.guaranty_reduction_terms;
@@ -1427,7 +1536,7 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                 <Prose k="Notes" v={l.notes} />
                 {tsEntries.map(([k, v]) => (
                   <Prose key={k} k={`${LOAN_TYPE_LABEL[l.loan_type] || ''} · ${k.replace(/_/g, ' ')}`}
-                    v={typeof v === 'object' ? JSON.stringify(v, null, 1) : String(v)} />
+                    v={<TsValue v={v} />} />
                 ))}
               </Card>
             </>
@@ -1577,11 +1686,19 @@ export function LoansTab({ pinUnlocked, requirePin }) {
             <div>
               <div style={{ fontSize: 19, fontWeight: 600, color: 'var(--text)' }}>Loans</div>
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
-                {filtered.length} · {fmt$(totalAmount)} · {constructionCount} constr / {refinanceCount} refi{maturingThisYear ? ` · ${maturingThisYear} maturing ${thisYear}` : ''}
+                {filtered.length} loan{filtered.length === 1 ? '' : 's'} · {fmt$(totalAmount)}
               </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
+                {constructionCount} constr · {refinanceCount} refi{maturingThisYear ? ` · ${maturingThisYear} maturing ${thisYear}` : ''}
+              </div>
+              {fLender && (
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--warn)', marginTop: 2 }}>
+                  {fLender}&apos;s share — participations included
+                </div>
+              )}
               {reqGapCount > 0 && (
                 <div onClick={() => { setFReqGap(g => !g); setShowFilters(true); }} title="Abstract states reporting obligations, but nothing is scheduled — click to filter"
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--warn-text)', marginTop: 3, cursor: 'pointer' }}>
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--warn-text)', marginTop: 2, cursor: 'pointer' }}>
                   ⚠ {reqGapCount} missing reporting requirements
                 </div>
               )}
@@ -1645,7 +1762,9 @@ export function LoansTab({ pinUnlocked, requirePin }) {
                 style={{ cursor: 'pointer', padding: '13px 22px 13px 19px', borderBottom: '1px solid var(--border)', background: sel ? 'var(--panel2)' : 'transparent', borderLeft: `3px solid ${sel ? 'var(--text)' : 'transparent'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.property_name || l.borrower_entity || '—'}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}>{fmt$(l.loan_amount)}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}
+                    title={fLender && lenderShare(l) < 1 ? `${fLender}'s share of ${fmt$(l.loan_amount)}` : undefined}>
+                    {fmt$((Number(l.loan_amount) || 0) * lenderShare(l))}</span>
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--muted)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {l.lead_lender || '—'} · {LOAN_TYPE_LABEL[l.loan_type] || l.loan_type} · {matShort(l.maturity_date)}

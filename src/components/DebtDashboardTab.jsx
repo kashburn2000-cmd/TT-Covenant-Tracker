@@ -11,7 +11,7 @@ import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync, CLASSIFICATION_LABEL } from '../dealRegistry.js';
 import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
 import { TasksWidget } from './TasksWidget.jsx';
-import { buildLenderRollup, buildLenderComparison, rollupStats } from '../lenderExposure.js';
+import { buildLenderRollup, buildLenderComparison, rollupStats, projectHolders, holdersMatch, holdersShare, holdersLabel, holdersTitle } from '../lenderExposure.js';
 import { capExpectedReceipts, swapMtm, hedgeSummary } from '../hedgeCalc.js';
 import { portfolioMtm } from '../loanMtm.js';
 import { useIsMobile } from '../useIsMobile.js';
@@ -232,6 +232,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
   const [sourceFilter, setSourceFilter] = useState('all');
   const [fundFilter, setFundFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [lenderFilter, setLenderFilter] = useState('');   // '' = all lenders (deal view)
   const [showHidden, setShowHidden] = useState(false);
   const [showRemoved, setShowRemoved] = useState(false);
   const [editingFund, setEditingFund] = useState(null); // project id being edited
@@ -312,6 +313,24 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
   const funds = useMemo(() => [...new Set(projects.map(p => p.fund).filter(Boolean))].sort(), [projects]);
   const removed = useMemo(() => projects.filter(p => p.removed), [projects]);
   const hiddenCount = useMemo(() => projects.filter(p => p.hidden && !p.removed).length, [projects]);
+  // Every bank with a piece of any deal — leads and participants alike, so a
+  // participant is selectable here even though it appears on no schedule row.
+  const lenderNames = useMemo(
+    () => [...new Set(projects.flatMap(p => (p._holders || []).map(h => h.name)).filter(Boolean))].sort(),
+    [projects],
+  );
+
+  // Filtering to one lender switches the table from "the deals" to "that
+  // lender's book": each deal is scaled to the share that lender holds, so the
+  // portfolio tiles read as its exposure. Ratios are untouched — scaling both
+  // sides of LTC/LTV leaves them the deal's own.
+  const scaleToLender = (p) => {
+    const share = holdersShare(p._holders, lenderFilter);
+    if (share >= 1) return p;
+    const s = (v) => (v == null ? v : v * share);
+    return { ...p, loan_amount: s(p.loan_amount), project_cost: s(p.project_cost), appraised_value: s(p.appraised_value), guaranty_amt: s(p.guaranty_amt), _lenderShare: share };
+  };
+
   const rows = useMemo(() => projects
     .filter(p => !p.removed && p._status !== 'sold') // sold deals live on the Deal Registry tab
     .filter(p => !p._classification) // credit facilities get their own section below
@@ -319,7 +338,9 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
     .filter(p => sourceFilter === 'all' || p.source === sourceFilter)
     .filter(p => fundFilter === 'all' || (fundFilter === '(unassigned)' ? !p.fund : p.fund === fundFilter))
     .filter(p => categoryFilter === 'all' || (categoryFilter === '(unset)' ? !p.category : p.category === categoryFilter))
-    .sort(sort.cmp), [projects, sourceFilter, fundFilter, categoryFilter, showHidden, sort.sortKey, sort.sortDir]);
+    .filter(p => holdersMatch(p._holders, lenderFilter))
+    .map(scaleToLender)
+    .sort(sort.cmp), [projects, sourceFilter, fundFilter, categoryFilter, lenderFilter, showHidden, sort.sortKey, sort.sortDir]);
 
   // Credit facilities (e.g. the Simmons land facility) render in their own
   // strip, outside the project table and the portfolio total tiles. The
@@ -361,6 +382,15 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
           {funds.map(f => <option key={f} value={f}>{f}</option>)}
           <option value="(unassigned)">Unassigned</option>
         </select>
+        <select value={lenderFilter} onChange={e => setLenderFilter(e.target.value)} style={selStyle} title="Scope the table to one lender's share of each deal">
+          <option value="">All lenders</option>
+          {lenderNames.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        {lenderFilter && (
+          <span style={{ fontSize: '0.7rem', color: 'var(--warn)' }}>
+            showing {lenderFilter}&apos;s share of each deal
+          </span>
+        )}
         {hiddenCount > 0 && (
           <label style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
             <input type="checkbox" checked={showHidden} onChange={e => setShowHidden(e.target.checked)} style={{ width: 'auto' }} />
@@ -448,7 +478,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                   )}
                 </td>
                 <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{SOURCE_LABEL[p.source]}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>{p.lender || '—'}<Ov p={p} k="lender" type="text" /></td>
+                <td style={{ whiteSpace: 'nowrap' }} title={holdersTitle(p._holders)}>{holdersLabel(p._holders)}<Ov p={p} k="lender" type="text" /></td>
                 <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}<Ov p={p} k="loan_amount" type="currency" /></td>
                 <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.project_cost)}<Ov p={p} k="project_cost" type="currency" /></td>
                 <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.appraised_value)}<Ov p={p} k="appraised_value" type="currency" /></td>
@@ -533,7 +563,7 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                 {p.deal_uid && <span title="Deal Registry id — stable across every tab" className="mono" style={{ fontSize: '0.62rem', color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
                 <span className="pill yellow">{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>
                 <span className="mono" style={{ color: 'var(--text2)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                  {p.lender || '—'} · {fmtM(p.loan_amount)}{p.maturity_date ? ` · matures ${fmtDate(p.maturity_date)}` : ''}
+                  <span title={holdersTitle(p._holders)}>{holdersLabel(p._holders)}</span> · {fmtM(p.loan_amount)}{p.maturity_date ? ` · matures ${fmtDate(p.maturity_date)}` : ''}
                 </span>
                 {pinUnlocked && (
                   <span style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
@@ -704,7 +734,7 @@ function MaturityWidget({ projects, onSetHidden, onPatch, pinUnlocked }) {
                       <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, background: sqColor, marginRight: 8, verticalAlign: 'baseline' }} />
                       {p.name}{p._classification && <span className="pill yellow" style={{ marginLeft: 6 }}>{CLASSIFICATION_LABEL[p._classification] || p._classification}</span>}
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{p.lender || '—'}<Ov p={p} k="lender" type="text" /></td>
+                    <td style={{ whiteSpace: 'nowrap' }} title={holdersTitle(p._holders)}>{holdersLabel(p._holders)}<Ov p={p} k="lender" type="text" /></td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(p.loan_amount)}<Ov p={p} k="loan_amount" type="currency" /></td>
                     <td style={{ whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)', color: months < 6 ? 'var(--fail)' : 'var(--text2)', fontVariantNumeric: 'tabular-nums' }}>{label}</td>
                     {pinUnlocked && (
@@ -820,7 +850,12 @@ function LenderExposureWidget({ projects }) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${SB_URL}/rest/v1/loans?select=lead_lender,rate_spread_bps,loan_amount,loan_fee_pct,exit_fee_pct,extension_fee_pct,dscr_covenant,debt_yield_covenant,repayment_guaranty_pct,extension_count,prepayment_open`, { headers: SB_HEADERS });
+        // participants / lead_lender_commitment / deal_uid drive the exposure
+        // split; deal_uid is what joins an abstract to its schedule row.
+        const cols = 'lead_lender,rate_spread_bps,loan_amount,loan_fee_pct,exit_fee_pct,extension_fee_pct,dscr_covenant,debt_yield_covenant,repayment_guaranty_pct,extension_count,prepayment_open,participants,lead_lender_commitment';
+        let res = await fetch(`${SB_URL}/rest/v1/loans?select=${cols},deal_uid`, { headers: SB_HEADERS });
+        // Installs predating db/deal_registry_setup.sql's loans.deal_uid column.
+        if (!res.ok) res = await fetch(`${SB_URL}/rest/v1/loans?select=${cols}`, { headers: SB_HEADERS });
         if (res.ok) setLoans(await res.json());
       } catch { /* abstracts are enrichment only */ }
     })();
@@ -942,7 +977,14 @@ function LenderExposureWidget({ projects }) {
                 </tr>
                 {openKey === r.key && r.deals.map((d, i) => (
                   <tr key={i} style={{ background: 'var(--panel2)' }}>
-                    <td style={{ paddingLeft: '1.5rem', color: 'var(--muted)' }}>{d.name}</td>
+                    <td style={{ paddingLeft: '1.5rem', color: 'var(--muted)' }}>
+                      {d.name}
+                      {d.participated && (
+                        <span className="pill" style={{ marginLeft: 6 }} title="This lender holds part of the loan; the rest sits with the other participants">
+                          {fmtPct(d.share, 0)} share
+                        </span>
+                      )}
+                    </td>
                     <td />
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{fmtM(d.loan_amount)}</td>
                     <td />
@@ -2105,6 +2147,7 @@ const DEFAULT_LAYOUT = DEFAULT_WIDGETS.map(k => ({ i: k, ...WIDGETS[k].defaultGr
 export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   const [projects, setProjects] = useState([]);
   const [registry, setRegistry] = useState([]); // deal_registry rows — manual status overrides
+  const [abstracts, setAbstracts] = useState([]); // loan abstracts — participation splits per deal
   const [dbError, setDbError] = useState(null);
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadTimes, setUploadTimes] = useState({});
@@ -2140,6 +2183,12 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
           const rr = await fetch(`${SB_URL}/rest/v1/deal_registry?order=uid.asc`, { headers: SB_HEADERS });
           if (rr.ok) setRegistry(await rr.json());
         } catch { /* derive-only mode */ }
+        // Participation detail. Needs loans.deal_uid (same setup script); an
+        // install without it simply sees every deal held whole by its lead.
+        try {
+          const ar = await fetch(`${SB_URL}/rest/v1/loans?select=deal_uid,lead_lender,loan_amount,lead_lender_commitment,participants&deal_uid=not.is.null`, { headers: SB_HEADERS });
+          if (ar.ok) setAbstracts(await ar.json());
+        } catch { /* no participation splits */ }
         const s = await fetch(`${SB_URL}/rest/v1/settings?key=in.(atRiskUploaded,stabilizedUploaded)`, { headers: SB_HEADERS });
         if (s.ok) {
           const rows = await s.json();
@@ -2335,11 +2384,25 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
   // their own section and keeps them out of the portfolio totals, while the
   // Maturity Schedule and Guaranty Hub keep them (real exposure), labeled.
   const registryByUid = useMemo(() => new Map(registry.map(e => [e.uid, e])), [registry]);
+  // _holders is every bank with a piece of the deal (lead + participants from
+  // the linked abstract), so lender columns and filters see participations
+  // rather than just the one name on the schedule row.
+  const abstractByDeal = useMemo(() => {
+    const m = new Map();
+    for (const a of abstracts) if (a?.deal_uid && !m.has(a.deal_uid)) m.set(a.deal_uid, a);
+    return m;
+  }, [abstracts]);
   const merged = useMemo(() => projects.map(p => {
     const entry = registryByUid.get(p.deal_uid);
     const derived = deriveDebtRowStatus(p);
-    return { ...applyOverrides(p), _status: effectiveStatus(entry, derived), _classification: entry?.classification || null };
-  }), [projects, registryByUid]);
+    const eff = applyOverrides(p);
+    return {
+      ...eff,
+      _status: effectiveStatus(entry, derived),
+      _classification: entry?.classification || null,
+      _holders: projectHolders(eff, p.deal_uid ? abstractByDeal.get(p.deal_uid) : null),
+    };
+  }), [projects, registryByUid, abstractByDeal]);
   const visibleProjects = useMemo(() => merged.filter(p => !p.hidden && !p.removed && p._status !== 'sold'), [merged]);
 
   function renderWidget(key) {

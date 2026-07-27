@@ -1,4 +1,6 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { nameKey } from '../parseDebtSchedules.js';
+import { projectHolders, holdersMatch, holdersLabel, holdersTitle } from '../lenderExposure.js';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { parseWeeklyLeasingRows } from '../parseWeeklyLeasing.js';
 
@@ -67,10 +69,11 @@ function useSectionSort(defaultKey, defaultDir = 1) {
   return { key, dir, toggle, cmp };
 }
 
-function Section({ title, block, columns, sort, filterState }) {
+function Section({ title, block, columns, sort, filterState, lenderFilter, holdersOf }) {
   const rows = useMemo(() => block.properties
     .filter(r => filterState === 'All' || (r.cityState || '').startsWith(filterState))
-    .sort(sort.cmp), [block.properties, filterState, sort.key, sort.dir]);
+    .filter(r => !lenderFilter || holdersMatch(holdersOf(r), lenderFilter))
+    .sort(sort.cmp), [block.properties, filterState, lenderFilter, holdersOf, sort.key, sort.dir]);
 
   return (
     <div style={{ marginBottom: 28 }}>
@@ -122,6 +125,11 @@ export function LeasingTab() {
   const [uploadMsg, setUploadMsg] = useState('');
   const [dbLoading, setDbLoading] = useState(true);
   const [filterState, setFilterState] = useState('All');
+  const [lenderFilter, setLenderFilter] = useState('');
+  // Leasing rows carry no lender — they're joined to the debt schedule by
+  // normalized property name, the same key the Deal Registry links on.
+  const [debtRows, setDebtRows] = useState([]);
+  const [abstracts, setAbstracts] = useState([]);
   const luSort = useSectionSort('name');
   const stSort = useSectionSort('name');
 
@@ -139,6 +147,15 @@ export function LeasingTab() {
       } catch (err) {
         console.error('Leasing load error:', err);
       }
+      // Lender comes from the debt schedule, joined by property name below.
+      try {
+        const [dRes, aRes] = await Promise.all([
+          fetch(`${SB_URL}/rest/v1/debt_projects?select=name,name_key,lender,deal_uid`, { headers: SB_HEADERS }),
+          fetch(`${SB_URL}/rest/v1/loans?select=deal_uid,lead_lender,loan_amount,lead_lender_commitment,participants&deal_uid=not.is.null`, { headers: SB_HEADERS }),
+        ]);
+        if (dRes.ok) setDebtRows(await dRes.json());
+        if (aRes.ok) setAbstracts(await aRes.json());
+      } catch { /* leasing still works without lender data */ }
       setDbLoading(false);
     })();
   }, []);
@@ -223,6 +240,30 @@ export function LeasingTab() {
 
   const lu = data.leaseUp;
   const st = data.stabilized;
+  // Join leasing properties to the debt schedule by normalized name — the same
+  // key the Deal Registry links on. A property whose marketing name doesn't
+  // match any schedule row simply has no lender; the filter bar reports how
+  // many, so a bad join is visible rather than silently dropping rows.
+  const holdersByName = useMemo(() => {
+    const abstractByDeal = new Map();
+    for (const a of abstracts) if (a?.deal_uid && !abstractByDeal.has(a.deal_uid)) abstractByDeal.set(a.deal_uid, a);
+    const m = new Map();
+    for (const r of debtRows) {
+      const k = r.name_key || nameKey(r.name);
+      if (!k || m.has(k)) continue;
+      m.set(k, projectHolders(r, r.deal_uid ? abstractByDeal.get(r.deal_uid) : null));
+    }
+    return m;
+  }, [debtRows, abstracts]);
+  const holdersOf = useCallback((r) => holdersByName.get(nameKey(r?.name)) || [], [holdersByName]);
+
+  const allProps = [...(lu?.properties || []), ...(st?.properties || [])];
+  const lenderNames = useMemo(
+    () => [...new Set(allProps.flatMap(r => holdersOf(r).map(h => h.name)).filter(Boolean))].sort(),
+    [holdersOf, lu, st],
+  );
+  const unmatchedCount = allProps.filter(r => holdersOf(r).length === 0).length;
+
   const states = ['All', ...[...new Set(
     [...(lu?.properties || []), ...(st?.properties || [])].map(r => (r.cityState || '').split(',')[0].trim()).filter(Boolean)
   )].sort()];
@@ -234,7 +275,10 @@ export function LeasingTab() {
   const propertyCell = (r) => (
     <div>
       <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 12.5 }}>{r.name || r.cityState}</div>
-      <div className="mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{r.cityState} · {r.units ?? '—'} units</div>
+      <div className="mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+        {r.cityState} · {r.units ?? '—'} units
+        {holdersOf(r).length > 0 && <span title={holdersTitle(holdersOf(r))}> · {holdersLabel(holdersOf(r))}</span>}
+      </div>
     </div>
   );
 
@@ -281,6 +325,19 @@ export function LeasingTab() {
               {s === 'All' ? 'All states' : s}
             </button>
           ))}
+          {lenderNames.length > 0 && (
+            <select value={lenderFilter} onChange={e => setLenderFilter(e.target.value)}
+              title="Show only properties whose loan this bank has a piece of — participations included"
+              style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', padding: '0.25rem 0.5rem', fontFamily: 'inherit', fontSize: '0.72rem' }}>
+              <option value="">All lenders</option>
+              {lenderNames.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          )}
+          {lenderFilter && unmatchedCount > 0 && (
+            <span className="mono" style={{ fontSize: 11, color: 'var(--warn)' }} title="These properties have no matching row on the debt schedule, so no lender is known for them">
+              {unmatchedCount} unmatched
+            </span>
+          )}
           {uploadLabel(false)}
           {uploadMsg && <span className="mono" style={{ fontSize: 10.5, color: uploadMsg.startsWith('✓') ? passColor : failColor }}>{uploadMsg}</span>}
         </div>
@@ -298,7 +355,7 @@ export function LeasingTab() {
             <Card label="In-Place Rent vs PF" value={fmtPct(lu.totals.inPlaceRentPF)} color={pfColor(lu.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(lu.totals.marketRentPF)} of proforma`} />
             <Card label="Avg Net Move-Ins / Mo" value={fmtNum(lu.totals.avgNetMI, 0)} sub={`${fmtNum(lu.totals.avgNetLeases, 0)} net leases / mo`} />
           </div>
-          <Section title="Lease-Up Properties" block={lu} columns={luColumns} sort={luSort} filterState={filterState} />
+          <Section title="Lease-Up Properties" block={lu} columns={luColumns} sort={luSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} />
         </>
       )}
 
@@ -314,7 +371,7 @@ export function LeasingTab() {
             <Card label="In-Place Rent vs PF" value={fmtPct(st.totals.inPlaceRentPF)} color={pfColor(st.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(st.totals.marketRentPF)} of proforma`} />
             <Card label="Closing Ratio" value={fmtPct(st.totals.closingRatio, 0)} sub="Leases ÷ traffic" />
           </div>
-          <Section title="Stabilized Properties" block={st} columns={stColumns} sort={stSort} filterState={filterState} />
+          <Section title="Stabilized Properties" block={st} columns={stColumns} sort={stSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} />
         </>
       )}
 

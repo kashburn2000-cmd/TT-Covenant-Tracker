@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { parseLatLng, mergeProjects } from '../mapProjects.js';
+import { projectHolders, holdersMatch, holdersLabel, holdersTitle } from '../lenderExposure.js';
 import { LockIcon } from '../icons.jsx';
 import { useIsMobile } from '../useIsMobile.js';
 
@@ -52,7 +53,7 @@ function projectRows(p) {
   if (p.detail) {
     const d = p.detail;
     add('Location', p.location);
-    add('Lender', d.lender);
+    add('Lender', p.holders?.length ? holdersLabel(p.holders) : d.lender);
     add('Loan', fmt$(d.loan_amount));
     add('Maturity', d.maturity_date ? fmtDate(d.maturity_date) : null);
     add('Units', d.units);
@@ -125,6 +126,8 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   const [stageOn,   setStageOn]   = useState({ pipeline: true, committed: true, construction: true, stabilized: true });
   const [coordDrafts, setCoordDrafts] = useState({}); // per-project paste-coordinates inputs
   const [search,    setSearch]    = useState('');
+  const [lenderFilter, setLenderFilter] = useState('');  // '' = every lender
+  const [abstracts, setAbstracts] = useState([]);        // participation splits per deal
   const [selectedKey, setSelectedKey] = useState(null); // drives the floating detail card + 1.4x pin
 
   const mapDivRef  = useRef(null);
@@ -138,20 +141,43 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
   useEffect(() => { armedRef.current = armedKey; }, [armedKey]);
 
   const registryByUid = useMemo(() => new Map(registry.map(e => [e.uid, e])), [registry]);
-  const projects = useMemo(() => mergeProjects(debtRows, deals, registryByUid), [debtRows, deals, registryByUid]);
+  const abstractByDeal = useMemo(() => {
+    const m = new Map();
+    for (const a of abstracts) if (a?.deal_uid && !m.has(a.deal_uid)) m.set(a.deal_uid, a);
+    return m;
+  }, [abstracts]);
+  // Every bank on a project: the schedule lender plus the linked abstract's
+  // participants, or a pipeline deal's named lenders (nothing is participated
+  // before close). Drives the lender filter and the detail card.
+  const holdersFor = (p) => {
+    if (p.detail) return projectHolders({ lender: p.detail.lender }, p.uid ? abstractByDeal.get(p.uid) : null);
+    if (p.deal) return [p.deal.primary_lender, p.deal.secondary_lender].filter(Boolean).map((n, i) => ({ name: n, share: 1, lead: i === 0 }));
+    return [];
+  };
+  const projects = useMemo(
+    () => mergeProjects(debtRows, deals, registryByUid).map(p => ({ ...p, holders: holdersFor(p) })),
+    [debtRows, deals, registryByUid, abstractByDeal],
+  );
+  const lenderNames = useMemo(
+    () => [...new Set(projects.flatMap(p => p.holders.map(h => h.name)).filter(Boolean))].sort(),
+    [projects],
+  );
+  const matchesLender = (p) => !lenderFilter || holdersMatch(p.holders, lenderFilter);
   // A pin saved before the project was linked to the registry sits under the
   // name key; once linked, new saves key by uid. Check both.
   const locFor = (p) => locations[p.key] || (p.name_key ? locations[p.name_key] : undefined);
   const pinned   = useMemo(() => projects.filter(p => locFor(p)), [projects, locations]);
   const unpinned = useMemo(() => projects.filter(p => !locFor(p)), [projects, locations]);
-  const visiblePins = useMemo(() => pinned.filter(p => stageOn[p.stage]), [pinned, stageOn]);
+  const visiblePins = useMemo(() => pinned.filter(p => stageOn[p.stage] && matchesLender(p)), [pinned, stageOn, lenderFilter]);
   const searchLower = search.trim().toLowerCase();
   // Sidebar list: every project; in edit mode the unplaced ones float to the
   // top so they're easy to drag/place.
   const listShown = useMemo(() => {
-    const f = projects.filter(p => !searchLower || p.name.toLowerCase().includes(searchLower) || (p.location || '').toLowerCase().includes(searchLower));
+    const f = projects
+      .filter(p => !searchLower || p.name.toLowerCase().includes(searchLower) || (p.location || '').toLowerCase().includes(searchLower))
+      .filter(matchesLender);
     return editMode ? [...f.filter(p => !locFor(p)), ...f.filter(p => locFor(p))] : f;
-  }, [projects, searchLower, editMode, locations]);
+  }, [projects, searchLower, editMode, locations, lenderFilter]);
 
   // ── Load everything ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -171,6 +197,12 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
         if (dRes.ok) setDebtRows(await dRes.json());
         if (pRes.ok) setDeals(await pRes.json());
         if (rRes.ok) setRegistry(await rRes.json()); // table may not exist yet — statuses just derive
+        // Participation detail (needs loans.deal_uid); absent, every deal
+        // reads as wholly its schedule lender's.
+        try {
+          const aRes = await fetch(`${SB_URL}/rest/v1/loans?select=deal_uid,lead_lender,loan_amount,lead_lender_commitment,participants&deal_uid=not.is.null`, { headers: SB_HEADERS });
+          if (aRes.ok) setAbstracts(await aRes.json());
+        } catch { /* no participation splits */ }
         if (lRes.ok) {
           const rows = await lRes.json();
           const byKey = {};
@@ -459,6 +491,12 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
         <div style={{ padding: '9px 22px', borderBottom: '1px solid var(--border)' }}>
           <input type="text" placeholder="Search projects…" value={search} onChange={e => setSearch(e.target.value)}
             style={{ width: '100%', fontFamily: MONO, fontSize: 11, padding: '5px 9px', borderRadius: 6, border: '1px solid var(--border2)', background: 'var(--panel)', color: 'var(--text)' }} />
+          <select value={lenderFilter} onChange={e => setLenderFilter(e.target.value)}
+            title="Show only projects this bank has a piece of — participations included"
+            style={{ width: '100%', marginTop: 6, fontFamily: MONO, fontSize: 11, padding: '5px 9px', borderRadius: 6, border: '1px solid var(--border2)', background: 'var(--panel2)', color: 'var(--text)' }}>
+            <option value="">All lenders</option>
+            {lenderNames.map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
         </div>
 
         {/* Project list */}
