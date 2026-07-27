@@ -3,6 +3,9 @@ import { nameKey } from '../parseDebtSchedules.js';
 import { projectHolders, holdersMatch, holdersLabel, holdersTitle } from '../lenderExposure.js';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { parseWeeklyLeasingRows } from '../parseWeeklyLeasing.js';
+import { leasingKey } from '../dealLinks.js';
+import { useDealLinks } from './DealLinksContext.jsx';
+import { DealPicker } from './ConnectionsPanel.jsx';
 
 // ── Leasing Tab ───────────────────────────────────────────────────────────────
 // Driven by the "Weekly Leasing Summary" workbook — the report auto-emailed
@@ -69,7 +72,7 @@ function useSectionSort(defaultKey, defaultDir = 1) {
   return { key, dir, toggle, cmp };
 }
 
-function Section({ title, block, columns, sort, filterState, lenderFilter, holdersOf }) {
+function Section({ title, block, columns, sort, filterState, lenderFilter, holdersOf, highlightKey }) {
   const rows = useMemo(() => block.properties
     .filter(r => filterState === 'All' || (r.cityState || '').startsWith(filterState))
     .filter(r => !lenderFilter || holdersMatch(holdersOf(r), lenderFilter))
@@ -97,8 +100,15 @@ function Section({ title, block, columns, sort, filterState, lenderFilter, holde
               </tr>
             </thead>
             <tbody>
+              {/* highlightKey marks the row a jump from another tab was
+                  following, so it's findable in a long table. */}
               {rows.map(r => (
-                <tr key={r.name || r.cityState}>
+                <tr
+                  key={r.name || r.cityState}
+                  style={highlightKey && leasingKey(r) === highlightKey
+                    ? { background: 'color-mix(in srgb, var(--accent) 9%, transparent)', boxShadow: 'inset 3px 0 0 var(--accent)' }
+                    : undefined}
+                >
                   {columns.map(c => (
                     <td key={c.key} className={c.right ? 'mono' : undefined} style={{
                       padding: '10px 14px', textAlign: c.right ? 'right' : 'left',
@@ -119,19 +129,21 @@ function Section({ title, block, columns, sort, filterState, lenderFilter, holde
   );
 }
 
-export function LeasingTab() {
+export function LeasingTab({ dealNav, pinUnlocked = false, focusUid = null, onFocusConsumed }) {
   const [data, setData] = useState(null);          // parsed weekly-summary object
   const [legacySnapshot, setLegacySnapshot] = useState(false);
   const [uploadMsg, setUploadMsg] = useState('');
   const [dbLoading, setDbLoading] = useState(true);
   const [filterState, setFilterState] = useState('All');
   const [lenderFilter, setLenderFilter] = useState('');
+  const [linkEditor, setLinkEditor] = useState(false);
   // Leasing rows carry no lender — they're joined to the debt schedule by
   // normalized property name, the same key the Deal Registry links on.
   const [debtRows, setDebtRows] = useState([]);
   const [abstracts, setAbstracts] = useState([]);
   const luSort = useSectionSort('name');
   const stSort = useSectionSort('name');
+  const dealLinks = useDealLinks();
 
   // ── Load latest snapshot ───────────────────────────────────────────────────
   useEffect(() => {
@@ -217,10 +229,15 @@ export function LeasingTab() {
     </label>
   );
 
-  // Join leasing properties to the debt schedule by normalized name — the same
-  // key the Deal Registry links on. A property whose marketing name doesn't
-  // match any schedule row simply has no lender; the filter bar reports how
-  // many, so a bad join is visible rather than silently dropping rows.
+  // Join leasing properties to their deal. The Deal Registry is the primary
+  // route — a leasing row is scored onto a deal by shared name words, which
+  // reaches names an exact normalized match never could ("Ellenton" vs "TTRes
+  // at Ellenton, FL") — and from the deal come the lender, the schedule figures,
+  // the abstract and the covenant tests. The old direct name_key join to
+  // debt_projects stays as the fallback for installs where the registry hasn't
+  // been set up. A property matching nothing simply has no lender; the filter
+  // bar reports how many, so a bad join is visible rather than silently
+  // dropping rows.
   // These hooks must stay above the loading/empty returns below — bailing out
   // early with a different hook count is what React refuses to render.
   const holdersByName = useMemo(() => {
@@ -234,7 +251,16 @@ export function LeasingTab() {
     }
     return m;
   }, [debtRows, abstracts]);
-  const holdersOf = useCallback((r) => holdersByName.get(nameKey(r?.name)) || [], [holdersByName]);
+
+  const { byUid, leasingUid } = dealLinks.index;
+  const bundleOf = useCallback(
+    (r) => byUid.get(leasingUid.get(leasingKey(r))) || null,
+    [byUid, leasingUid],
+  );
+  const holdersOf = useCallback((r) => {
+    const holders = bundleOf(r)?.debt.holders;
+    return holders?.length ? holders : (holdersByName.get(nameKey(r?.name)) || []);
+  }, [bundleOf, holdersByName]);
 
   const allProps = useMemo(
     () => [...(data?.leaseUp?.properties || []), ...(data?.stabilized?.properties || [])],
@@ -243,6 +269,22 @@ export function LeasingTab() {
   const lenderNames = useMemo(
     () => [...new Set(allProps.flatMap(r => holdersOf(r).map(h => h.name)).filter(Boolean))].sort(),
     [holdersOf, allProps],
+  );
+
+  // Arriving from another tab's Leasing chip — mark that deal's row and hand
+  // the focus back, so the highlight survives the navigation being consumed.
+  const [highlightKey, setHighlightKey] = useState(null);
+  useEffect(() => {
+    if (!focusUid) return;
+    let key = null;
+    for (const [k, uid] of leasingUid) if (uid === focusUid) { key = k; break; }
+    setHighlightKey(key);
+    onFocusConsumed?.();
+  }, [focusUid, leasingUid, onFocusConsumed]);
+
+  const unlinkedCount = useMemo(
+    () => (dealLinks.ready ? allProps.filter(r => !bundleOf(r)).length : 0),
+    [dealLinks.ready, allProps, bundleOf],
   );
 
   // ── Loading / empty states ─────────────────────────────────────────────────
@@ -278,15 +320,56 @@ export function LeasingTab() {
   const netColor = v => (v > 0 ? passColor : v < 0 ? failColor : 'var(--faint)');
   const pfColor = v => (v == null ? undefined : v >= 1 ? passColor : 'var(--text2)');
 
-  const propertyCell = (r) => (
-    <div>
-      <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 12.5 }}>{r.name || r.cityState}</div>
-      <div className="mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
-        {r.cityState} · {r.units ?? '—'} units
-        {holdersOf(r).length > 0 && <span title={holdersTitle(holdersOf(r))}> · {holdersLabel(holdersOf(r))}</span>}
-      </div>
-    </div>
+  // A leasing property, with everything the deal behind it connects to: the
+  // registry id, then one chip per other screen holding data on the same deal.
+  // Chips only appear where there is something to open, so an empty row is a
+  // statement that nothing else has this property rather than a dead link.
+  const jump = (label, fn, title) => (
+    <button
+      key={label} onClick={fn} title={title}
+      style={{
+        fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600, letterSpacing: '0.04em',
+        padding: '1px 5px', borderRadius: 3, cursor: 'pointer', whiteSpace: 'nowrap',
+        border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+        background: 'color-mix(in srgb, var(--accent) 9%, transparent)', color: 'var(--accent)',
+      }}
+    >{label}</button>
   );
+
+  const propertyCell = (r) => {
+    const b = bundleOf(r);
+    const holders = holdersOf(r);
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, color: 'var(--text)', fontSize: 12.5 }}>{r.name || r.cityState}</span>
+          {b && (
+            <span className="mono" title={`Deal Registry id — ${b.name}`} style={{ fontSize: 9, color: 'var(--faint2)', fontVariantNumeric: 'tabular-nums' }}>{b.uid}</span>
+          )}
+        </div>
+        <div className="mono" style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+          {r.cityState} · {r.units ?? '—'} units
+          {holders.length > 0 && <span title={holdersTitle(holders)}> · {holdersLabel(holders)}</span>}
+        </div>
+        {(b || linkEditor) && (
+          <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+            {b?.debt.eff && dealNav?.debt && jump('Debt', () => dealNav.debt(b), 'Open this deal on the Debt Dashboard')}
+            {b?.abstract && dealNav?.loans && jump('Abstract', () => dealNav.loans(b), 'Open this deal’s loan abstract')}
+            {b?.covenant.length > 0 && dealNav?.covenant && jump(`Covenant ${b.covenant.length}`, () => dealNav.covenant(b), 'Open this deal on the Covenant Tracker')}
+            {b?.pipeline && dealNav?.pipeline && jump('Pipeline', () => dealNav.pipeline(b), 'Open this deal on the Lender Pipeline')}
+            {linkEditor && (
+              <DealPicker
+                label=""
+                value={b?.uid || ''}
+                registry={dealLinks.registry}
+                onChange={(uid) => dealLinks.linkLeasingRow(leasingKey(r), uid || '').catch(e => setUploadMsg(e.message))}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const luColumns = [
     { key: 'name', label: 'Property', render: propertyCell },
@@ -344,6 +427,18 @@ export function LeasingTab() {
               {unmatchedCount} unmatched
             </span>
           )}
+          {dealLinks.ready && (
+            <span className="mono" style={{ fontSize: 11, color: unlinkedCount ? 'var(--warn)' : 'var(--muted)' }}
+              title="Leasing rows are matched to a deal by name — everything the deal touches (debt schedule, abstract, covenant tests) is reachable from a matched row">
+              {allProps.length - unlinkedCount}/{allProps.length} linked to a deal
+            </span>
+          )}
+          {dealLinks.ready && pinUnlocked && (
+            <button className={`chip ${linkEditor ? 'chip-active' : ''}`} onClick={() => setLinkEditor(v => !v)}
+              title="Point a property at a different deal — use when two deals in one city were matched the wrong way round">
+              {linkEditor ? 'Done linking' : '⇄ Edit deal links'}
+            </button>
+          )}
           {uploadLabel(false)}
           {uploadMsg && <span className="mono" style={{ fontSize: 10.5, color: uploadMsg.startsWith('✓') ? passColor : failColor }}>{uploadMsg}</span>}
         </div>
@@ -361,7 +456,7 @@ export function LeasingTab() {
             <Card label="In-Place Rent vs PF" value={fmtPct(lu.totals.inPlaceRentPF)} color={pfColor(lu.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(lu.totals.marketRentPF)} of proforma`} />
             <Card label="Avg Net Move-Ins / Mo" value={fmtNum(lu.totals.avgNetMI, 0)} sub={`${fmtNum(lu.totals.avgNetLeases, 0)} net leases / mo`} />
           </div>
-          <Section title="Lease-Up Properties" block={lu} columns={luColumns} sort={luSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} />
+          <Section title="Lease-Up Properties" block={lu} columns={luColumns} sort={luSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} highlightKey={highlightKey} />
         </>
       )}
 
@@ -377,7 +472,7 @@ export function LeasingTab() {
             <Card label="In-Place Rent vs PF" value={fmtPct(st.totals.inPlaceRentPF)} color={pfColor(st.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(st.totals.marketRentPF)} of proforma`} />
             <Card label="Closing Ratio" value={fmtPct(st.totals.closingRatio, 0)} sub="Leases ÷ traffic" />
           </div>
-          <Section title="Stabilized Properties" block={st} columns={stColumns} sort={stSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} />
+          <Section title="Stabilized Properties" block={st} columns={stColumns} sort={stSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} highlightKey={highlightKey} />
         </>
       )}
 

@@ -172,31 +172,48 @@ export function nameTokens(s) {
 
 // Overlap of two token sets, normalized by the smaller one so a short name
 // ("Sarasota") can fully match a longer one ("TTRes at Sarasota, FL").
-function tokenScore(a, b) {
+export function tokenScore(a, b) {
   if (!a.size || !b.size) return 0;
   let shared = 0;
   for (const t of a) if (b.has(t)) shared++;
   return shared / Math.min(a.size, b.size);
 }
 
-// Best-guess registry uid for a loan abstract, or null. Returns null when
-// nothing scores well enough AND when the top two candidates tie — two deals
-// in the same city are indistinguishable on name alone, and a confident-looking
-// wrong guess is worse than no guess when the user is confirming each one.
-export function suggestDealUid(loan, registry = []) {
-  const loanSets = [loan?.property_name, loan?.borrower_entity]
-    .map(nameTokens)
-    .filter(s => s.size);
-  if (!loanSets.length) return null;
+// Best registry uid for one or more candidate names, or null. `candidates` is
+// the list of names to try (a covenant row has one, an abstract has property
+// name + borrower entity); the best score across them wins.
+//
+// Returns null when nothing scores well enough AND when the top two candidates
+// tie — two deals in the same city are indistinguishable on name alone, and a
+// confident-looking wrong guess is worse than no guess. `aliases` lets callers
+// widen a registry entry's name set with the names it goes by elsewhere (sheet
+// names, pipeline names) so a canonical name that drifted still matches.
+export function matchNameToUid(candidates, registry = [], { minScore = 0.5, aliases = null } = {}) {
+  const sets = (Array.isArray(candidates) ? candidates : [candidates]).map(nameTokens).filter(s => s.size);
+  if (!sets.length) return null;
 
   const scored = registry
-    .map(e => ({ uid: e.uid, score: Math.max(...loanSets.map(ls => tokenScore(ls, nameTokens(e.name)))) }))
-    .filter(s => s.score >= 0.5)
+    .map(e => {
+      const names = [e.name, ...(aliases?.get(e.uid) || [])];
+      let best = 0;
+      for (const n of names) {
+        const nt = nameTokens(n);
+        for (const s of sets) best = Math.max(best, tokenScore(s, nt));
+      }
+      return { uid: e.uid, score: best };
+    })
+    .filter(s => s.score >= minScore)
     .sort((a, b) => b.score - a.score);
 
   if (!scored.length) return null;
   if (scored.length > 1 && scored[1].score === scored[0].score) return null;
   return scored[0].uid;
+}
+
+// Best-guess registry uid for a loan abstract, or null. Thin wrapper kept for
+// the Import Abstract picker, which pre-selects (never commits) the guess.
+export function suggestDealUid(loan, registry = []) {
+  return matchNameToUid([loan?.property_name, loan?.borrower_entity], registry);
 }
 
 // ── Supabase executors ───────────────────────────────────────────────────────

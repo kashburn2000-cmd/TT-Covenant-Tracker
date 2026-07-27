@@ -5,9 +5,10 @@
 --
 -- Creates deal_registry: one row per real-world deal with a stable
 -- human-readable id (TT-001, TT-002, …) that persists across schedule
--- re-uploads, renames, and tabs. debt_projects, pipeline_deals, and
--- project_locations each gain a deal_uid column pointing at the registry,
--- so once a row is linked nothing depends on name matching again.
+-- re-uploads, renames, and tabs. debt_projects, pipeline_deals,
+-- project_locations, properties (covenant tests) and loans (abstracts) each
+-- gain a deal_uid column pointing at the registry, so once a row is linked
+-- nothing depends on name matching again.
 --
 -- Status lifecycle: pipeline → committed → construction → stabilized → sold.
 -- A NULL status means "derive from where the deal appears" (schedule source
@@ -42,6 +43,19 @@ ALTER TABLE deal_registry ADD COLUMN IF NOT EXISTS classification text
 ALTER TABLE debt_projects     ADD COLUMN IF NOT EXISTS deal_uid text;
 ALTER TABLE pipeline_deals    ADD COLUMN IF NOT EXISTS deal_uid text;
 ALTER TABLE project_locations ADD COLUMN IF NOT EXISTS deal_uid text;
+
+-- Covenant tests link too. properties.property is a short marketing name
+-- ("Sarasota") that never equals a schedule name ("TTRes at Sarasota, FL"), so
+-- the first link is scored on shared name words rather than an exact match —
+-- then written here and never guessed at again. Portfolio rows (the 2022 Fund)
+-- match no single deal and stay NULL.
+DO $$
+BEGIN
+  IF to_regclass('public.properties') IS NOT NULL THEN
+    ALTER TABLE properties ADD COLUMN IF NOT EXISTS deal_uid text;
+    CREATE INDEX IF NOT EXISTS properties_deal_uid_idx ON properties (deal_uid);
+  END IF;
+END $$;
 
 -- Loan abstracts link too, but by hand rather than by name: the abstract's
 -- names ("Sarasota", "TTRES CO Wheat Ridge Kipling St, LLC") never equal the

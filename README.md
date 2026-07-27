@@ -63,6 +63,9 @@ Curves load from the `sofr_curve` / `ten_year_curve` tables (a hardcoded Chatham
 #### Math transparency panel
 Expandable per-row panel showing the full calculation chain: inputs (loan amount / commitment, NOI, amortization), rate selection with all three prongs listed and the winner highlighted, the NOI build-up (income and expense months, averages, adjustments, annualized total), debt service (amortizing payment or T-3 rolling interest breakdown for variable loans), and the DSCR / DY result with paydown-to-cure.
 
+#### Connections
+Each test carries the deal's registry id (`properties.deal_uid`), so the detail pane shows the same loan as the Debt Dashboard sees it, its loan abstract, and how it is leasing — with a click through to any of them. See [Connections](#connections) for the full picture and the tie-out warnings. The 2022 Fund row tests a facility across nine properties rather than one deal, so it links to nothing itself; instead each fund sub-row carries that property's occupancy and its own deal id.
+
 #### History & Prior Test
 Every update writes a snapshot (NOI, loan, rate, debt service, result) to `property_events`; users can also add comments. Snapshots are flagged monthly vs. interim (`is_monthly`), and a snapshot can be explicitly pinned as the Prior Test baseline (`src/priorTest.js`) — the table's **Prior Test** column and Doc View's trend arrows compare against it.
 
@@ -89,6 +92,7 @@ Portfolio-wide weekly leasing performance (`src/components/LeasingTab.jsx`), dri
 - Only the latest snapshot is kept: each upload replaces the single row in `leasing_snapshot` (stored as the `weekly_summary_v1` shape; snapshots from the retired Lender Leasing Comparison upload render as the empty state prompting a fresh upload, and uploading the old workbook by mistake is detected and rejected with a pointer to the right file)
 - The [Monday reminder banner](#weekly-upload-reminder) tracks this upload via `leasing_snapshot.uploaded_at`
 - **Fully hands-off option:** the [weekly email ingest](#weekly-leasing-email-ingest) reads the Monday email from a dedicated Gmail mailbox and loads the attachment automatically — same parser, same table; the manual upload button remains as the fallback
+- **Linked to the rest of the app:** each property is matched to its Deal Registry id by name, which is where its lender comes from (participations included) and how the row reaches everything else — chips under the property name open the deal on the Debt Dashboard, its loan abstract, or its covenant tests. The header reports how many properties are linked; **⇄ Edit deal links** (edit mode) repoints one by hand. Occupancy, leased %, 8-week projection and rent-vs-proforma flow the other way too, into the Connections panel on the Covenant Tracker and Loans tabs
 
 ### Lender Pipeline
 A financing pipeline tracker for development deals (`src/components/PipelineTab.jsx`), stored in `pipeline_deals`.
@@ -115,6 +119,7 @@ A queryable database of closed-loan abstracts (construction + refinance), replac
 - Expandable per-loan detail view covering all terms, covenants, extension, prepayment, and type-specific JSON
 - **Import Abstract** form (PIN-gated): paste the JSON sidecar (or auto-fill it from the attached `.docx`) + attach the `.docx`; re-importing the same doc updates in place (no duplicates)
 - **Reporting requirements pulled from the abstract**: the reporting section is parsed into structured deliverables (`src/parseReporting.js`) that feed the nightly reminders and the accounting digest. Deadlines are stored the way abstracts word them — *45 days after quarter end* — so each occurrence lands on the real period end plus those days (Mar 31 → May 15, Jun 30 → Aug 14) on the calendar fiscal year; entering one by hand asks for the same thing and previews the next three dates. The detail panel groups deliverables under the date they're next due, lists 90 days ahead by default (30 / 90 / 180 / 1 yr / All), and collapses on the ▼ toggle — loans whose abstract states reporting obligations but has nothing scheduled are flagged in the detail panel, counted in the list header, and filterable, with a one-click **⚙ Extract from abstract text** for loans imported before the parser existed
+- **Connections panel** above the terms: once the abstract is linked to a deal, the detail pane shows that deal's schedule figures, covenant tests, leasing performance and pipeline card, and flags where the abstract's note amount or maturity disagrees with the schedule (see [Connections](#connections))
 - **Download .docx** per loan via short-lived Supabase Storage signed URL (private `loan-docs` bucket)
 - PDF export of the filtered list
 - One-time backfill script (`scripts/backfill-loans.mjs`) parses a folder of existing Word abstracts into rows and uploads the source docs
@@ -131,6 +136,8 @@ A drag-and-drop dashboard of movable, resizable widgets (`src/components/DebtDas
 - **Filter by lender on the Map and Leasing tabs** — the Project Map's sidebar gains an **All lenders** dropdown that filters both the pins and the project list to deals a bank has a piece of (participations included; pipeline deals match on their named lenders). The Leasing Dashboard gains the same dropdown — leasing rows carry no lender of their own, so properties are joined to the debt schedule by normalized name (`nameKey`, the key the Deal Registry links on) and the matched lender shows under the property name. Properties whose marketing name matches no schedule row have no lender; the count of those is shown next to the filter rather than dropping them silently. The Loans tab already sorted and filtered by lender — its filter now matches participations too.
 - **Lender columns are participation-aware everywhere** — the Leverage Tracker, Maturity Schedule, Guaranty Hub and Excel export show every bank holding a deal (`BOKF +1`, hover for `BOKF 65% (lead) · RCB Bank 35%`) rather than only the schedule's lead, so sorting by lender surfaces a deal under any of its holders. Deals stay **one row** — duplicating them per holder would double-count loan and cost in portfolio LTC / LTV. Filtering to a single lender (the Leverage Tracker's lender dropdown, the Loans tab's lender box) switches from the deal view to **that lender's book**: each deal is scaled to the share that bank holds, so the totals read as its exposure. Per-deal LTC / LTV are unchanged by the scaling — both sides of the ratio move together — and the Loans tab's lender box now matches participations, not just the loans a bank leads.
 - **Lender Exposure** — dollars per lending relationship across both schedules (`src/lenderExposure.js`), with concentration tiles, name-variant folding ("Simmons Bank" and "Simmons" are one relationship), and a click-through deal list. **Participations are split by who actually holds the paper:** where a deal's linked abstract records participants, the project's loan and TTH-guaranty dollars are divided on those shares, so a lead that syndicated $18.1M of a $51.7M loan shows $33.6M of exposure and the participant shows $18.1M — each participated deal is tagged with the holder's share in the expanded list. Shares come from the abstract but dollars come from the schedule, so every deal's slices still sum to that deal and the portfolio total ties out to the Leverage Tracker unchanged. An abstract recording a lead commitment short of the loan with no participants named puts the remainder under *(undisclosed participants)* rather than overstating the lead. Deals with no linked abstract (see the Deal Registry) stay wholly with the schedule's lender.
+
+- **Deal Connections** *(new — existing layouts pick it up via **+ Add Widget**)* — a row per deal showing every screen that holds data on it (covenant tests, both schedules, the pipeline, the abstract, the leasing report, the map pin), lit where the deal appears and dim where it doesn't. Tiles count the gaps — closed loans with no abstract, building or stabilized deals with no leasing row — and a **Missing something** filter narrows to just those; expanding a row shows the full [Connections](#connections) panel with its tie-out warnings and jumps to every other tab. Sold deals and the land facility are excluded (a credit line has nothing to connect). The Leverage Tracker's project rows carry the same chips inline.
 
 **Data out:** the toolbar's **⤓ Export Excel** button (`src/exportDebtDashboard.js`) downloads the dashboard as a styled multi-tab workbook (ExcelJS, CDN-loaded on demand): a **Summary** cover sheet (portfolio LTC/LTV/total debt, guaranty exposure, maturity-bucket outlook, credit facilities, schedule dates), then **Leverage**, **Maturities** (year-banded, with color-coded time-left), **Guaranties**, and **Forward Curves** (latest snapshot points + spot prints; skipped if no curve data). Cells carry real typed values with Excel number formats, so the file sums and filters natively, and the same visibility rules as the widgets apply (hidden/removed/sold excluded, facilities outside the portfolio totals, committed deals off the maturity list).
 
@@ -163,7 +170,22 @@ A **Deal Registry** tab (`src/components/RegistryTab.jsx`, logic in `src/dealReg
 
 - **Loan abstracts** — the **Abstract** chip shows whether a deal has a loan abstract linked, and clicks through to that loan on the Loans tab; the **Loan abstracts** tile counts how many deals have one. Unlike the sources above, abstracts are *not* auto-linked by name: an abstract's names (`Sarasota`, `TTRES CO Wheat Ridge Kipling St, LLC`) never equal a schedule name (`TTRes at Sarasota, FL`), so the **Import Abstract** dialog asks which deal it belongs to, pre-selecting a best guess from shared name words. Ambiguous guesses (two deals in one city) are left blank rather than guessed at. Re-importing the same `.docx` updates the existing record, so a wrong or missing link is fixed by importing again.
 
-**Setup:** run [`db/deal_registry_setup.sql`](db/deal_registry_setup.sql) once in the Supabase SQL editor (creates `deal_registry` and adds a `deal_uid` column to `debt_projects`, `pipeline_deals`, `project_locations`, and `loans`, with row-level security; re-running it adds the newer `classification` and `loans.deal_uid` columns to older installs). Until it runs, the app simply derives every status from the sheets like before, and the abstract link picker stays hidden.
+- **Covenant tests and leasing** — the **Covenant** and **Leasing** chips light up the same way, and click through to that screen. Neither source can be matched on an exact name (`properties.property` is `Sarasota`, the leasing report says `Sarasota`, the schedule says `TTRes at Sarasota, FL`), so both are scored on shared name words against every name the deal goes by — its registry name plus its schedule, pipeline and abstract names. A covenant test's match is written to `properties.deal_uid` the first time and never guessed at again; leasing has no row to hold a link (the weekly snapshot is replaced wholesale every Monday) so it is re-matched each render, with manual corrections stored in `settings.leasingLinks` keyed by normalized name. **Nothing name-matched ever mints a deal id** — a covenant test or leasing row that matches nothing stays unlinked and is counted, so the land facility and pipeline deals not yet on a schedule can't litter the registry with phantom deals.
+
+#### Connections
+Once a deal is linked everywhere, the **Connections** panel shows the whole loan at once — the Debt Dashboard's lender / loan / cost / LTC / LTV / maturity / guaranty, the abstract's note terms and participants, this week's occupancy, leased % and rent-vs-proforma, the covenant tests it backs, and its pipeline card. It renders in three places, from one component so the figures can't drift between screens:
+
+- **Covenant Tracker** detail pane, under the result cards — the answer to "what else do we know about this loan"
+- **Loans** detail pane, above the abstract terms
+- **Debt Dashboard → Deal Connections** widget, a row per deal with lit/dim chips for every screen, the count of deals still missing an abstract or a leasing row, and an expandable panel per deal
+
+Every chip is a jump: clicking **Leasing** on a covenant test opens the Leasing tab with that property highlighted, clicking **Abstract** opens the loan, and so on. Tabs hidden by the shared tab config are revealed for that session rather than dead-ending.
+
+**Tie-out.** Joining the tabs is also what makes them checkable, so the panel flags figures that disagree: a covenant row's loan balance or maturity against the schedule, the abstract's note amount and maturity against the schedule, the leasing report's unit count against the schedule's, and a covenant lender that isn't among the deal's holders. Construction draws are excluded — an At Risk row legitimately sits below the covenant's commitment — so only fully drawn (Stabilized) deals are compared on dollars.
+
+**Repairing a bad match.** Scoring gets it wrong when two deals share a city. On the Covenant Tracker, the detail pane's **Linked deal** dropdown (edit mode) repoints a test; on the Leasing tab, **⇄ Edit deal links** (edit mode) does the same per property, and the header shows how many rows are linked. Deals that share an id wrongly are still fixed with **Merge…** here.
+
+**Setup:** run [`db/deal_registry_setup.sql`](db/deal_registry_setup.sql) once in the Supabase SQL editor (creates `deal_registry` and adds a `deal_uid` column to `debt_projects`, `pipeline_deals`, `project_locations`, `properties`, and `loans`, with row-level security; re-running it adds the newer `classification`, `loans.deal_uid` and `properties.deal_uid` columns to older installs — **installs predating the Connections panel need this re-run** to link covenant tests). Until it runs, the app simply derives every status from the sheets like before, the abstract link picker stays hidden, and the Connections panel doesn't render.
 
 ---
 
@@ -292,7 +314,7 @@ npm run lint      # eslint src/
 ├── index.html                    # Theme tokens (CSS variables), pre-paint theme script, mount point
 ├── vite.config.js
 ├── src/
-│   ├── main.jsx                  # Mounts <AuthGate><App/></AuthGate>
+│   ├── main.jsx                  # Mounts <AuthGate><DealLinksProvider><App/></DealLinksProvider></AuthGate>
 │   ├── App.jsx                   # App shell: tabs, theme, PIN, curve upload + the Covenant Tracker tab
 │   ├── calc.js                   # Pure covenant math engine (unit-tested; ported to SQL for Power BI)
 │   ├── parseForecasts.js         # Monthly Budget Analysis xlsx → per-property NOI series
@@ -304,6 +326,7 @@ npm run lint      # eslint src/
 │   ├── priorTest.js              # Which snapshot counts as the Prior Test baseline
 │   ├── projectOverrides.js       # Manual field overrides layered over schedule data
 │   ├── dealRegistry.js           # Stable deal ids (TT-001, …) + lifecycle status overrides
+│   ├── dealLinks.js              # Cross-tab join: one bundle per deal + tie-out checks
 │   ├── mapProjects.js            # Merge schedules + pipeline into one project list; lat/lng paste parsing
 │   ├── auth.js / supabase.js     # Supabase auth client / REST config + headers
 │   ├── format.js, theme.js, icons.jsx, *.test.js
@@ -314,6 +337,8 @@ npm run lint      # eslint src/
 │       ├── LeasingTab.jsx, PipelineTab.jsx, LandFacilityTab.jsx
 │       ├── LoansTab.jsx, DebtDashboardTab.jsx, MapTab.jsx
 │       ├── RegistryTab.jsx       # Hidden Deal Registry admin tab (edit mode only)
+│       ├── DealLinksContext.jsx  # Loads the cross-tab join once; shared by every screen
+│       ├── ConnectionsPanel.jsx  # "This deal on every other tab" card + deal picker
 │       ├── DocView.jsx           # Executive Covenant Dashboard replica + styled Excel export
 │       └── MathLine.jsx
 ├── db/                           # One-time Supabase SQL: loans, debt dashboard, map, deal registry, security, Power BI
@@ -328,9 +353,9 @@ npm run lint      # eslint src/
 
 | Table | Purpose | Created by |
 |---|---|---|
-| `properties` | All tracked loans and covenant parameters | Created manually (see [Setup](#setup)) |
+| `properties` | All tracked loans and covenant parameters (incl. `deal_uid`, the Deal Registry link) | Created manually (see [Setup](#setup)) |
 | `property_events` | Per-property history: test snapshots, comments, prior-test baselines | Created manually |
-| `settings` | Key/value app config: `lastUpdated`, `forecastMonth`, `visibleCols`, `visibleTabs`, `sofrUpdated`, `landThreshold` | Created manually |
+| `settings` | Key/value app config: `lastUpdated`, `forecastMonth`, `visibleCols`, `visibleTabs`, `sofrUpdated`, `landThreshold`, `leasingLinks` | Created manually |
 | `sofr_curve` / `ten_year_curve` | Chatham 1-Mo Term SOFR / 10-Year Treasury forward curves | Created manually |
 | `loans` | Closed-loan abstracts (construction + refinance) | `db/loans_setup.sql` |
 | `debt_projects` | Projects from the At Risk / Stabilized schedule uploads | `db/debt_dashboard_setup.sql` |
