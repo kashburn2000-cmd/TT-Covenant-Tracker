@@ -3,7 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { parseLatLng, mergeProjects } from '../mapProjects.js';
-import { projectHolders, holdersMatch, holdersLabel, holdersTitle } from '../lenderExposure.js';
+import { projectHolders, holdersMatch, holdersLabel, holdersTitle, foldLenderNames } from '../lenderExposure.js';
 import { LockIcon } from '../icons.jsx';
 import { useIsMobile } from '../useIsMobile.js';
 
@@ -158,8 +158,9 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn() }) {
     () => mergeProjects(debtRows, deals, registryByUid).map(p => ({ ...p, holders: holdersFor(p) })),
     [debtRows, deals, registryByUid, abstractByDeal],
   );
+  // One option per relationship, not per spelling — see foldLenderNames().
   const lenderNames = useMemo(
-    () => [...new Set(projects.flatMap(p => p.holders.map(h => h.name)).filter(Boolean))].sort(),
+    () => foldLenderNames(projects.flatMap(p => p.holders.map(h => h.name))).map(l => l.label),
     [projects],
   );
   const matchesLender = (p) => !lenderFilter || holdersMatch(p.holders, lenderFilter);

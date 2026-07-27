@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { nameKey } from '../parseDebtSchedules.js';
-import { projectHolders, holdersMatch, holdersLabel, holdersTitle } from '../lenderExposure.js';
+import { projectHolders, holdersMatch, holdersLabel, holdersTitle, foldLenderNames } from '../lenderExposure.js';
 import { SB_URL, SB_HEADERS } from '../supabase.js';
 import { parseWeeklyLeasingRows } from '../parseWeeklyLeasing.js';
 
@@ -258,8 +258,9 @@ export function LeasingTab() {
   const holdersOf = useCallback((r) => holdersByName.get(nameKey(r?.name)) || [], [holdersByName]);
 
   const allProps = [...(lu?.properties || []), ...(st?.properties || [])];
+  // One option per relationship, not per spelling — see foldLenderNames().
   const lenderNames = useMemo(
-    () => [...new Set(allProps.flatMap(r => holdersOf(r).map(h => h.name)).filter(Boolean))].sort(),
+    () => foldLenderNames(allProps.flatMap(r => holdersOf(r).map(h => h.name))).map(l => l.label),
     [holdersOf, lu, st],
   );
   const unmatchedCount = allProps.filter(r => holdersOf(r).length === 0).length;

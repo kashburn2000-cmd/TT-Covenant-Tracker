@@ -14,19 +14,64 @@
 // the abstract's shares to the project's amount, so every deal's pieces still
 // sum to that deal — see participationSplit().
 
+// Abbreviations and trade names no rule can derive from the spelling — the
+// schedule and the abstracts each use whichever the deal was papered under.
+// Keys and values are both post-normalization forms. Add a pair here when one
+// lender shows up twice in a lender dropdown under two names.
+const LENDER_ALIASES = new Map([
+  ['5 3', 'fifth third'],
+  ['53', 'fifth third'],
+  ['bokf', 'bank of oklahoma'],
+  ['bok financial', 'bank of oklahoma'],
+  ['fnbo', 'first national of omaha'],
+  ['first national bank of omaha', 'first national of omaha'],
+]);
+
 // Fold lender-name variants together: case/punctuation-insensitive, and
 // generic suffixes ("Bank", "N.A.", "National Association") dropped so
 // "Simmons Bank" and "Simmons" roll up as one relationship. Distinctive words
 // (Financial, Capital, Trust, …) are kept — they distinguish real lenders.
+// Known abbreviations fold last, via LENDER_ALIASES above.
 export function normalizeLenderName(name) {
   if (!name) return '';
-  let s = String(name).toLowerCase().replace(/[.,'']/g, ' ').replace(/\s+/g, ' ').trim();
+  // Slashes and dashes separate words, they aren't part of a name ("5/3").
+  let s = String(name).toLowerCase().replace(/[.,''/\-–—]/g, ' ').replace(/\s+/g, ' ').trim();
   s = s.replace(/\b(national association|n a|na)\b/g, ' ').replace(/\s+/g, ' ').trim();
   // Drop a trailing generic "bank" ("Simmons Bank" → "simmons") but keep it
   // when it's load-bearing ("Bank OZK", or the name IS "...bank" one word).
   const words = s.split(' ');
   if (words.length > 1 && words[words.length - 1] === 'bank') words.pop();
-  return words.join(' ');
+  const key = words.join(' ');
+  return LENDER_ALIASES.get(key) || key;
+}
+
+// One entry per real lending relationship across a list of raw names:
+// { key, label, names }. The label is the fullest spelling seen (longest, ties
+// broken alphabetically) so a dropdown reads "Fifth Third", not "5/3".
+export function foldLenderNames(names) {
+  const byKey = new Map();
+  for (const raw of names) {
+    const label = String(raw || '').trim();
+    const key = normalizeLenderName(label);
+    if (!key) continue;
+    if (!byKey.has(key)) byKey.set(key, { key, label, names: [] });
+    const row = byKey.get(key);
+    if (!row.names.includes(label)) row.names.push(label);
+    if (label.length > row.label.length || (label.length === row.label.length && label < row.label)) row.label = label;
+  }
+  return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// Does one lender name answer to `query`? Folded variants count as the same
+// lender ("5/3" matches "Fifth Third"); a partial string still matches too, so
+// typing into a free-text lender box keeps working.
+export function lenderMatches(name, query) {
+  const q = String(query || '').trim();
+  if (!q) return true;
+  const n = String(name || '');
+  const nk = normalizeLenderName(n);
+  if (nk && nk === normalizeLenderName(q)) return true;
+  return n.toLowerCase().includes(q.toLowerCase());
 }
 
 // Name for the slice of a participated loan whose holders we don't have on
@@ -98,22 +143,20 @@ export function projectHolders(project, abstract) {
   return holders;
 }
 
-// Does any bank on this deal answer to `query`? Substring match on the raw
-// name, same as typing into a lender filter box.
+// Does any bank on this deal answer to `query`? Folded variants count as the
+// same lender — see lenderMatches().
 export function holdersMatch(holders, query) {
-  const q = String(query || '').trim().toLowerCase();
-  if (!q) return true;
-  return (holders || []).some(h => String(h.name || '').toLowerCase().includes(q));
+  if (!String(query || '').trim()) return true;
+  return (holders || []).some(h => lenderMatches(h.name, query));
 }
 
 // The share of this deal held by the bank(s) matching `query` — the multiplier
 // that turns a deal-level dollar figure into that lender's piece of it.
 // 1 when nothing is being filtered on.
 export function holdersShare(holders, query) {
-  const q = String(query || '').trim().toLowerCase();
-  if (!q) return 1;
+  if (!String(query || '').trim()) return 1;
   return (holders || [])
-    .filter(h => String(h.name || '').toLowerCase().includes(q))
+    .filter(h => lenderMatches(h.name, query))
     .reduce((s, h) => s + h.share, 0);
 }
 

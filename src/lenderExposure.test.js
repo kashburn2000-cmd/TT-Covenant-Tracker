@@ -3,6 +3,7 @@ import {
   normalizeLenderName, buildLenderRollup, buildLenderComparison, rollupStats,
   participationSplit, UNDISCLOSED_PARTICIPANTS,
   projectHolders, holdersMatch, holdersShare, holdersLabel, holdersTitle,
+  foldLenderNames, lenderMatches,
 } from './lenderExposure.js';
 
 describe('normalizeLenderName', () => {
@@ -173,7 +174,7 @@ describe('buildLenderRollup — participations', () => {
 
   it('credits each bank its own hold rather than the lead the whole loan', () => {
     const rollup = buildLenderRollup([project], [SYNDICATED]);
-    const bokf = rollup.find(r => r.key === 'bokf');
+    const bokf = rollup.find(r => r.key === 'bank of oklahoma');
     const rcb = rollup.find(r => r.key === 'rcb');
     expect(bokf.totalLoan).toBeCloseTo(33586097, 6);
     expect(rcb.totalLoan).toBeCloseTo(18108543, 6);
@@ -189,13 +190,13 @@ describe('buildLenderRollup — participations', () => {
   it('leaves the loan whole when the deal has no linked abstract', () => {
     // Same abstract, but linked to a different deal — it must not apply here.
     const rollup = buildLenderRollup([{ ...project, deal_uid: 'TT-999' }], [SYNDICATED]);
-    expect(rollup.find(r => r.key === 'bokf').totalLoan).toBe(51694640);
+    expect(rollup.find(r => r.key === 'bank of oklahoma').totalLoan).toBe(51694640);
     expect(rollup.find(r => r.key === 'rcb')).toBeUndefined();
   });
 
   it('splits guaranty dollars on the same shares and leaves the pct alone', () => {
     const rollup = buildLenderRollup([{ ...project, guaranty_amt: 10000000, guaranty_pct: 25 }], [SYNDICATED]);
-    const bokf = rollup.find(r => r.key === 'bokf');
+    const bokf = rollup.find(r => r.key === 'bank of oklahoma');
     const rcb = rollup.find(r => r.key === 'rcb');
     expect(bokf.totalGuaranty + rcb.totalGuaranty).toBeCloseTo(10000000, 6);
     expect(bokf.wAvgGuarantyPct).toBeCloseTo(25, 10);
@@ -213,7 +214,7 @@ describe('buildLenderRollup — participations', () => {
 describe('buildLenderComparison — participations', () => {
   it('weighs the lead by its own commitment and gives the participant a row', () => {
     const cmp = buildLenderComparison([{ ...SYNDICATED, rate_spread_bps: 300 }]);
-    const bokf = cmp.find(c => c.key === 'bokf');
+    const bokf = cmp.find(c => c.key === 'bank of oklahoma');
     const rcb = cmp.find(c => c.key === 'rcb');
     expect(bokf.totalCommitment).toBeCloseTo(33586097, 6);
     expect(rcb.totalCommitment).toBeCloseTo(18108543, 6);
@@ -272,5 +273,60 @@ describe('projectHolders / holder filtering', () => {
     expect(holdersLabel(projectHolders(project, SYNDICATED))).toBe('BOKF +1');
     expect(holdersTitle(projectHolders(project, SYNDICATED))).toBe('BOKF 65% (lead) · RCB Bank 35%');
     expect(holdersLabel([])).toBe('—');
+  });
+});
+
+describe('lender name folding', () => {
+  it('folds the duplicate spellings that showed up in the lender dropdown', () => {
+    const folded = foldLenderNames([
+      'Associated', 'Associated Bank', 'First FInancial', 'First Financial Bank',
+      'Old National', 'Old National Bank', '5/3', 'Fifth Third', 'Comerica',
+    ]);
+    // Nine raw spellings collapse to five real relationships.
+    expect(folded.map(f => f.label)).toEqual([
+      'Associated Bank', 'Comerica', 'Fifth Third', 'First Financial Bank', 'Old National Bank',
+    ]);
+  });
+
+  it('keeps the fullest spelling as the label', () => {
+    expect(foldLenderNames(['Simmons', 'Simmons Bank'])[0].label).toBe('Simmons Bank');
+    expect(foldLenderNames(['5/3', 'Fifth Third'])[0].label).toBe('Fifth Third');
+  });
+
+  it('records every raw spelling behind one relationship', () => {
+    const [row] = foldLenderNames(['Associated', 'Associated Bank', 'Associated']);
+    expect(row.names).toEqual(['Associated', 'Associated Bank']);
+  });
+
+  it('does not fold genuinely different lenders', () => {
+    expect(foldLenderNames(['First Financial Bank', 'First Internet Bank', 'Freddie Mac'])).toHaveLength(3);
+    expect(foldLenderNames(['Merchants Bank of Indiana', 'Bank of Oklahoma'])).toHaveLength(2);
+  });
+
+  it('folds known abbreviations to their full name', () => {
+    expect(normalizeLenderName('5/3')).toBe(normalizeLenderName('Fifth Third Bank, N.A.'));
+    expect(normalizeLenderName('BOKF, NA')).toBe(normalizeLenderName('Bank of Oklahoma'));
+    expect(normalizeLenderName('FNBO')).toBe(normalizeLenderName('First National Bank of Omaha'));
+  });
+});
+
+describe('lenderMatches', () => {
+  it('matches a folded variant as the same lender', () => {
+    expect(lenderMatches('5/3', 'Fifth Third')).toBe(true);
+    expect(lenderMatches('Associated', 'Associated Bank')).toBe(true);
+    expect(lenderMatches('BOKF, NA', 'Bank of Oklahoma')).toBe(true);
+  });
+  it('still matches a partial string, for free-text lender boxes', () => {
+    expect(lenderMatches('RCB Bank', 'RCB')).toBe(true);
+    expect(lenderMatches('RCB Bank', '')).toBe(true);
+  });
+  it('does not match a different lender', () => {
+    expect(lenderMatches('First Internet Bank', 'First Financial Bank')).toBe(false);
+    expect(lenderMatches('Comerica', 'Barings')).toBe(false);
+  });
+  it('folds variants when filtering a deal by lender', () => {
+    const holders = [{ name: '5/3', share: 0.6 }, { name: 'RCB Bank', share: 0.4 }];
+    expect(holdersMatch(holders, 'Fifth Third')).toBe(true);
+    expect(holdersShare(holders, 'Fifth Third')).toBeCloseTo(0.6, 10);
   });
 });

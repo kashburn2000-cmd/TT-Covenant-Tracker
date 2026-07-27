@@ -11,7 +11,7 @@ import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync, CLASSIFICATION_LABEL } from '../dealRegistry.js';
 import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
 import { TasksWidget } from './TasksWidget.jsx';
-import { buildLenderRollup, buildLenderComparison, rollupStats, projectHolders, holdersMatch, holdersShare, holdersLabel, holdersTitle } from '../lenderExposure.js';
+import { buildLenderRollup, buildLenderComparison, rollupStats, projectHolders, holdersMatch, holdersShare, holdersLabel, holdersTitle, foldLenderNames } from '../lenderExposure.js';
 import { capExpectedReceipts, swapMtm, hedgeSummary } from '../hedgeCalc.js';
 import { portfolioMtm } from '../loanMtm.js';
 import { useIsMobile } from '../useIsMobile.js';
@@ -315,8 +315,10 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
   const hiddenCount = useMemo(() => projects.filter(p => p.hidden && !p.removed).length, [projects]);
   // Every bank with a piece of any deal — leads and participants alike, so a
   // participant is selectable here even though it appears on no schedule row.
+  // Folded to one option per relationship — "Associated" / "Associated Bank"
+  // and "5/3" / "Fifth Third" are each one lender, not two.
   const lenderNames = useMemo(
-    () => [...new Set(projects.flatMap(p => (p._holders || []).map(h => h.name)).filter(Boolean))].sort(),
+    () => foldLenderNames(projects.flatMap(p => (p._holders || []).map(h => h.name))).map(l => l.label),
     [projects],
   );
 
