@@ -217,6 +217,34 @@ export function LeasingTab() {
     </label>
   );
 
+  // Join leasing properties to the debt schedule by normalized name — the same
+  // key the Deal Registry links on. A property whose marketing name doesn't
+  // match any schedule row simply has no lender; the filter bar reports how
+  // many, so a bad join is visible rather than silently dropping rows.
+  // These hooks must stay above the loading/empty returns below — bailing out
+  // early with a different hook count is what React refuses to render.
+  const holdersByName = useMemo(() => {
+    const abstractByDeal = new Map();
+    for (const a of abstracts) if (a?.deal_uid && !abstractByDeal.has(a.deal_uid)) abstractByDeal.set(a.deal_uid, a);
+    const m = new Map();
+    for (const r of debtRows) {
+      const k = r.name_key || nameKey(r.name);
+      if (!k || m.has(k)) continue;
+      m.set(k, projectHolders(r, r.deal_uid ? abstractByDeal.get(r.deal_uid) : null));
+    }
+    return m;
+  }, [debtRows, abstracts]);
+  const holdersOf = useCallback((r) => holdersByName.get(nameKey(r?.name)) || [], [holdersByName]);
+
+  const allProps = useMemo(
+    () => [...(data?.leaseUp?.properties || []), ...(data?.stabilized?.properties || [])],
+    [data],
+  );
+  const lenderNames = useMemo(
+    () => [...new Set(allProps.flatMap(r => holdersOf(r).map(h => h.name)).filter(Boolean))].sort(),
+    [holdersOf, allProps],
+  );
+
   // ── Loading / empty states ─────────────────────────────────────────────────
   if (dbLoading) return (
     <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280, color: 'var(--faint)', fontSize: 12 }}>
@@ -240,32 +268,10 @@ export function LeasingTab() {
 
   const lu = data.leaseUp;
   const st = data.stabilized;
-  // Join leasing properties to the debt schedule by normalized name — the same
-  // key the Deal Registry links on. A property whose marketing name doesn't
-  // match any schedule row simply has no lender; the filter bar reports how
-  // many, so a bad join is visible rather than silently dropping rows.
-  const holdersByName = useMemo(() => {
-    const abstractByDeal = new Map();
-    for (const a of abstracts) if (a?.deal_uid && !abstractByDeal.has(a.deal_uid)) abstractByDeal.set(a.deal_uid, a);
-    const m = new Map();
-    for (const r of debtRows) {
-      const k = r.name_key || nameKey(r.name);
-      if (!k || m.has(k)) continue;
-      m.set(k, projectHolders(r, r.deal_uid ? abstractByDeal.get(r.deal_uid) : null));
-    }
-    return m;
-  }, [debtRows, abstracts]);
-  const holdersOf = useCallback((r) => holdersByName.get(nameKey(r?.name)) || [], [holdersByName]);
-
-  const allProps = [...(lu?.properties || []), ...(st?.properties || [])];
-  const lenderNames = useMemo(
-    () => [...new Set(allProps.flatMap(r => holdersOf(r).map(h => h.name)).filter(Boolean))].sort(),
-    [holdersOf, lu, st],
-  );
   const unmatchedCount = allProps.filter(r => holdersOf(r).length === 0).length;
 
   const states = ['All', ...[...new Set(
-    [...(lu?.properties || []), ...(st?.properties || [])].map(r => (r.cityState || '').split(',')[0].trim()).filter(Boolean)
+    allProps.map(r => (r.cityState || '').split(',')[0].trim()).filter(Boolean)
   )].sort()];
 
   const growthColor = v => (v == null ? undefined : v >= 0 ? passColor : failColor);
