@@ -820,7 +820,12 @@ function LenderExposureWidget({ projects }) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${SB_URL}/rest/v1/loans?select=lead_lender,rate_spread_bps,loan_amount,loan_fee_pct,exit_fee_pct,extension_fee_pct,dscr_covenant,debt_yield_covenant,repayment_guaranty_pct,extension_count,prepayment_open`, { headers: SB_HEADERS });
+        // participants / lead_lender_commitment / deal_uid drive the exposure
+        // split; deal_uid is what joins an abstract to its schedule row.
+        const cols = 'lead_lender,rate_spread_bps,loan_amount,loan_fee_pct,exit_fee_pct,extension_fee_pct,dscr_covenant,debt_yield_covenant,repayment_guaranty_pct,extension_count,prepayment_open,participants,lead_lender_commitment';
+        let res = await fetch(`${SB_URL}/rest/v1/loans?select=${cols},deal_uid`, { headers: SB_HEADERS });
+        // Installs predating db/deal_registry_setup.sql's loans.deal_uid column.
+        if (!res.ok) res = await fetch(`${SB_URL}/rest/v1/loans?select=${cols}`, { headers: SB_HEADERS });
         if (res.ok) setLoans(await res.json());
       } catch { /* abstracts are enrichment only */ }
     })();
@@ -942,7 +947,14 @@ function LenderExposureWidget({ projects }) {
                 </tr>
                 {openKey === r.key && r.deals.map((d, i) => (
                   <tr key={i} style={{ background: 'var(--panel2)' }}>
-                    <td style={{ paddingLeft: '1.5rem', color: 'var(--muted)' }}>{d.name}</td>
+                    <td style={{ paddingLeft: '1.5rem', color: 'var(--muted)' }}>
+                      {d.name}
+                      {d.participated && (
+                        <span className="pill" style={{ marginLeft: 6 }} title="This lender holds part of the loan; the rest sits with the other participants">
+                          {fmtPct(d.share, 0)} share
+                        </span>
+                      )}
+                    </td>
                     <td />
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>{fmtM(d.loan_amount)}</td>
                     <td />
