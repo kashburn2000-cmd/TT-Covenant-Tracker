@@ -88,4 +88,27 @@ describe('SourceChips', () => {
     // Nothing pinned this deal on the map, so that chip is not a button.
     expect(container.textContent).toContain('Map pin');
   });
+
+  // A dense table row can't carry five chips saying "no" — those belong on the
+  // Deal Connections widget, where the gaps are the subject.
+  it('drops the absent screens under onlyLit', () => {
+    const bundle = indexWith().byUid.get('TT-001');
+    render(<SourceChips sources={bundle.sources} onlyLit />);
+    expect(container.textContent).not.toContain('Map pin');
+    expect(container.textContent).not.toContain('Pipeline');
+    expect(container.textContent).toContain('Leasing');
+  });
+
+  it('drops screens the surrounding table already names', () => {
+    const bundle = indexWith().byUid.get('TT-001');
+    render(<SourceChips sources={bundle.sources} onlyLit omit={['atRisk', 'stabilized', 'pin']} />);
+    expect(container.textContent).not.toContain('Stabilized');
+    expect(container.textContent).toContain('Leasing');
+    expect(container.textContent).toContain('Covenant');
+  });
+
+  it('renders nothing at all when the deal connects nowhere else', () => {
+    render(<SourceChips sources={{ stabilized: true }} onlyLit omit={['atRisk', 'stabilized', 'pin']} />);
+    expect(container.textContent).toBe('');
+  });
 });

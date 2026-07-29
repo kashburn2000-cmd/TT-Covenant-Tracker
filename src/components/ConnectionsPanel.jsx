@@ -38,12 +38,23 @@ const SOURCE_META = [
   ['pin',        'Map pin',    'var(--muted)'],
 ];
 
-// Lit when the deal appears in that source, dim when it doesn't — a scan across
-// the strip shows what a deal is still missing.
-export function SourceChips({ sources, onOpen, compact = false }) {
+// Lit when the deal appears in that source, dim when it doesn't — a scan down
+// the full strip shows what a deal is still missing, which is the whole point
+// of the Deal Connections widget.
+//
+// That full strip is too much everywhere else: on a dense table row, five dim
+// chips saying "no" bury the one or two saying "yes". `onlyLit` drops the
+// absent sources, and `omit` drops ones the surrounding screen already states
+// (a Leverage row's Stage column has said At Risk / Stabilized before you reach
+// the chips). Both together reduce a typical row to a single chip.
+export function SourceChips({ sources, onOpen, compact = false, onlyLit = false, omit = [] }) {
+  const shown = SOURCE_META
+    .filter(([key]) => !omit.includes(key))
+    .filter(([key]) => !onlyLit || !!sources?.[key]);
+  if (!shown.length) return null;
   return (
     <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
-      {SOURCE_META.map(([key, label, color]) => {
+      {shown.map(([key, label, color]) => {
         const on = !!sources?.[key];
         const clickable = on && !!onOpen;
         const style = {
@@ -116,7 +127,9 @@ export function ConnectionsPanel({ bundle, nav = {}, hideSource = null, title = 
         <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)' }}>{bundle.name}</span>
         {bundle.status && <span className={`pill ${STATUS_PILL[bundle.status] || ''}`}>{STATUS_LABEL[bundle.status]}</span>}
         {bundle.classification && <span className="pill yellow">{CLASSIFICATION_LABEL[bundle.classification]}</span>}
-        <span style={{ marginLeft: 'auto' }}><SourceChips sources={sources} onOpen={(key) => {
+        {/* Lit only — the gaps are spelled out in words at the foot of the
+            panel, so dim chips here would say the same thing twice. */}
+        <span style={{ marginLeft: 'auto' }}><SourceChips sources={sources} onlyLit onOpen={(key) => {
           if (key === 'covenant') nav.covenant?.(bundle);
           else if (key === 'atRisk' || key === 'stabilized') nav.debt?.(bundle);
           else if (key === 'pipeline') nav.pipeline?.(bundle);

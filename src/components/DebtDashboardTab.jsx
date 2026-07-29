@@ -431,17 +431,23 @@ function LeverageWidget({ projects, onSetFund, onSetCategory, onSetHidden, onPat
                   {p.name}
                   {p.deal_uid && <span title="Deal Registry id — stable across every tab" style={{ marginLeft: 6, fontSize: '0.62rem', color: 'var(--faint2)', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }}>{p.deal_uid}</span>}
                   {p._status === 'committed' && <span className="pill blue" style={{ marginLeft: 6 }}>COMMITTED</span>}
-                  {/* Where else this deal lives — click a lit chip to open it there. */}
+                  {/* Where else this deal lives, on the same line — only the
+                      screens that actually have it, and not the schedules the
+                      Stage column already names. Deals connected nowhere else
+                      show nothing rather than a row of empty chips. */}
                   {bundle && (
-                    <div style={{ marginTop: 3 }}>
-                      <SourceChips sources={bundle.sources} compact onOpen={(key) => {
-                        if (key === 'covenant') dealNav?.covenant?.(bundle);
-                        else if (key === 'pipeline') dealNav?.pipeline?.(bundle);
-                        else if (key === 'abstract') dealNav?.loans?.(bundle);
-                        else if (key === 'leasing') dealNav?.leasing?.(bundle);
-                        else if (key === 'pin') dealNav?.map?.(bundle);
-                      }} />
-                    </div>
+                    <span style={{ marginLeft: 6 }}>
+                      <SourceChips
+                        sources={bundle.sources} compact onlyLit
+                        omit={['atRisk', 'stabilized', 'pin']}
+                        onOpen={(key) => {
+                          if (key === 'covenant') dealNav?.covenant?.(bundle);
+                          else if (key === 'pipeline') dealNav?.pipeline?.(bundle);
+                          else if (key === 'abstract') dealNav?.loans?.(bundle);
+                          else if (key === 'leasing') dealNav?.leasing?.(bundle);
+                        }}
+                      />
+                    </span>
                   )}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
