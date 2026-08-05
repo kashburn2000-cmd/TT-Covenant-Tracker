@@ -68,6 +68,14 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
     ? `${r.covenantReq.toFixed(2)} Debt Service Coverage`
     : `${r.covenantReq % 1 === 0 ? r.covenantReq : r.covenantReq.toFixed(2)}% Debt Yield`;
 
+  // Standard report header block — same four labeled lines on screen and in the export.
+  const headerLines = [
+    ['Report Name:', 'Covenant Dashboard'],
+    ['Date Updated:', fmtTitle(asOf)],
+    ['Report Frequency:', 'Monthly'],
+    ['Person(s) Responsible for Update:', 'Kevin'],
+  ];
+
   // Rebuilds the on-screen table into a styled .xlsx — same colors, merges, fonts,
   // and column order — so the download looks all but identical to this page.
   const [xlState, setXlState] = useState('idle'); // idle | working | error
@@ -87,21 +95,23 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       const widths = [4.5, 11, 12, 16, 20, 16, 27, 13, 4, 13, 16, 15];
       widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-      // Title + subtitle.
-      ws.mergeCells(1, 1, 1, COLS);
-      const title = ws.getCell(1, 1);
-      title.value = `Covenant Dashboard - ${fmtTitle(asOf)}`;
-      title.font = { name: 'Calibri', bold: true, size: 14, color: { argb: 'FF000000' } };
-      title.alignment = { horizontal: 'left', vertical: 'middle' };
-      ws.getRow(1).height = 20;
-      ws.mergeCells(2, 1, 2, COLS);
-      const sub = ws.getCell(2, 1);
-      sub.value = 'Prepared Monthly by Kevin';
-      sub.font = { name: 'Calibri', bold: true, italic: true, size: 9, color: { argb: 'FF000000' } };
-      sub.alignment = { horizontal: 'left', vertical: 'middle' };
+      // Report header block — one labeled line per row.
+      headerLines.forEach(([label, value], i) => {
+        const row = i + 1;
+        ws.mergeCells(row, 1, row, COLS);
+        const c = ws.getCell(row, 1);
+        c.value = {
+          richText: [
+            { text: label, font: { name: 'Calibri', bold: true, italic: true, size: 11, color: { argb: 'FF000000' } } },
+            { text: ` ${value}`, font: { name: 'Calibri', size: 11, color: { argb: 'FF000000' } } },
+          ],
+        };
+        c.alignment = { horizontal: 'left', vertical: 'middle' };
+        ws.getRow(row).height = 16;
+      });
 
       // Date context row (over the Previous / Current result columns).
-      const dateRow = 4;
+      const dateRow = headerLines.length + 2;
       const dateFont = { name: 'Calibri', italic: true, size: 8, color: { argb: 'FF555555' } };
       const dateAlign = { horizontal: 'center', vertical: 'middle' };
       if (prevHeaderDate) {
@@ -110,7 +120,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       const cd = ws.getCell(dateRow, 10); cd.value = fmtMDY(asOf); cd.font = dateFont; cd.alignment = dateAlign;
 
       // Column header row.
-      const headRow = 5;
+      const headRow = dateRow + 1;
       const headers = ['', 'DATE', 'TYPE', 'PROPERTY', 'LENDER', 'Loan Amount', 'COVENANT REQUIREMENT', 'PREVIOUS TEST RESULT', '', 'CURRENT TEST RESULT', 'SATISFIED (TRUE/FALSE)', 'Potential Paydown'];
       const rightCols = new Set([6, 12]);
       headers.forEach((h, i) => {
@@ -227,8 +237,13 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       </div>
 
       <div style={{ padding: '1.25rem 1.5rem' }}>
-        <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#000' }}>Covenant Dashboard - {fmtTitle(asOf)}</div>
-        <div style={{ fontSize: '0.72rem', fontWeight: 700, fontStyle: 'italic', color: '#000', marginBottom: '0.75rem' }}>Prepared Monthly by Kevin</div>
+        <div style={{ marginBottom: '0.75rem' }}>
+          {headerLines.map(([label, value]) => (
+            <div key={label} style={{ fontSize: '0.82rem', color: '#000', lineHeight: 1.45 }}>
+              <span style={{ fontWeight: 700, fontStyle: 'italic' }}>{label}</span> {value}
+            </div>
+          ))}
+        </div>
 
         <table style={{ borderCollapse: 'collapse', background: '#fff' }}>
           <thead>
