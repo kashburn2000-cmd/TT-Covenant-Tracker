@@ -69,6 +69,8 @@ Each test carries the deal's registry id (`properties.deal_uid`), so the detail 
 #### History & Prior Test
 Every update writes a snapshot (NOI, loan, rate, debt service, result) to `property_events`; users can also add comments. Snapshots are flagged monthly vs. interim (`is_monthly`), and a snapshot can be explicitly pinned as the Prior Test baseline (`src/priorTest.js`) — the table's **Prior Test** column and Doc View's trend arrows compare against it.
 
+Resolution order (`findPriorTest`): an explicitly pinned baseline wins; otherwise it is the newest **monthly** snapshot from a calendar month earlier than the newest monthly snapshot. That last part matters — applying a forecast writes a monthly snapshot of the values it just applied, so the newest monthly snapshot *is* the current result. Comparing against it would compare the current numbers to themselves and date the Previous column to today. Skipping the whole current month also means re-running an upload to fix a bad sheet match doesn't push the baseline forward. A property with no earlier monthly cycle shows “—”.
+
 #### Exports & Doc View
 Active (non-hidden) rows export in the executive workbook's 14-column "Covenant Dashboard Export" schema as **CSV**, native **`.xlsx`** (SheetJS, typed/formatted cells), or a styled landscape **PDF** (jsPDF + autotable, loaded from cdnjs at runtime). **Doc View** (`src/components/DocView.jsx`) is a full-screen, print-style replica of the company's Covenant Dashboard Excel document — year-banded rows, prior-vs-current trend arrows, SATISFIED / WAIVED coloring — with a **Download Excel** button that rebuilds the styled workbook via ExcelJS (also CDN-loaded on demand).
 

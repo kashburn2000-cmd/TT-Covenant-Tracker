@@ -25,18 +25,29 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
   const parseDate = s => { const d = new Date(s + 'T00:00:00'); return isNaN(d) ? null : d; };
   const fmtResult = (val, type) => type === 'dscr' ? dscrFmt(val) : `${val.toFixed(2)}%`;
 
+  // Prior test per row, resolved once — priorOf is read by the table, the
+  // header date and the Excel export.
+  const priorCache = new Map();
   const priorOf = r => {
-    const evs = propertyEvents[r.id];
-    const snap = findPriorTest(evs);
-    if (!snap) return null;
-    const val = parseFloat(snap.result);
-    if (isNaN(val)) return null;
-    return { val, date: snap.created_at ? new Date(snap.created_at) : null };
+    if (priorCache.has(r.id)) return priorCache.get(r.id);
+    const snap = findPriorTest(propertyEvents[r.id]);
+    const val = snap ? parseFloat(snap.result) : NaN;
+    const date = snap && snap.created_at ? new Date(snap.created_at) : null;
+    const prior = isNaN(val) ? null : { val, date: date && !isNaN(date) ? date : null };
+    priorCache.set(r.id, prior);
+    return prior;
   };
 
-  // Previous-column header date = most recent prior snapshot across rows.
-  const priorDates = rows.map(priorOf).filter(p => p && p.date && !isNaN(p.date)).map(p => p.date.getTime());
+  // Previous-column header date = most recent prior snapshot across rows. Rows
+  // skipped by that upload keep an older prior, so the one header date can only
+  // ever be an "as of latest" — call that out in the footnote rather than let
+  // the column read as though every value shares it.
+  const priorDates = rows.map(priorOf).filter(p => p && p.date).map(p => p.date.getTime());
   const prevHeaderDate = priorDates.length ? new Date(Math.max(...priorDates)) : null;
+  const priorDatesVary = new Set(priorDates.map(t => fmtMDY(new Date(t)))).size > 1;
+  const priorNote = priorDatesVary
+    ? 'Previous Test Result is each property\u2019s last monthly test before the current cycle \u2014 dates vary where a property was not in the prior upload.'
+    : null;
 
   // Year bucketing: 12-month windows measured forward from the report date, so the
   // current cohort (recent + next 12 months of tests) all lands in Year 1.
@@ -207,6 +218,13 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       const foot = ws.getCell(footRow, 1);
       foot.value = `Generated live from the Covenant Tracker · ${fmtMDY(asOf)}`;
       foot.font = { name: 'Calibri', size: 8, color: { argb: 'FF999999' } };
+      if (priorNote) {
+        const noteRow = footRow + 1;
+        ws.mergeCells(noteRow, 1, noteRow, COLS);
+        const note = ws.getCell(noteRow, 1);
+        note.value = priorNote;
+        note.font = { name: 'Calibri', size: 8, italic: true, color: { argb: 'FF999999' } };
+      }
 
       const buf = await wb.xlsx.writeBuffer();
       const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -298,7 +316,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
                   <td style={td}>{r.lender}</td>
                   <td style={{ ...td, textAlign: 'right' }}>${num2(r.loanAmount)}</td>
                   <td style={{ ...td, textAlign: 'center' }}>{reqText(r)}</td>
-                  <td style={{ ...td, textAlign: 'center' }}>{prior ? fmtResult(prior.val, r.covenantType) : '—'}</td>
+                  <td style={{ ...td, textAlign: 'center' }} title={prior && prior.date ? `Prior test recorded ${fmtMDY(prior.date)}` : undefined}>{prior ? fmtResult(prior.val, r.covenantType) : '—'}</td>
                   <td style={{ ...td, textAlign: 'center', color: arrowColor, fontWeight: 700 }}>{arrow}</td>
                   <td style={{ ...td, textAlign: 'center' }}>{fmtResult(cur, r.covenantType)}</td>
                   <td style={{ ...td, textAlign: 'center', background: ok ? C.okBg : C.failBg, color: ok ? C.okTxt : C.failTxt, fontWeight: 700, fontStyle: waived ? 'italic' : 'normal' }}>{statusText}</td>
@@ -318,6 +336,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
 
         <div style={{ fontSize: '0.62rem', color: '#999', marginTop: '0.75rem' }}>
           Generated live from the Covenant Tracker · {fmtMDY(asOf)}
+          {priorNote && <div style={{ fontStyle: 'italic', marginTop: '0.2rem' }}>{priorNote}</div>}
         </div>
       </div>
     </div>
