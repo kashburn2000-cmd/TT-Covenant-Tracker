@@ -777,18 +777,21 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         headers: SB_HEADERS,
         body: JSON.stringify(patch),
       });
-    })).then(() => {
-      setProperties(ps => {
-        const next = ps.map(p => {
-          const match = matched.find(r => r.id === p.id);
-          if (!match) return p;
-          return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiT1Current: match.newNOIT1Current ?? null, noiStabilized: match.newNOIStabilized ?? null, noiStabilizedMonth: match.newNOIStabilizedMonth ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
-        });
-        next.forEach(p => {
-          if (matched.find(r => r.id === p.id)) saveSnapshot(p.id, calcRow(p), monthlyUpload);
-        });
-        return next;
+    })).then(async () => {
+      const next = properties.map(p => {
+        const match = matched.find(r => r.id === p.id);
+        if (!match) return p;
+        return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiT1Current: match.newNOIT1Current ?? null, noiStabilized: match.newNOIStabilized ?? null, noiStabilizedMonth: match.newNOIStabilizedMonth ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
       });
+      setProperties(next);
+      // Snapshots are written outside the state updater: React invokes updaters
+      // more than once (StrictMode does it on every render), which used to post
+      // a duplicate snapshot per property and double up the history feed.
+      const updated = next.filter(p => matched.some(r => r.id === p.id));
+      await Promise.all(updated.map(p => saveSnapshot(p.id, calcRow(p), monthlyUpload)));
+      // Re-pull history so the Prior Test column and Doc View compare against
+      // the refreshed feed instead of the pre-upload cache.
+      await Promise.all(updated.map(p => fetchEvents(p.id)));
       setShowUploadResults(false);
       const now = new Date();
       setLastUpdated(now);
