@@ -67,3 +67,86 @@ describe('DocView previous test result', () => {
     expect(el.textContent).not.toContain('dates vary');
   });
 });
+
+// ── Excel export ────────────────────────────────────────────────────────────
+// The .xlsx is what actually reaches lenders, so it has to say the same thing
+// the screen does. A fake ExcelJS records what the export writes.
+function fakeExcelJS() {
+  const cells = new Map();
+  const key = (r, c) => `${r},${c}`;
+  const ws = {
+    getColumn: () => ({}),
+    getRow: () => ({}),
+    mergeCells: () => {},
+    getCell(r, c) {
+      if (!cells.has(key(r, c))) cells.set(key(r, c), {});
+      return cells.get(key(r, c));
+    },
+  };
+  return {
+    cells,
+    lib: { Workbook: class { addWorksheet() { return ws; } get xlsx() { return { writeBuffer: async () => new ArrayBuffer(8) }; } } },
+  };
+}
+
+async function exportAndRead(rows, propertyEvents) {
+  const { cells, lib } = fakeExcelJS();
+  window.ExcelJS = lib;
+  const el = render(rows, propertyEvents);
+  const btn = [...el.querySelectorAll('button')].find(b => b.textContent.includes('Download Excel'));
+  expect(btn, 'download button should be enabled once history is loaded').toBeTruthy();
+  await act(async () => { btn.click(); });
+  return { cells, at: (r, c) => cells.get(`${r},${c}`) };
+}
+
+describe('DocView Excel export', () => {
+  const events = { 1: [snap('2026-08-24T16:00:00Z', '1.31'), snap('2026-06-30T12:00:00Z', '0.733')] };
+
+  it('writes the Previous column and its header date, not a dash', async () => {
+    const { at } = await exportAndRead([row()], events);
+    expect(at(6, 8).value).toBe('6/30/2026'); // date row over PREVIOUS TEST RESULT
+    expect(at(6, 10).value).toBe('8/24/2026');
+    expect(at(8, 8).value).toBe(0.733);
+    expect(at(8, 10).value).toBe(1.31);
+  });
+
+  it('writes results as numbers so Excel can sort and chart them', async () => {
+    const { at } = await exportAndRead([row()], events);
+    expect(typeof at(8, 8).value).toBe('number');
+    expect(at(8, 8).numFmt).toBe('0.00#');
+    const dy = await exportAndRead([row({ covenantType: 'dy', currentVal: 8.4, covenantReq: 9 })], events);
+    expect(dy.at(8, 10).numFmt).toBe('0.00"%"');
+  });
+
+  it('exports Waived and TBD as words, never as a paydown figure', async () => {
+    const waived = await exportAndRead([row({ waived: true, paydown: 27090928 })], events);
+    expect(waived.at(8, 12).value).toBe('Waived');
+
+    const tbd = await exportAndRead([row({ satisfied: false, paydown: 49200000, loanAmount: 49200000 })], events);
+    expect(tbd.at(8, 12).value).toBe('TBD');
+
+    const real = await exportAndRead([row({ satisfied: false, paydown: 1000000, loanAmount: 49200000 })], events);
+    expect(real.at(8, 12).value).toBe(1000000);
+    expect(real.at(8, 12).numFmt).toBe('$#,##0');
+  });
+
+  it('only ever writes valid ARGB colors', async () => {
+    // An unchanged result used to colour its arrow with a CSS variable.
+    const flat = { 1: [snap('2026-08-24T16:00:00Z', '1.31'), snap('2026-06-30T12:00:00Z', '1.31')] };
+    const { cells } = await exportAndRead([row({ currentVal: 1.31 })], flat);
+    const argbs = [];
+    for (const c of cells.values()) {
+      if (c.font && c.font.color) argbs.push(c.font.color.argb);
+      if (c.fill && c.fill.fgColor) argbs.push(c.fill.fgColor.argb);
+    }
+    expect(argbs.length).toBeGreaterThan(0);
+    argbs.forEach(a => expect(a).toMatch(/^FF[0-9A-F]{6}$/));
+  });
+
+  it('blocks the download until prior results have loaded', () => {
+    const el = render([row()], {}); // events not fetched yet
+    const btn = [...el.querySelectorAll('button')].find(b => b.textContent.includes('Loading prior results'));
+    expect(btn).toBeTruthy();
+    expect(btn.disabled).toBe(true);
+  });
+});
