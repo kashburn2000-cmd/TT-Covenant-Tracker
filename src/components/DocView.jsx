@@ -49,6 +49,22 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
     ? 'Previous Test Result is each property\u2019s last monthly test before the current cycle \u2014 dates vary where a property was not in the prior upload.'
     : null;
 
+  // Potential Paydown is a number *or* one of three words — waived tests and
+  // unsizable paydowns must not export as a figure a lender could read as real.
+  // Screen and .xlsx both go through this so they can't drift apart.
+  const paydownOf = r => {
+    if (r.waived === true) return { text: 'Waived', italic: true };
+    if (r.paydownDisplay === 'TBD') return { text: 'TBD' };
+    if (r.paydownDisplay === 'dash') return { text: '\u2014' };
+    if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999) return { text: 'TBD' };
+    return { value: r.paydown > 0 ? r.paydown : 0 };
+  };
+
+  // Prior results load per property after the view opens. Exporting mid-load
+  // silently produced a Previous column of dashes with no header date, so the
+  // download waits for the same data the table is showing.
+  const historyLoaded = rows.every(r => propertyEvents[r.id] !== undefined);
+
   // Year bucketing: 12-month windows measured forward from the report date, so the
   // current cohort (recent + next 12 months of tests) all lands in Year 1.
   const yearOf = r => {
@@ -155,7 +171,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
           let arrow = '', arrowColor = '#888888';
           if (prior) {
             const delta = cur - prior.val;
-            if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = 'var(--pass)'; }
+            if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = '#2e7d32'; }
             else if (delta > 0) { arrow = '▲'; arrowColor = '#2e7d32'; }
             else { arrow = '▼'; arrowColor = '#c0392b'; }
           }
@@ -186,15 +202,21 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
           set(5, r.lender, {});
           set(6, r.loanAmount, { align: 'right', numFmt: '$#,##0.00' });
           set(7, reqText(r), { align: 'center' });
-          set(8, prior ? fmtResult(prior.val, r.covenantType) : '—', { align: 'center' });
+          const resFmt = r.covenantType === 'dscr' ? '0.00#' : '0.00"%"';
+          set(8, prior ? prior.val : '—', { align: 'center', numFmt: prior ? resFmt : undefined });
           set(9, arrow, { align: 'center', font: { name: 'Calibri', size: 9, bold: true, color: { argb: argb(arrowColor) } } });
-          set(10, fmtResult(cur, r.covenantType), { align: 'center' });
+          set(10, cur, { align: 'center', numFmt: resFmt });
           set(11, statusText, {
             align: 'center',
             fill: fill(ok ? C.okBg : C.failBg),
             font: { name: 'Calibri', size: 9, bold: true, italic: waived, color: { argb: argb(ok ? C.okTxt : C.failTxt) } },
           });
-          set(12, r.paydown > 0 ? r.paydown : 0, { align: 'right', numFmt: '$#,##0' });
+          const pd = paydownOf(r);
+          set(12, pd.text !== undefined ? pd.text : pd.value, {
+            align: 'right',
+            numFmt: pd.text !== undefined ? undefined : '$#,##0',
+            font: pd.italic ? { name: 'Calibri', size: 9, italic: true, color: { argb: argb(C.txt) } } : bodyFont,
+          });
           rIdx++;
         });
 
@@ -247,8 +269,8 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       <div style={{ position: 'sticky', top: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 1rem', background: '#f1f1f1', borderBottom: `1px solid ${C.line}`, zIndex: 2 }}>
         <span style={{ fontSize: '0.7rem', color: '#666', fontWeight: 600 }}>Doc View</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={downloadExcel} disabled={xlState === 'working'} title="Download this page as a formatted Excel file" style={{ padding: '5px 16px', borderRadius: 4, border: '1px solid #1f4e79', background: xlState === 'working' ? '#9bb0c7' : '#1f4e79', color: '#fff', cursor: xlState === 'working' ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
-            {xlState === 'working' ? 'Generating…' : xlState === 'error' ? 'Export failed — retry' : '⤓ Download Excel'}
+          <button onClick={downloadExcel} disabled={xlState === 'working' || !historyLoaded} title={historyLoaded ? 'Download this page as a formatted Excel file' : 'Waiting on prior test results — the export would show an empty Previous column'} style={{ padding: '5px 16px', borderRadius: 4, border: '1px solid #1f4e79', background: (xlState === 'working' || !historyLoaded) ? '#9bb0c7' : '#1f4e79', color: '#fff', cursor: (xlState === 'working' || !historyLoaded) ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>
+            {!historyLoaded ? 'Loading prior results…' : xlState === 'working' ? 'Generating…' : xlState === 'error' ? 'Export failed — retry' : '⤓ Download Excel'}
           </button>
           <button onClick={onClose} style={{ padding: '5px 16px', borderRadius: 4, border: '1px solid #999', background: '#fff', color: '#333', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.72rem', fontWeight: 600 }}>✕ Close</button>
         </div>
@@ -294,7 +316,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
               let arrow = '', arrowColor = '#888';
               if (prior) {
                 const delta = cur - prior.val;
-                if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = 'var(--pass)'; }
+                if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = '#2e7d32'; }
                 else if (delta > 0) { arrow = '▲'; arrowColor = '#2e7d32'; }
                 else { arrow = '▼'; arrowColor = '#c0392b'; }
               }
@@ -321,12 +343,8 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
                   <td style={{ ...td, textAlign: 'center' }}>{fmtResult(cur, r.covenantType)}</td>
                   <td style={{ ...td, textAlign: 'center', background: ok ? C.okBg : C.failBg, color: ok ? C.okTxt : C.failTxt, fontWeight: 700, fontStyle: waived ? 'italic' : 'normal' }}>{statusText}</td>
                   <td style={{ ...td, textAlign: 'right', ...(waived ? { fontStyle: 'italic' } : {}) }}>{(() => {
-                    if (waived) return 'Waived';
-                    const disp = r.paydownDisplay;
-                    if (disp === 'TBD') return 'TBD';
-                    if (disp === 'dash') return '—';
-                    if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999) return 'TBD';
-                    return r.paydown > 0 ? usd0(r.paydown) : '$0';
+                    const pd = paydownOf(r);
+                    return pd.text !== undefined ? pd.text : usd0(pd.value);
                   })()}</td>
                 </tr>
               );
