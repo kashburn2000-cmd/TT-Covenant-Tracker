@@ -56,9 +56,17 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
     if (r.waived === true) return { text: 'Waived', italic: true };
     if (r.paydownDisplay === 'TBD') return { text: 'TBD' };
     if (r.paydownDisplay === 'dash') return { text: '\u2014' };
-    if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999) return { text: 'TBD' };
+    // Curing would take the whole loan or more \u2014 which is what a non-positive
+    // NOI implies, since no balance reduction lifts coverage above zero. "TBD"
+    // read as an unfinished cell in a report going to a lender; say what it is.
+    if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999) return { text: 'Not curable' };
     return { value: r.paydown > 0 ? r.paydown : 0 };
   };
+  const anyUncurable = rows.some(r => r.waived !== true && r.paydownDisplay !== 'TBD'
+    && r.paydownDisplay !== 'dash' && r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999);
+  const paydownNote = anyUncurable
+    ? '\u201cNot curable\u201d means no paydown restores compliance \u2014 the shortfall exceeds the loan balance, as it does wherever net operating income is not positive.'
+    : null;
 
   // Prior results load per property after the view opens. Exporting mid-load
   // silently produced a Previous column of dashes with no header date, so the
@@ -89,7 +97,11 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
   };
   const td = { border: `1px solid ${C.line}`, padding: '3px 8px', fontSize: '0.74rem', color: C.txt, whiteSpace: 'nowrap' };
   const th = { border: `1px solid ${C.navy}`, padding: '5px 8px', fontSize: '0.66rem', fontWeight: 700, color: '#fff', background: C.navy, textAlign: 'center', letterSpacing: '0.02em' };
-  const dateTh = { border: 'none', fontSize: '0.62rem', fontStyle: 'italic', color: '#555', textAlign: 'center', paddingBottom: 2 };
+  // Explicit white ground: these cells sit above the navy header with no border
+  // or background of their own, so without it they pick up whatever is behind
+  // the table and the grey italic date turns unreadable.
+  const dateTh = { border: 'none', background: '#fff', fontSize: '0.62rem', fontStyle: 'italic', color: '#333', textAlign: 'center', paddingBottom: 2 };
+  const spacerTh = { border: 'none', background: '#fff' };
 
   const reqText = r => r.covenantType === 'dscr'
     ? `${r.covenantReq.toFixed(2)} Debt Service Coverage`
@@ -238,13 +250,14 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       const footRow = rIdx + 1;
       ws.mergeCells(footRow, 1, footRow, COLS);
       const foot = ws.getCell(footRow, 1);
-      foot.value = `Generated live from the Covenant Tracker · ${fmtMDY(asOf)}`;
+      foot.value = `Generated from the Covenant Tracker · data as of ${fmtMDY(asOf)}`;
       foot.font = { name: 'Calibri', size: 8, color: { argb: 'FF999999' } };
-      if (priorNote) {
-        const noteRow = footRow + 1;
+      let noteRow = footRow;
+      for (const text of [priorNote, paydownNote].filter(Boolean)) {
+        noteRow += 1;
         ws.mergeCells(noteRow, 1, noteRow, COLS);
         const note = ws.getCell(noteRow, 1);
-        note.value = priorNote;
+        note.value = text;
         note.font = { name: 'Calibri', size: 8, italic: true, color: { argb: 'FF999999' } };
       }
 
@@ -288,11 +301,11 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
         <table style={{ borderCollapse: 'collapse', background: '#fff' }}>
           <thead>
             <tr>
-              <th colSpan={7} style={{ border: 'none' }}></th>
+              <th colSpan={7} style={spacerTh}></th>
               <th style={dateTh}>{prevHeaderDate ? fmtMDY(prevHeaderDate) : ''}</th>
-              <th style={{ border: 'none' }}></th>
+              <th style={spacerTh}></th>
               <th style={dateTh}>{fmtMDY(asOf)}</th>
-              <th colSpan={2} style={{ border: 'none' }}></th>
+              <th colSpan={2} style={spacerTh}></th>
             </tr>
             <tr>
               <th style={{ ...th, width: 22 }}></th>
@@ -353,8 +366,11 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
         </table>
 
         <div style={{ fontSize: '0.62rem', color: '#999', marginTop: '0.75rem' }}>
-          Generated live from the Covenant Tracker · {fmtMDY(asOf)}
+          {/* "live" next to the NOI vintage read as though the report were a
+              week stale; the date is the data's, not the render's. */}
+          Generated from the Covenant Tracker · data as of {fmtMDY(asOf)}
           {priorNote && <div style={{ fontStyle: 'italic', marginTop: '0.2rem' }}>{priorNote}</div>}
+          {paydownNote && <div style={{ fontStyle: 'italic', marginTop: '0.2rem' }}>{paydownNote}</div>}
         </div>
       </div>
     </div>

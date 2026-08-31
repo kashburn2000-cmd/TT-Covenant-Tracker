@@ -130,6 +130,74 @@ describe('buildDealIndex', () => {
     expect(idx.unlinked.covenant).toHaveLength(1);
     expect(idx.unlinked.leasing).toHaveLength(1);
   });
+
+  // A read-only session can't PATCH properties.deal_uid, and a database that
+  // never had the column added can't store one at all. Neither may leave the
+  // covenant tests stranded — the name match is computable at read time.
+  it('joins covenant tests that were never stamped with a deal_uid', () => {
+    const idx = buildDealIndex({
+      registry: REGISTRY,
+      debtRows: [debtRow()],
+      covenantRows: [{ id: 7, property: 'Sarasota', deal_uid: null, covenant_date: '2026-07-01' }],
+    });
+    expect(idx.byUid.get('TT-001').covenant).toHaveLength(1);
+    expect(idx.byUid.get('TT-001').sources.covenant).toBe(true);
+    expect(idx.unlinked.covenant).toHaveLength(0);
+  });
+
+  it('prefers a stored deal_uid over what the name would score', () => {
+    const idx = buildDealIndex({
+      registry: REGISTRY,
+      covenantRows: [{ id: 7, property: 'Sarasota', deal_uid: 'TT-002' }],
+    });
+    expect(idx.byUid.get('TT-002').covenant).toHaveLength(1);
+    expect(idx.byUid.get('TT-001').covenant).toHaveLength(0);
+  });
+
+  // Two deals in one city tie on name alone; the covenant row's own lender and
+  // loan amount say which is which.
+  describe('name ties', () => {
+    const TIED = [
+      { uid: 'TT-020', name: 'TTRES GA Pooler, LLC' },
+      { uid: 'TT-021', name: 'TTRES GA Pooler Mosaic' },
+    ];
+    const TIED_DEBT = [
+      { deal_uid: 'TT-020', name: 'TTRES GA Pooler, LLC', lender: 'Fifth Third', loan_amount: 54250000, maturity_date: '2028-09-18' },
+      { deal_uid: 'TT-021', name: 'TTRES GA Pooler Mosaic', lender: 'Synovus', loan_amount: 31000000, maturity_date: '2029-01-04' },
+    ];
+    const build = (covRow) => buildDealIndex({
+      registry: TIED, debtRows: TIED_DEBT, covenantRows: [covRow],
+    });
+
+    it('settles on the deal whose lender and loan amount agree', () => {
+      const idx = build({ id: 1, property: 'Pooler', lender: 'Fifth Third', loan_amount: 54250000 });
+      expect(idx.byUid.get('TT-020').covenant).toHaveLength(1);
+      expect(idx.byUid.get('TT-021').covenant).toHaveLength(0);
+    });
+
+    it('settles the other way on the other deal’s figures', () => {
+      const idx = build({ id: 1, property: 'Pooler', lender: 'Synovus', loan_amount: 31000000 });
+      expect(idx.byUid.get('TT-021').covenant).toHaveLength(1);
+    });
+
+    it('stays unlinked when the extra evidence does not separate them', () => {
+      const idx = build({ id: 1, property: 'Pooler' });
+      expect(idx.unlinked.covenant).toHaveLength(1);
+    });
+
+    it('stays unlinked when the evidence points at neither', () => {
+      const idx = build({ id: 1, property: 'Pooler', lender: 'Truist', loan_amount: 9000000 });
+      expect(idx.unlinked.covenant).toHaveLength(1);
+    });
+  });
+
+  it('still leaves a portfolio row unlinked rather than guessing', () => {
+    const idx = buildDealIndex({
+      registry: REGISTRY,
+      covenantRows: [{ id: 9, property: '2022 Fund', is_fund: true }],
+    });
+    expect(idx.unlinked.covenant).toHaveLength(1);
+  });
 });
 
 describe('crossChecks', () => {

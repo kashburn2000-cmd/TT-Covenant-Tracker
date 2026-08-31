@@ -72,7 +72,7 @@ function useSectionSort(defaultKey, defaultDir = 1) {
   return { key, dir, toggle, cmp };
 }
 
-function Section({ title, block, columns, sort, filterState, lenderFilter, holdersOf, highlightKey }) {
+function Section({ title, block, columns, sort, filterState, lenderFilter, holdersOf, highlightKey, footnote = null }) {
   const rows = useMemo(() => block.properties
     .filter(r => filterState === 'All' || (r.cityState || '').startsWith(filterState))
     .filter(r => !lenderFilter || holdersMatch(holdersOf(r), lenderFilter))
@@ -125,6 +125,9 @@ function Section({ title, block, columns, sort, filterState, lenderFilter, holde
           {rows.length === 0 && <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--faint)', fontSize: 12.5 }}>No properties in this state.</div>}
         </div>
       </div>
+      {footnote && rows.length > 0 && (
+        <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 6 }}>{footnote}</div>
+      )}
     </div>
   );
 }
@@ -371,6 +374,25 @@ export function LeasingTab({ dealNav, pinUnlocked = false, focusUid = null, onFo
     );
   };
 
+  // Closing ratio is leases ÷ traffic straight from the workbook, so a week with
+  // one or two tours prints 200% or 300% and reads like a star performer. Below
+  // a handful of tours the ratio is noise, not signal — show it greyed with the
+  // sample size rather than letting it stand next to real percentages.
+  const MIN_TRAFFIC = 5;
+  const closingCell = r => {
+    const thin = r.traffic != null && r.traffic < MIN_TRAFFIC;
+    if (r.closingRatio == null) return fmtPct(r.closingRatio, 0);
+    return (
+      <span
+        style={thin ? { color: 'var(--muted)' } : undefined}
+        title={thin ? `Only ${fmtNum(r.traffic)} tour${r.traffic === 1 ? '' : 's'} this week — too small a sample to read as a closing rate` : undefined}
+      >
+        {fmtPct(r.closingRatio, 0)}{thin ? '*' : ''}
+      </span>
+    );
+  };
+  const closingFootnote = `* Closing ratio on fewer than ${MIN_TRAFFIC} tours in the week — too small a sample to read as a rate.`;
+
   const luColumns = [
     { key: 'name', label: 'Property', render: propertyCell },
     { key: 'occPct', label: 'Occupancy · 8-wk proj', render: r => <OccBar occ={r.occPct} proj={r.projOcc} /> },
@@ -378,7 +400,7 @@ export function LeasingTab({ dealNav, pinUnlocked = false, focusUid = null, onFo
     { key: 'projOcc', label: '8-Wk Proj', right: true, render: r => <span style={{ color: 'var(--text2)' }}>{fmtPct(r.projOcc)}</span> },
     { key: 'traffic', label: 'Traffic', right: true, render: r => fmtNum(r.traffic) },
     { key: 'netRental', label: 'Wk Net', right: true, render: r => <span style={{ fontWeight: 600, color: netColor(r.netRental) }}>{r.netRental > 0 ? '+' : ''}{fmtNum(r.netRental)}</span> },
-    { key: 'closingRatio', label: 'Closing', right: true, render: r => fmtPct(r.closingRatio, 0) },
+    { key: 'closingRatio', label: 'Closing', right: true, render: closingCell },
     { key: 'inPlaceRentPF', label: 'Rent vs PF', right: true, render: r => <span style={{ fontWeight: 600, color: pfColor(r.inPlaceRentPF) }}>{fmtPct(r.inPlaceRentPF, 1)}</span> },
     { key: 'avgNetMI', label: 'Net MI/Mo', right: true, render: r => fmtNum(r.avgNetMI, 1) },
     { key: 'dopDate', label: 'First DOP', render: r => <span className="mono" style={{ color: 'var(--text2)', fontSize: 11 }}>{fmtDate(r.dopDate)}</span> },
@@ -391,7 +413,7 @@ export function LeasingTab({ dealNav, pinUnlocked = false, focusUid = null, onFo
     { key: 'projOcc', label: '8-Wk Proj', right: true, render: r => <span style={{ color: 'var(--text2)' }}>{fmtPct(r.projOcc)}</span> },
     { key: 'traffic', label: 'Traffic', right: true, render: r => fmtNum(r.traffic) },
     { key: 'netRental', label: 'Wk Net', right: true, render: r => <span style={{ fontWeight: 600, color: netColor(r.netRental) }}>{r.netRental > 0 ? '+' : ''}{fmtNum(r.netRental)}</span> },
-    { key: 'closingRatio', label: 'Closing', right: true, render: r => fmtPct(r.closingRatio, 0) },
+    { key: 'closingRatio', label: 'Closing', right: true, render: closingCell },
     { key: 'yoyRentGrowth', label: 'YOY Growth', right: true, render: r => <span style={{ fontWeight: 600, color: growthColor(r.yoyRentGrowth) }}>{r.yoyRentGrowth != null && r.yoyRentGrowth >= 0 ? '+' : ''}{fmtPct(r.yoyRentGrowth)}</span> },
     { key: 'inPlaceRentPF', label: 'Rent vs PF', right: true, render: r => <span style={{ fontWeight: 600, color: pfColor(r.inPlaceRentPF) }}>{fmtPct(r.inPlaceRentPF, 1)}</span> },
     { key: 'stabilizationDate', label: 'Stabilized', render: r => <span className="mono" style={{ color: 'var(--text2)', fontSize: 11 }}>{fmtDate(r.stabilizationDate)}</span> },
@@ -454,9 +476,9 @@ export function LeasingTab({ dealNav, pinUnlocked = false, focusUid = null, onFo
             <Card label="Weekly Net Rentals" value={`${lu.totals.netRental > 0 ? '+' : ''}${fmtNum(lu.totals.netRental)}`} color={netColor(lu.totals.netRental)} sub={`${fmtNum(lu.totals.traffic)} traffic · ${fmtNum(lu.totals.leases)} leases`} />
             <Card label="Closing Ratio" value={fmtPct(lu.totals.closingRatio, 0)} sub="Leases ÷ traffic" />
             <Card label="In-Place Rent vs PF" value={fmtPct(lu.totals.inPlaceRentPF)} color={pfColor(lu.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(lu.totals.marketRentPF)} of proforma`} />
-            <Card label="Avg Net Move-Ins / Mo" value={fmtNum(lu.totals.avgNetMI, 0)} sub={`${fmtNum(lu.totals.avgNetLeases, 0)} net leases / mo`} />
+            <Card label="Avg Net Move-Ins / Mo" value={fmtNum(lu.totals.avgNetMI, 0)} sub={`vs ${fmtNum(lu.totals.avgNetLeases, 0)} net leases / mo`} />
           </div>
-          <Section title="Lease-Up Properties" block={lu} columns={luColumns} sort={luSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} highlightKey={highlightKey} />
+          <Section title="Lease-Up Properties" block={lu} columns={luColumns} sort={luSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} highlightKey={highlightKey} footnote={closingFootnote} />
         </>
       )}
 
@@ -472,7 +494,7 @@ export function LeasingTab({ dealNav, pinUnlocked = false, focusUid = null, onFo
             <Card label="In-Place Rent vs PF" value={fmtPct(st.totals.inPlaceRentPF)} color={pfColor(st.totals.inPlaceRentPF)} sub={`Market rent ${fmtPct(st.totals.marketRentPF)} of proforma`} />
             <Card label="Closing Ratio" value={fmtPct(st.totals.closingRatio, 0)} sub="Leases ÷ traffic" />
           </div>
-          <Section title="Stabilized Properties" block={st} columns={stColumns} sort={stSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} highlightKey={highlightKey} />
+          <Section title="Stabilized Properties" block={st} columns={stColumns} sort={stSort} filterState={filterState} lenderFilter={lenderFilter} holdersOf={holdersOf} highlightKey={highlightKey} footnote={closingFootnote} />
         </>
       )}
 

@@ -29,12 +29,21 @@ const stageOf = (key) => STAGES.find(s => s.key === key);
 const MONO = 'var(--font-mono)';
 const SANS = 'var(--font-sans)';
 
-// CARTO basemaps (free with attribution), matched to the app theme.
+// Esri gray canvas, matched to the app theme. Keyless, and muted enough that
+// the stage-coloured pins stay the loudest thing on the map.
+//
+// This used to be CARTO's basemaps CDN, which stopped serving anonymous
+// requests: every tile came back watermarked "API KEY REQUIRED", so the whole
+// map read as broken. If you'd rather have CARTO's styling back, register for a
+// key and point these at your keyed endpoint — the rest of the layer setup is
+// unchanged. Note the ArcGIS path puts {y} before {x}, and the canvas basemaps
+// top out at zoom 16.
 const TILE_URL = {
-  dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  dark:  'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+  light: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
 };
-const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const TILE_MAX_ZOOM = 16;
+const TILE_ATTR = '&copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const currentTheme = () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
 
 const US_CENTER = [38.8, -96.9];
@@ -283,7 +292,11 @@ export function MapTab({ pinUnlocked = true, requirePin = (fn) => fn(), focusUid
       center: US_CENTER, zoom: US_ZOOM, zoomSnap: 0.5, minZoom: 3, maxZoom: 18,
       attributionControl: true, worldCopyJump: true,
     });
-    tileRef.current = L.tileLayer(TILE_URL[currentTheme()], { attribution: TILE_ATTR, subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+    // maxNativeZoom lets Leaflet upscale past the basemap's last real zoom
+    // level rather than dropping to blank tiles when someone zooms right in.
+    tileRef.current = L.tileLayer(TILE_URL[currentTheme()], {
+      attribution: TILE_ATTR, maxNativeZoom: TILE_MAX_ZOOM, maxZoom: 18,
+    }).addTo(map);
     markersRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 

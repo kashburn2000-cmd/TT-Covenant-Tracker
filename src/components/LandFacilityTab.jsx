@@ -16,6 +16,7 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
   const [sheetBalance, setSheetBalance] = useState(null); // facility balance per the At Risk schedule (null = unavailable)
   const [threshold, setThreshold]     = useState('');
   const [thresholdInput, setThresholdInput] = useState('');
+  const [thresholdBad, setThresholdBad] = useState(null); // stored value above the cap, kept only to name it in the warning
   const [loading, setLoading]         = useState(true);
   const [msg, setMsg]                 = useState('');
   const [msgErr, setMsgErr]           = useState(false);
@@ -40,7 +41,19 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
       if (drawRes.ok) { const d = await drawRes.json(); setDraws(Array.isArray(d) ? d : []); }
       if (settRes.ok) {
         const s = await settRes.json();
-        if (s.length > 0) { const v = JSON.parse(s[0].value); setThreshold(v); setThresholdInput(String(v / 1e6)); }
+        // A stored threshold above the facility cap is bad data, not a limit.
+        // Refuse to adopt it: leaving `threshold` unset keeps it from drawing an
+        // off-scale line on a chart whose axis is fixed at the cap, and from
+        // reporting a reassuring "under internal threshold" against a number
+        // that can never be crossed. The raw value stays in the input so it can
+        // be corrected, and the banner below names it.
+        if (s.length > 0) {
+          const v = JSON.parse(s[0].value);
+          const bad = !(v > 0) || v > FACILITY_MAX;
+          setThreshold(bad ? '' : v);
+          setThresholdBad(bad ? v : null);
+          setThresholdInput(String(v / 1e6));
+        }
       }
       // Sheet-side tie-out: the At Risk schedule carries the facility as one
       // row, classified 'land_facility' on the Deal Registry. Degrades
@@ -107,7 +120,17 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
   async function saveThreshold() {
     const val = parseFloat(thresholdInput) * 1e6;
     if (isNaN(val) || val <= 0) { flash('Enter a valid threshold in $M', true); return; }
+    // The internal threshold is a self-imposed limit *inside* the $45M line, so
+    // anything above the cap is a typo — almost always a raw dollar figure typed
+    // into a field that is already denominated in millions. Caught here because
+    // a threshold of $12,349M reads as reassuring ("under internal threshold")
+    // while being 274x the facility it governs.
+    if (val > FACILITY_MAX) {
+      flash(`Threshold can't exceed the ${fmtM(FACILITY_MAX)} facility cap — enter it in $M (e.g. 35 for $35M)`, true);
+      return;
+    }
     setThreshold(val);
+    setThresholdBad(null);
     await saveSetting('landThreshold', val);
     flash('✓ Threshold saved');
   }
@@ -524,6 +547,11 @@ export function LandFacilityTab({ pinUnlocked, requirePin }) {
             {totalOutstanding > threshold
               ? `⚠ ${fmtM(totalOutstanding - threshold)} over TT internal threshold`
               : `${fmtM(threshold - totalOutstanding)} headroom vs. TT internal threshold`}
+          </div>
+        )}
+        {thresholdBad != null && (
+          <div className="mono" style={{ marginLeft: 4, fontSize: 10.5, color: 'var(--warn-text)' }}>
+            ⚠ Saved threshold is {fmtM(thresholdBad)} — above the {fmtM(FACILITY_MAX)} cap, so it is being ignored. Re-enter it in $M.
           </div>
         )}
       </div>
