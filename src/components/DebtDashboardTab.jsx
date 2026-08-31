@@ -831,11 +831,13 @@ function GuarantyWidget({ projects }) {
       </div>
       <div style={{ flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-          <span style={{ fontSize: '0.74rem', color: 'var(--text2)' }}>Total exposure · {rows.length} guaranteed loan{rows.length === 1 ? '' : 's'}</span>
+          {/* With $0 guaranties included these aren't "guaranteed loans" at all,
+              so the noun has to follow the filter. */}
+          <span style={{ fontSize: '0.74rem', color: 'var(--text2)' }}>Total exposure · {rows.length} {showZero ? 'loan' : 'guaranteed loan'}{rows.length === 1 ? '' : 's'}</span>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 18, fontWeight: 600, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{fmtM(totals.amt)}</span>
         </div>
         <div className="mono" style={{ fontSize: '0.68rem', color: 'var(--muted)', marginTop: 2 }}>
-          Loan-weighted avg <b style={{ color: 'var(--text)', fontWeight: 600 }}>{fmtPct(totals.avgPct)}</b>
+          Loan-weighted avg <b style={{ color: 'var(--text)', fontWeight: 600 }}>{fmtPct(totals.avgPct)}</b> · {showZero ? 'all loans' : 'guaranteed loans only'}
         </div>
       </div>
       <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
@@ -2723,7 +2725,10 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
         <div className="card" style={{ padding: '16px 18px' }}>
           <div className="label" style={{ marginBottom: 0 }}>Guaranty exposure</div>
           <div className="metric" style={{ marginTop: 7 }}>{fmtM(headline.guaranty)}</div>
-          <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 4 }}>{headline.gAvg != null ? `${fmtPct(headline.gAvg)} wtd avg` : '—'}</div>
+          {/* Denominator is every loan, including the unguaranteed ones — which
+              is why this sits well below the Repayment Guaranty Hub's average
+              of the guaranteed loans alone. Both are right; say which is which. */}
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 4 }}>{headline.gAvg != null ? `${fmtPct(headline.gAvg)} wtd avg · all ${headline.n} loans` : '—'}</div>
         </div>
       </div>
 

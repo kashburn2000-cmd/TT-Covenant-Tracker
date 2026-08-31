@@ -598,15 +598,19 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   // a bad match by hand.
   const dealLinks = useDealLinks();
   const selBundle = sel ? dealLinks.bundleForCovenant(sel.id) : null;
+  // The effective link, not just a stored one, so the picker shows the deal the
+  // panel beside it is actually displaying. Saving from here pins the inferred
+  // match, which is exactly how a guess gets confirmed.
   const selLinkedUid = useMemo(() => {
     if (!sel) return null;
-    return dealLinks.covenantRows?.find(r => String(r.id) === String(sel.id))?.deal_uid || null;
-  }, [sel, dealLinks.covenantRows]);
+    return dealLinks.index?.covenantUid?.get(sel.id) || null;
+  }, [sel, dealLinks.index]);
 
   // Arriving from another tab's "Covenant" chip: select that deal's test.
   useEffect(() => {
     if (!focusUid || !dealLinks.covenantRows?.length) return;
-    const hit = dealLinks.covenantRows.find(r => r.deal_uid === focusUid);
+    const covUid = dealLinks.index?.covenantUid;
+    const hit = dealLinks.covenantRows.find(r => (covUid?.get(r.id) || r.deal_uid) === focusUid);
     if (hit) {
       setSelectedId(hit.id);
       if (isMobile) setMobileDetail(true);
@@ -1466,11 +1470,19 @@ Req: ${formatCurrency(r.requiredNOI)}`,
   const labelStyle = { fontSize: '0.62rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '0.3rem', display: 'block' };
 
   // ── Console-layout derived values ─────────────────────────────────────────
+  // The Failing chip filters to waived tests as well — a waived test did fail,
+  // it was just excused — but it must not then *say* "Failing 10" next to a
+  // subtitle reading "8 failing". Count the two apart and let the label show
+  // the split, so the chip and the header agree on what a failure is.
   const chipCounts = {
     all: visibleRows.length,
-    fail: visibleRows.filter(r => { const s = covenantStatus(r); return s === 'FAIL' || s === 'WAIVED'; }).length,
+    fail: visibleRows.filter(r => covenantStatus(r) === 'FAIL').length,
+    waived: visibleRows.filter(r => covenantStatus(r) === 'WAIVED').length,
     thin: visibleRows.filter(r => covenantStatus(r) === 'THIN').length,
   };
+  const failChipLabel = chipCounts.waived
+    ? `Failing ${chipCounts.fail} · ${chipCounts.waived} waived`
+    : `Failing ${chipCounts.fail}`;
   const futureDates = activeRows.map(r => r.covenantDate).filter(d => (daysUntil(d) ?? -1) >= 0).sort();
   const allTestDates = activeRows.map(r => r.covenantDate).sort();
   const nextTestDate = futureDates[0] || allTestDates[0] || null;
@@ -1627,7 +1639,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 </span>
               </div>
               <div style={{ display: 'flex', gap: 7, marginTop: 13, flexWrap: 'wrap' }}>
-                {[['all', `All ${chipCounts.all}`], ['fail', `Failing ${chipCounts.fail}`], ['thin', `Thin ${chipCounts.thin}`]].map(([key, label]) => (
+                {[['all', `All ${chipCounts.all}`], ['fail', failChipLabel], ['thin', `Thin ${chipCounts.thin}`]].map(([key, label]) => (
                   <button key={key} className={`chip ${statusFilter === key ? 'chip-active' : ''}`} onClick={() => setStatusFilter(key)}>{label}</button>
                 ))}
                 {pinUnlocked && hiddenCount > 0 && (

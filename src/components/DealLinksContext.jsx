@@ -24,7 +24,7 @@ const DealLinksCtx = createContext(null);
 
 const EMPTY = {
   ready: false, loading: false, error: null, setupNeeded: false,
-  index: { byUid: new Map(), list: [], aliases: new Map(), leasingRows: [], leasingUid: new Map(), unlinked: { covenant: [], leasing: [] } },
+  index: { byUid: new Map(), list: [], aliases: new Map(), leasingRows: [], leasingUid: new Map(), covenantUid: new Map(), unlinked: { covenant: [], leasing: [] } },
   registry: [], covenantLinkAvailable: false, leasingWeek: null, covenantRows: [],
   unlinkedCounts: { covenant: 0, leasing: 0 },
   bundle: () => null, bundleForCovenant: () => null, bundleForLeasing: () => null,
@@ -173,9 +173,13 @@ export function DealLinksProvider({ children }) {
     leasingWeek: state.leasingSnapshot?.weekEnd || null,
     index,
     bundle: (uid) => (uid ? index.byUid.get(uid) || null : null),
+    // Resolved the same way the join resolves it — a stored deal_uid when there
+    // is one, the name match otherwise. Reading properties.deal_uid straight off
+    // the row here meant a session that couldn't write the column back (any
+    // read-only viewer) saw "Not linked to a deal" on every covenant test.
     bundleForCovenant: (id) => {
       const row = state.covenantRows.find(r => String(r.id) === String(id));
-      return row?.deal_uid ? index.byUid.get(row.deal_uid) || null : null;
+      return row ? index.byUid.get(index.covenantUid.get(row.id)) || null : null;
     },
     bundleForLeasing: (key) => index.byUid.get(index.leasingUid.get(key)) || null,
     // Rows that matched no deal. Some of these are correct — the 2022 Fund is a

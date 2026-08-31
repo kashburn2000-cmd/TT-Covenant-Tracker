@@ -17,9 +17,14 @@
 // replaced wholesale every Monday and its rows have no id, so leasing is matched
 // by name at read time (manual corrections live in settings under
 // `leasingLinks`). Covenant rows *can* hold one — properties.deal_uid — but the
-// names never match exactly ("Sarasota" vs "TTRes at Sarasota, FL"), so the
-// first link is scored on shared name words like an abstract's, then persisted
-// and never guessed at again.
+// names never match exactly ("Sarasota" vs "TTRes at Sarasota, FL"), so they are
+// scored on shared name words like an abstract's.
+//
+// Both name-matched sources resolve at read time, and a stored uid always wins
+// over a fresh guess. Covenant links are additionally persisted when the session
+// can write, but the join never *depends* on that write having landed: a
+// read-only viewer and a database missing the deal_uid column both still see
+// the covenant tests joined to their deals.
 //
 // Nothing here mints a registry id: a covenant test or leasing row with no
 // matching deal stays unlinked and is counted, rather than inventing a deal
@@ -31,7 +36,7 @@ import { nameKey } from './parseDebtSchedules.js';
 import { applyOverrides } from './projectOverrides.js';
 import { normalizeLenderName, projectHolders } from './lenderExposure.js';
 import {
-  matchNameToUid, deriveStatus, effectiveStatus, isLandFacility,
+  matchNameToUid, scoreNameToUids, deriveStatus, effectiveStatus, isLandFacility,
 } from './dealRegistry.js';
 
 // ── Name aliases ─────────────────────────────────────────────────────────────
@@ -98,6 +103,64 @@ export function leasingProperties(snapshot) {
   return out;
 }
 
+// row id → uid for every covenant test, resolved the way leasing is: a stored
+// properties.deal_uid always wins, and anything still unstamped is scored by
+// name at read time. planCovenantLinks() persists the same answer when the
+// session can write, but the join must not depend on that having happened —
+// a read-only viewer, or a database where the deal_uid column was never added,
+// would otherwise see every covenant test unlinked forever even though the
+// match is sitting right there in the registry.
+export function resolveCovenantUids({ registry = [], covenantRows = [], aliases = null, debtRows = [] }) {
+  const pool = matchable(registry);
+  // uid → the schedule figures for that deal, used only to settle a name tie.
+  const facts = new Map();
+  for (const d of debtRows) {
+    if (!d.deal_uid || facts.has(d.deal_uid)) continue;
+    facts.set(d.deal_uid, { lender: d.lender, loan: d.loan_amount, maturity: d.maturity_date });
+  }
+
+  const m = new Map();
+  for (const r of covenantRows) {
+    if (r.id == null) continue;
+    if (r.deal_uid) { m.set(r.id, r.deal_uid); continue; }
+    if (r.is_fund) continue;
+    const uid = matchNameToUid([r.property], pool, { aliases })
+      ?? breakTie(scoreNameToUids([r.property], pool, { aliases }), r, facts);
+    if (uid) m.set(r.id, uid);
+  }
+  return m;
+}
+
+// Two deals in one city score identically on name — "Pooler" against both
+// "TTRES GA Pooler, LLC" and "TTRES GA Pooler Mosaic" — and matchNameToUid
+// rightly refuses to guess between them. A covenant row carries more than a
+// name though: its lender, loan amount and maturity all come off the loan
+// document. Score the tied candidates on those instead, and take the winner
+// only when exactly one leads. Anything less stays unlinked for a human.
+function breakTie(scored, row, facts) {
+  if (scored.length < 2 || scored[0].score !== scored[1].score) return null;
+  const top = scored.filter(s => s.score === scored[0].score);
+
+  const covLoan = row.variable_loan ? row.loan_commitment : row.loan_amount;
+  const ranked = top.map(s => {
+    const f = facts.get(s.uid);
+    let pts = 0;
+    if (f) {
+      if (row.lender && f.lender &&
+          normalizeLenderName(row.lender) === normalizeLenderName(f.lender)) pts += 2;
+      if (covLoan != null && f.loan != null &&
+          Math.abs(Number(covLoan) - Number(f.loan)) <= Math.abs(Number(f.loan)) * 0.01) pts += 2;
+      if (row.maturity_date && f.maturity &&
+          String(row.maturity_date).slice(0, 10) === String(f.maturity).slice(0, 10)) pts += 1;
+    }
+    return { uid: s.uid, pts };
+  }).sort((a, b) => b.pts - a.pts);
+
+  if (!ranked[0].pts) return null;
+  if (ranked.length > 1 && ranked[1].pts === ranked[0].pts) return null;
+  return ranked[0].uid;
+}
+
 // name_key → uid for the whole snapshot. `overrides` (settings.leasingLinks) is
 // a manual map of the same shape; '' pins a row as deliberately unlinked so the
 // matcher stops re-guessing it.
@@ -133,6 +196,7 @@ export function buildDealIndex({
   const aliases = buildAliasIndex({ debtRows, deals, loans });
   const leasingRows = leasingProperties(leasingSnapshot);
   const leasingUid = planLeasingLinks({ registry, leasingRows, aliases, overrides: leasingOverrides });
+  const covenantUid = resolveCovenantUids({ registry, covenantRows, aliases, debtRows });
 
   const byUid = new Map();
   for (const entry of registry) {
@@ -161,7 +225,7 @@ export function buildDealIndex({
   }
   for (const d of deals) { const b = byUid.get(d.deal_uid); if (b && !b.pipeline) b.pipeline = d; }
   for (const a of loans) { const b = byUid.get(a.deal_uid); if (b && !b.abstract) b.abstract = a; }
-  for (const c of covenantRows) byUid.get(c.deal_uid)?.covenant.push(c);
+  for (const c of covenantRows) byUid.get(covenantUid.get(c.id))?.covenant.push(c);
   for (const l of locations) { const b = l.deal_uid && byUid.get(l.deal_uid); if (b) { b.pinned = true; b.pin = l; } }
   for (const r of leasingRows) {
     const b = byUid.get(leasingUid.get(r._key));
@@ -190,7 +254,7 @@ export function buildDealIndex({
   }
 
   const unlinked = {
-    covenant: covenantRows.filter(c => !c.deal_uid || !byUid.has(c.deal_uid)),
+    covenant: covenantRows.filter(c => !byUid.has(covenantUid.get(c.id))),
     leasing: leasingRows.filter(r => !byUid.has(leasingUid.get(r._key))),
   };
 
@@ -200,6 +264,7 @@ export function buildDealIndex({
     aliases,
     leasingRows,
     leasingUid,
+    covenantUid,
     unlinked,
   };
 }

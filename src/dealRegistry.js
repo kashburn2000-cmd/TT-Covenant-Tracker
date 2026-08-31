@@ -189,10 +189,21 @@ export function tokenScore(a, b) {
 // widen a registry entry's name set with the names it goes by elsewhere (sheet
 // names, pipeline names) so a canonical name that drifted still matches.
 export function matchNameToUid(candidates, registry = [], { minScore = 0.5, aliases = null } = {}) {
-  const sets = (Array.isArray(candidates) ? candidates : [candidates]).map(nameTokens).filter(s => s.size);
-  if (!sets.length) return null;
+  const scored = scoreNameToUids(candidates, registry, { minScore, aliases });
+  if (!scored.length) return null;
+  if (scored.length > 1 && scored[1].score === scored[0].score) return null;
+  return scored[0].uid;
+}
 
-  const scored = registry
+// The scored candidate list behind matchNameToUid, best first. Exposed so a
+// caller holding more evidence than a name — a covenant row knows its lender and
+// loan amount — can break a tie the name alone can't, instead of settling for
+// the null that matchNameToUid returns.
+export function scoreNameToUids(candidates, registry = [], { minScore = 0.5, aliases = null } = {}) {
+  const sets = (Array.isArray(candidates) ? candidates : [candidates]).map(nameTokens).filter(s => s.size);
+  if (!sets.length) return [];
+
+  return registry
     .map(e => {
       const names = [e.name, ...(aliases?.get(e.uid) || [])];
       let best = 0;
@@ -204,10 +215,6 @@ export function matchNameToUid(candidates, registry = [], { minScore = 0.5, alia
     })
     .filter(s => s.score >= minScore)
     .sort((a, b) => b.score - a.score);
-
-  if (!scored.length) return null;
-  if (scored.length > 1 && scored[1].score === scored[0].score) return null;
-  return scored[0].uid;
 }
 
 // Best-guess registry uid for a loan abstract, or null. Thin wrapper kept for

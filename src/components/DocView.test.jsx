@@ -118,12 +118,14 @@ describe('DocView Excel export', () => {
     expect(dy.at(8, 10).numFmt).toBe('0.00"%"');
   });
 
-  it('exports Waived and TBD as words, never as a paydown figure', async () => {
+  it('exports Waived and uncurable tests as words, never as a paydown figure', async () => {
     const waived = await exportAndRead([row({ waived: true, paydown: 27090928 })], events);
     expect(waived.at(8, 12).value).toBe('Waived');
 
+    // Paydown at or above the whole balance can't cure the test, so the cell
+    // says so rather than showing a figure or an unexplained "TBD".
     const tbd = await exportAndRead([row({ satisfied: false, paydown: 49200000, loanAmount: 49200000 })], events);
-    expect(tbd.at(8, 12).value).toBe('TBD');
+    expect(tbd.at(8, 12).value).toBe('Not curable');
 
     const real = await exportAndRead([row({ satisfied: false, paydown: 1000000, loanAmount: 49200000 })], events);
     expect(real.at(8, 12).value).toBe(1000000);

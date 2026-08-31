@@ -149,7 +149,7 @@ export function ConnectionsPanel({ bundle, nav = {}, hideSource = null, title = 
         <div style={{ marginBottom: 10, padding: '8px 11px', borderRadius: 7, background: 'color-mix(in srgb, var(--warn) 9%, transparent)', border: '1px solid color-mix(in srgb, var(--warn) 28%, transparent)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
             <span className="mono" style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: 'var(--warn-text)' }}>
-              {checks.length} figure{checks.length === 1 ? '' : 's'} disagree across tabs
+              {checks.length} figure{checks.length === 1 ? ' disagrees' : 's disagree'} across tabs
             </span>
             <button className="btn btn-ghost btn-sm" style={{ padding: '0 3px', color: 'var(--muted)' }} onClick={() => setShowChecks(false)}>✕</button>
           </div>
