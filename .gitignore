@@ -17,3 +17,8 @@ npm-debug.log*
 .env
 .env.local
 .env.*.local
+
+# Confidential working files (loan abstracts, forecast/bank workbooks).
+# backfill-loans.mjs defaults to ./abstracts — these must never be committed.
+abstracts/
+workbooks/
