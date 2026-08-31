@@ -11,6 +11,18 @@ deploys. Vercel keeps building `main` exactly as it does today.
 
 ## Quick start
 
+**Windows, automated:** `scripts/setup-local.ps1` does everything in this
+section — installs Node.js and Git if missing, downloads the project, installs
+its components, and installs Claude Code. Paste this into PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/kashburn2000-cmd/TT-Covenant-Tracker/claude/desktop-local-dev-setup-29f4y5/scripts/setup-local.ps1 | iex
+```
+
+It is safe to re-run, and checks before installing anything.
+
+**By hand, any platform:**
+
 ```bash
 git clone https://github.com/kashburn2000-cmd/tt-covenant-tracker.git
 cd tt-covenant-tracker
