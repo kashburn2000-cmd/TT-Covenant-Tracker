@@ -118,9 +118,6 @@ node --input-type=module -e "
 In practice it's easier to let Claude Code do this — point it at the file path
 and it can iterate on the parser and the fixture until the workbook loads.
 
-Keep real workbooks **outside** the repo (or in an ignored folder) so they never
-get committed.
-
 ---
 
 ## Environment variables
@@ -163,7 +160,7 @@ $env:SB_KEY="<service-role-key>"; node scripts/generate-tasks.mjs
 the same as pointing at production.
 
 `SB_KEY` here means the Supabase **service_role** key — it bypasses row-level
-security entirely. See [Credential hygiene](#credential-hygiene).
+security entirely. See [About the keys](#about-the-keys).
 
 ---
 
@@ -234,8 +231,8 @@ Two notes on that:
   checking what's in `curve_snapshots`, sanity-checking a covenant row against
   what the dashboard shows.
 - The **filesystem** server is what lets Claude open the real Chatham exports
-  and Budget Analysis workbooks. Point it at the repo plus one folder where you
-  drop working spreadsheets — not at your entire user profile.
+  and Budget Analysis workbooks. Point it at the repo plus wherever you keep
+  working spreadsheets.
 
 MCP package names and flags do move; if a server fails to start, check the
 current docs for that server rather than assuming the config above is stale-proof.
@@ -301,18 +298,21 @@ Run them locally to debug them, then let Actions own the schedule.
 
 ---
 
-## Credential hygiene
+## About the keys
+
+This is a single-maintainer project on a private repo and a personal machine, so
+there's no need to be precious here. Two practical notes and nothing more:
 
 - **The publishable key is not a secret.** It's already in `src/supabase.js` and
-  shipped to every browser. Row-level security is what protects the data.
-- **The `service_role` key is a real secret.** It bypasses RLS completely — full
-  read and write on every table. It belongs in GitHub Actions secrets and, when
-  you need it locally, in a password manager and a gitignored `.env`. Never in a
-  commit, a chat message, or a file that syncs to personal cloud storage.
-- `.env` and `.env.local` are gitignored. Keep it that way; `.env.example`
-  (values redacted) is the only env file that belongs in the repo.
-- Keep real bank packages, forecast workbooks, and loan abstracts outside the
-  repo directory, or in a folder covered by `.gitignore`. `backfill-loans.mjs`
-  defaults to `./abstracts` — that folder should never be committed.
-- If you scope an MCP filesystem server, scope it to the repo and one working
-  folder, not your whole user directory.
+  ships to every browser that loads the site. Row-level security is what
+  actually protects the data, not the obscurity of that key.
+- **The `service_role` key is worth keeping out of commits** — not for privacy,
+  but because it bypasses row-level security completely. Anything holding it can
+  drop or overwrite every table in one call, including the covenant and loan
+  history, with no undo. Keeping it in a gitignored `.env` and in the GitHub
+  Actions secrets means a stray copy can't be run against the database by
+  accident. `.env` is already ignored; `.env.example` ships with blank values.
+
+Working files — loan abstracts, forecast and bank workbooks — can live wherever
+is convenient, including inside the repo. `backfill-loans.mjs` defaults to
+reading `./abstracts`, so that's a natural place to put them.
