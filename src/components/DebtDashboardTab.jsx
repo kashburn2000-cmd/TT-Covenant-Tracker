@@ -11,6 +11,7 @@ import { parseChathamWorkbook, curveDateFromFilename } from '../curveParse.js';
 import { deriveDebtRowStatus, effectiveStatus, planRegistrySync, executeRegistrySync, CLASSIFICATION_LABEL } from '../dealRegistry.js';
 import { exportDebtDashboardExcel } from '../exportDebtDashboard.js';
 import { TasksWidget } from './TasksWidget.jsx';
+import { FedWatchWidget } from './FedWatchWidget.jsx';
 import { buildLenderRollup, buildLenderComparison, rollupStats, projectHolders, holdersMatch, holdersShare, holdersLabel, holdersTitle } from '../lenderExposure.js';
 import { capExpectedReceipts, swapMtm, hedgeSummary } from '../hedgeCalc.js';
 import { portfolioMtm } from '../loanMtm.js';
@@ -2288,6 +2289,7 @@ const WIDGETS = {
   maturities: { title: 'Maturity Schedule',      defaultGrid: { x: 0, y: 11, w: 6,  h: 10, minW: 4, minH: 5 } },
   guaranty:   { title: 'Repayment Guaranty Hub', defaultGrid: { x: 6, y: 11, w: 6,  h: 10, minW: 4, minH: 5 } },
   curve:      { title: 'Forward Curve Tracker',  defaultGrid: { x: 0, y: 21, w: 12, h: 10, minW: 6, minH: 6 } },
+  fedwatch:   { title: 'Fed Funds Odds',         defaultGrid: { x: 0, y: 78, w: 12, h: 11, minW: 6, minH: 6 } },
   tasks:      { title: 'Tasks & Reminders',      defaultGrid: { x: 0, y: 31, w: 12, h: 9,  minW: 4, minH: 5 } },
   lenders:    { title: 'Lender Exposure',        defaultGrid: { x: 0, y: 40, w: 12, h: 10, minW: 5, minH: 5 } },
   hedges:     { title: 'Hedge Tracker',          defaultGrid: { x: 0, y: 50, w: 12, h: 9,  minW: 5, minH: 5 } },
@@ -2596,6 +2598,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       );
       case 'guaranty':   return <GuarantyWidget projects={visibleProjects} />;
       case 'curve':      return <CurveWidget pinUnlocked={pinUnlocked} requirePin={requirePin} />;
+      case 'fedwatch':   return <FedWatchWidget />;
       case 'tasks':      return <TasksWidget pinUnlocked={pinUnlocked} />;
       case 'lenders':    return <LenderExposureWidget projects={visibleProjects} />;
       case 'hedges':     return <HedgeWidget pinUnlocked={pinUnlocked} />;
@@ -2643,6 +2646,7 @@ export function DebtDashboardTab({ pinUnlocked = true, requirePin = (fn) => fn()
       maturities: next ? `Next ${fmtDate(next.maturity_date)}` : 'No upcoming maturities',
       guaranty: `${fmtM(headline.guaranty)} exposure`,
       curve: 'SOFR & 10Y forward curves',
+      fedwatch: 'Rate-move odds by FOMC meeting',
       tasks: 'Reminders & deadlines',
       lenders: `${lenders.size} lender${lenders.size === 1 ? '' : 's'}`,
       hedges: 'Caps & swaps',
