@@ -47,7 +47,9 @@ begin
     'hedges',
     'market_spreads',
     'project_locations',
-    'tasks'
+    'tasks',
+    'fed_funds_futures',
+    'fed_funds_spot'
   ]
   loop
     if to_regclass('public.' || t) is not null then

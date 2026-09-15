@@ -83,6 +83,70 @@ async function fetchCmeTermSofrCurve() {
   return null;
 }
 
+// ── Fed funds spot anchors (NY Fed markets API) ──────────────────────────────
+// EFFR comes with the FOMC target range it sits in, which is exactly the
+// anchor the Fed Funds Odds widget needs to label its columns. SOFR rides
+// along as the same-basis anchor for the Chatham-curve variant.
+async function fetchFedFundsSpot() {
+  const get = async (path) => {
+    const res = await fetch(`https://markets.newyorkfed.org/api/rates/${path}/last/1.json`, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`NY Fed ${path} HTTP ${res.status}`);
+    return ((await res.json()).refRates || [])[0] || null;
+  };
+  const effr = await get('unsecured/effr');
+  if (!effr || effr.percentRate == null) throw new Error('No EFFR in NY Fed response');
+  let sofr = null;
+  try { sofr = await get('secured/sofr'); } catch { /* SOFR is optional */ }
+  return {
+    rate_date: effr.effectiveDate,
+    effr: parseFloat(effr.percentRate) / 100,
+    sofr: sofr && sofr.effectiveDate === effr.effectiveDate && sofr.percentRate != null ? parseFloat(sofr.percentRate) / 100 : null,
+    target_lower: effr.targetRateFrom != null ? parseFloat(effr.targetRateFrom) / 100 : null,
+    target_upper: effr.targetRateTo != null ? parseFloat(effr.targetRateTo) / 100 : null,
+    source: 'nyfed',
+  };
+}
+
+// ── 30-Day Fed Funds futures strip (Yahoo Finance, unofficial) ───────────────
+// One CBOT contract per calendar month, symbol ZQ + month code + 2-digit year
+// (ZQZ26 = December 2026). Yahoo's chart endpoint is free and needs no key,
+// but it is not a supported API: if it changes shape the widget just stops
+// updating and the last stored strip stays in place. Swap in CME licensed data
+// here when it exists — the table and widget don't care where prices come from.
+const ZQ_MONTH_CODES = 'FGHJKMNQUVXZ';
+const ZQ_MONTHS_AHEAD = 16; // covers ~8 meetings plus the no-meeting month after the last one
+
+async function fetchZqStrip() {
+  const now = new Date();
+  const rows = [];
+  const problems = [];
+  for (let i = 0; i < ZQ_MONTHS_AHEAD; i++) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
+    const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const symbol = `ZQ${ZQ_MONTH_CODES[d.getUTCMonth()]}${String(d.getUTCFullYear() % 100).padStart(2, '0')}`;
+    try {
+      const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}.CBT?range=1mo&interval=1d`, {
+        headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const result = (((await res.json()).chart || {}).result || [])[0];
+      const stamps = (result && result.timestamp) || [];
+      const closes = (((result && result.indicators) || {}).quote || [{}])[0].close || [];
+      // Last close that actually printed — far months can show null on quiet days.
+      let pick = null;
+      for (let k = stamps.length - 1; k >= 0; k--) {
+        if (closes[k] != null && isFinite(closes[k])) { pick = { ts: stamps[k], price: closes[k] }; break; }
+      }
+      if (!pick) throw new Error('no close in the last month');
+      rows.push({ price_date: new Date(pick.ts * 1000).toISOString().slice(0, 10), contract_month: ym, symbol, price: Math.round(pick.price * 10000) / 10000, source: 'yahoo' });
+    } catch (err) {
+      problems.push(`${symbol}: ${err.message}`);
+    }
+    await new Promise(r => setTimeout(r, 250)); // be polite
+  }
+  return { rows, problems };
+}
+
 const results = { ok: [], failed: [] };
 
 try {
@@ -107,6 +171,25 @@ try {
     results.ok.push(`SOFR forward curve snapshot (${curve.length} points)`);
   }
 } catch (err) { results.failed.push(`CME curve: ${err.message}`); }
+
+// Fed Funds Odds inputs — both tables come from db/fedwatch_setup.sql; until
+// it has been run the upserts fail and show up as failures below without
+// affecting the rate pulls above.
+try {
+  console.log('Fetching EFFR / SOFR / target range…');
+  const spot = await fetchFedFundsSpot();
+  await upsert('fed_funds_spot', 'rate_date', [spot]);
+  results.ok.push(`EFFR ${spot.rate_date} = ${(spot.effr * 100).toFixed(2)}% (target ${(spot.target_lower * 100).toFixed(2)}–${(spot.target_upper * 100).toFixed(2)})`);
+} catch (err) { results.failed.push(`Fed funds spot: ${err.message}`); }
+
+try {
+  console.log('Fetching the 30-Day Fed Funds futures strip…');
+  const { rows, problems } = await fetchZqStrip();
+  if (problems.length) console.warn('  skipped: ' + problems.join(' · '));
+  if (rows.length < 4) throw new Error(`only ${rows.length} contract(s) priced`);
+  await upsert('fed_funds_futures', 'price_date,contract_month', rows);
+  results.ok.push(`ZQ strip ${rows.length} contracts (${rows[0].symbol} ${rows[0].price} … ${rows[rows.length - 1].symbol} ${rows[rows.length - 1].price})`);
+} catch (err) { results.failed.push(`ZQ futures: ${err.message}`); }
 
 console.log('\nDone.', results.ok.length ? `Saved: ${results.ok.join(' · ')}` : 'Nothing saved.');
 if (results.failed.length) {
