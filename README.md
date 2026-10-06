@@ -53,6 +53,7 @@ Curves load from the `sofr_curve` / `ten_year_curve` tables (a hardcoded Chatham
 - 2027+ fallback: T1 December annualized when trailing months are unavailable
 - Detailed NOI build-up stored per property (`noi_detail`) for math transparency
 - An upload can be applied as the current NOI, or saved as a **Prior Test** baseline only
+- Annual **Budget Analysis** roll-ups (Forecast IQ, one tab per property code such as `w20mr`) can be converted into this forecast layout with `scripts/convert-budget-rollup.py` — see the script header for usage. It renames each tab to the `ST, City, Street` name the matcher expects and maps the budget rows onto the forecast rows by label
 
 #### 2022 Fund portfolio row
 - Aggregates NOI across 9 fund properties (Buckeye, Daytona, Fountain, Greeley, Monument, Ocala, Raymore, Woodbury, Wyoming) against the Barings facility
