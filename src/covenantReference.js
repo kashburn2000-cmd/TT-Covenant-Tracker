@@ -13,7 +13,7 @@
 // re-import that changes the workbook shows up as a test failure, not a silent
 // drift between the site and the spreadsheet.
 
-import reference from './data/covenantReference.json';
+import reference from './data/covenantReference.json' with { type: 'json' };
 
 export const REFERENCE = reference;
 export const REFERENCE_YEAR = 2027;
@@ -312,8 +312,8 @@ export const TRACKER_PLAN = {
   // Stockbridge — occupancy steps, extension and covenant. Loan Amount as the
   // loan agreement defines it ($37,275,630), which the imputed debt service runs off.
   CT047: [
-    { metric: 'occupancy', req: 50, testType: 'Covenant', date: '2027-06-27', inc: 3, exp: 6, label: 'Occupancy, step one', note: 'Standing covenant from 6/27/2027: 50% occupancy.' },
-    { metric: 'occupancy', req: 80, testType: 'Covenant', date: '2027-12-27', inc: 3, exp: 6, label: 'Occupancy, step two', note: 'Standing covenant from 12/27/2027: 80% occupancy.' },
+    { metric: 'occupancy', req: 50, testType: 'Covenant', date: '2027-06-27', inc: 3, exp: 6, loanAmount: 37275630, label: 'Occupancy, step one', note: 'Standing covenant from 6/27/2027: 50% occupancy.' },
+    { metric: 'occupancy', req: 80, testType: 'Covenant', date: '2027-12-27', inc: 3, exp: 6, loanAmount: 37275630, label: 'Occupancy, step two', note: 'Standing covenant from 12/27/2027: 80% occupancy.' },
   ],
   CT048: [{ metric: 'dscr', testType: 'Maturity', inc: 3, exp: 6, loanAmount: 37275630, label: 'Extension: DSCR', note: 'Extension test 11/30/2027. Revenue trailing 3 months, expenses trailing 6, both annualized. Debt service on the $37,275,630 Loan Amount as defined in the loan agreement.' }],
   CT049: [{ metric: 'dscr', testType: 'Covenant', inc: 3, exp: 6, loanAmount: 37275630, label: 'DSCR covenant', note: '12/27/2027, then each 6/30 and 12/31. Revenue trailing 3 months, expenses trailing 6.' }],

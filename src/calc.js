@@ -602,6 +602,17 @@ export function calcCovenantRow(p, scenario = null) {
   return { ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, noi, ads, effectiveLoan, variableLoanDetail, constantFloor, indexFloorApplied: floored, currentVal, satisfied, requiredNOI, noiVariance, paydown };
 }
 
+// Does the sheet carry at least one month before the test month? A file that
+// starts after the test date has nothing to trail, and applying it would
+// score a past test on a future month.
+export function sheetCoversTestDate(sheetData, covenantDate) {
+  const months = (sheetData?.monthData || []).filter(Boolean);
+  if (!months.length || !covenantDate) return false;
+  const d = new Date(covenantDate + 'T00:00:00');
+  const cut = d.getFullYear() * 12 + d.getMonth();
+  return months.some(m => m.year * 12 + m.month < cut);
+}
+
 // Ending occupancy (0–1) for the latest forecast month strictly before the
 // test month — the same window computeNOI's T1 uses — or null when the sheet
 // has no month before the test or no occupancy row.

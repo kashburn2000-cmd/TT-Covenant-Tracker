@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiveSofrCurve, setActive10YCurve, fuzzyMatch, parseMonthLabel, parseCellNumber, computeNOI, calcCovenantRow, occupancyAtDate } from './calc.js';
+import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiveSofrCurve, setActive10YCurve, fuzzyMatch, parseMonthLabel, parseCellNumber, computeNOI, calcCovenantRow, occupancyAtDate, sheetCoversTestDate } from './calc.js';
 import { REFERENCE, REFERENCE_YEAR, testById, resolveReferenceProperty, forecastLineForProperty, plannedTrackerRows, unscoredTests } from './covenantReference.js';
 import { CovenantReferenceCard, ReferenceCalendarView, ReferenceObligationsView, LoadReferencePreview } from './components/CovenantReference.jsx';
 import { SB_URL, SB_HEADERS } from './supabase.js';
@@ -749,6 +749,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
             if (r.warning) fundWarnings.push(`${fp.name}: ${r.warning}`);
           }
           if (!match) { fundWarnings.push(`${fp.name}: no sheet matched`); return fp; }
+          if (!sheetCoversTestDate(match, fundRow.covenantDate)) { fundWarnings.push(`${fp.name}: file starts after the ${fundRow.covenantDate} test date`); return fp; }
           if (match.parseWarnings && match.parseWarnings.length > 0) {
             fundWarnings.push(`${fp.name}: ${match.parseWarnings.slice(0, 2).join('; ')}${match.parseWarnings.length > 2 ? ` (+${match.parseWarnings.length - 2} more)` : ''}`);
           }
@@ -759,8 +760,10 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         });
         const totalNOI = updatedFundProps.reduce((s, fp) => s + (fp.noi || 0), 0);
         const matchedCount = updatedFundProps.filter(fp => fp.matchedSheet).length;
+        const anyCovers = updatedFundProps.some(fp => fp.matchedSheet);
+        const anyMatchedAtAll = fundWarnings.some(w => /file starts after/.test(w)) || anyCovers;
         results.push({
-          id: fundRow.id, property: fundRow.property, testLabel: fundRow.testLabel, status: matchedCount > 0 ? 'matched' : 'no_match',
+          id: fundRow.id, property: fundRow.property, testLabel: fundRow.testLabel, status: anyCovers ? 'matched' : anyMatchedAtAll ? 'file_after_test' : 'no_match',
           matchedSheet: `${matchedCount} of ${updatedFundProps.length} fund properties`, score: matchedCount / Math.max(updatedFundProps.length, 1),
           oldNOI: fundRow.noi, newNOI: totalNOI, newNOIT1: null,
           incomeMonths: fundRow.incomeMonths, expenseMonths: fundRow.expenseMonths,
@@ -787,6 +790,14 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         }
         const tie = tieOut(bestSheet, code || bestSheet.budgetCode);
         if (tie) matchWarning = matchWarning ? `${matchWarning} ${tie}` : tie;
+
+        // A file whose first month is after the test date has nothing to
+        // trail. Leave the row alone rather than score a 2026 test on a
+        // December 2027 month.
+        if (!sheetCoversTestDate(bestSheet, prop.covenantDate)) {
+          results.push({ id: prop.id, property: prop.property, testLabel: prop.testLabel, status: 'file_after_test', matchedSheet: bestSheet.propertyTitle, score: bestScore, oldNOI: prop.noi, covenantDate: prop.covenantDate });
+          continue;
+        }
 
         const { noi: computedNOI, detail: computedDetail } = computeNOI(bestSheet, prop.incomeMonths, prop.expenseMonths, prop.covenantDate, { actualEarlyTermMonths: prop.actualEarlyTermMonths, stdEarlyTerm: prop.stdEarlyTerm, oneTimeExpenseMonths: prop.oneTimeExpenseMonths, replacementReserves: prop.replacementReserves });
         if (computedNOI === null) {
@@ -2736,6 +2747,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 {uploadMode === 'prior' && (
                   <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginBottom: '0.85rem', padding: '0.5rem 0.65rem', background: 'var(--panel2)', borderRadius: 4, borderLeft: '3px solid var(--accent)' }}>
                     Records this forecast as the <strong style={{ color: 'var(--text2)' }}>Prior Test</strong> result{(forecastMonthInput.trim() || forecastMonth) ? <> dated <strong style={{ color: 'var(--text2)' }}>{forecastMonthInput.trim() || forecastMonth}</strong></> : null}. Current live NOI figures are left unchanged.
+                    {(() => {
+                      const label = forecastMonthInput.trim() || forecastMonth;
+                      const iso = monthLabelToISO(label);
+                      if (!label) return null;
+                      if (!iso) return <div style={{ color: 'var(--warn-text)', marginTop: 4 }}>⚠ "{label}" is not a month, so the baseline would be dated today. Type the month the forecast was prepared, like "August 2026".</div>;
+                      if (new Date(iso) > new Date()) return <div style={{ color: 'var(--warn-text)', marginTop: 4 }}>⚠ "{label}" is in the future — the detected label is the file's last month, not when it was prepared. Type the month the forecast was prepared, like "August 2026", so the Previous column shows the right date.</div>;
+                      return null;
+                    })()}
                   </div>
                 )}
                 <div style={{ overflowX: 'auto' }}>
@@ -2761,8 +2780,13 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                           </td>
                           <td style={{ padding: '0.5rem 0.75rem' }}>
                             <span className={`pill ${r.status === 'matched' ? 'green' : 'red'}`}>
-                              {r.status === 'matched' ? (r.matchedByCode ? '✓ Matched by budget code' : `✓ Matched (${Math.round(r.score * 100)}%)`) : r.status === 'no_match' ? '✗ No match' : '⚠ Insufficient data'}
+                              {r.status === 'matched' ? (r.matchedByCode ? '✓ Matched by budget code' : `✓ Matched (${Math.round(r.score * 100)}%)`) : r.status === 'no_match' ? '✗ No match' : r.status === 'file_after_test' ? '⊘ File starts after test date' : '⚠ Insufficient data'}
                             </span>
+                            {r.status === 'file_after_test' && (
+                              <div style={{ marginTop: '0.3rem', fontSize: '0.62rem', color: 'var(--muted)', maxWidth: 260, lineHeight: 1.45 }}>
+                                Test {r.covenantDate} has no month before it in this file, so the row keeps its current figures.
+                              </div>
+                            )}
                             {(r.matchWarning || (r.parseWarnings && r.parseWarnings.length > 0)) && (
                               <div style={{ marginTop: '0.3rem', fontSize: '0.62rem', color: 'var(--warn-text)', maxWidth: 260, lineHeight: 1.45 }}>
                                 {r.matchWarning && <div>⚠ {r.matchWarning}</div>}
