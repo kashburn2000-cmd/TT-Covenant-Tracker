@@ -32,7 +32,8 @@ Access is two-layered: Supabase Auth (invite-only sign-in) gates the entire app,
 
 The core of the app (implemented inline in `src/App.jsx`; the pure math lives in `src/calc.js` so it can be unit-tested in isolation).
 
-- Tracks DSCR and Debt Yield covenant / maturity tests across all active loans, stored in the `properties` table (seeded with ~11 rows on first run against an empty table)
+- Tracks DSCR, Debt Yield and occupancy covenant / maturity tests across all active loans, stored in the `properties` table (seeded with ~11 rows on first run against an empty table)
+- Ships the debt team's **Covenant Test Reference** workbook — every test read from the loan documents, with the rate inputs to score them — and can load a year's tests as tracker rows in one click. See [Covenant Test Reference](#covenant-test-reference)
 - Color-coded pass/fail/waived status per property, with summary cards (total / passing / failing and a click-to-reveal Potential Maximum Paydown across failing tests)
 - Sortable by test date, property name, or status; column picker (11 columns, persisted); hide/unhide rows (hidden tests stay in the DB but drop out of the dashboard, counts, and exports)
 - Paydown-to-cure calculation for failing covenants, plus a debt-fund refi sizing overlay (spread / DSCR / DY / amortization inputs)
@@ -40,28 +41,46 @@ The core of the app (implemented inline in `src/App.jsx`; the pure math lives in
 
 #### Three-prong rate calculation
 Each property's interest rate is the highest of up to three prongs:
-- **SOFR + Spread** — interpolated from the Chatham 1-Mo Term SOFR forward curve
+- **SOFR + Spread** — interpolated from the Chatham 1-Mo Term SOFR forward curve. An optional **index floor** (`index_floor`, e.g. 3.00%) floors SOFR before the spread is added
 - **10-Year Treasury + Spread** — interpolated from the Chatham 10-Year forward curve
-- **Sizing / Floor Rate** — a fixed floor entered per loan
+- **Sizing / Floor Rate** — a fixed floor entered per loan. An all-in rate floor ("7.00% all-in floor") and a fixed base rate (the Nationwide loans' 8.50%) both go here
+
+Debt service is the amortizing payment (or interest only) at that rate, and never less than an optional **mortgage constant** × balance (`mortgage_constant`, the PNC loans' 8.19% / 7.78%).
 
 Curves load from the `sofr_curve` / `ten_year_curve` tables (a hardcoded Chatham fallback dated 03 Mar 2026 lives in `src/calc.js`). The PIN-gated **Update Curve** button in the header accepts a Chatham `.xlsx` (or a 2-column CSV), replaces both curve tables, and also saves dated snapshots into `curve_snapshots` for the Debt Dashboard's Forward Curve Tracker.
 
 #### NOI calculation engine
-- Parses monthly forecast `.xlsx` files (multi-sheet Budget Analysis workbooks) via `src/parseForecasts.js`
-- Supports T1, T3, and T12 trailing income and expense periods independently
-- Fuzzy property-name matching across sheet names, with ambiguous-match warnings and a review screen before applying
+- Parses monthly forecast `.xlsx` files (multi-sheet Budget Analysis workbooks, or accounting's forecast-format workbook with one location-named tab per property) via `src/parseForecasts.js`
+- Supports T1, T3, T6 and T12 trailing income and expense periods independently
+- Sheets match on accounting's **budget code** first (`wdove`, `wsaug` … — read from a code-named tab or the sheet's "Source: Budget Analysis … (wdove)" line, against the row's `budget_code` or its reference line), then fall back to fuzzy name scoring with ambiguous-match warnings. The review screen says which. A 2027 sheet whose 12 months don't sum to the reference workbook's budget for that line is flagged before anything is applied
+- Occupancy tests take the ending occupancy of the month before the test date from the same sheet
 - 2027+ fallback: T1 December annualized when trailing months are unavailable
 - Detailed NOI build-up stored per property (`noi_detail`) for math transparency
 - An upload can be applied as the current NOI, or saved as a **Prior Test** baseline only
 
-#### 2022 Fund portfolio row
-- Aggregates NOI across 9 fund properties (Buckeye, Daytona, Fountain, Greeley, Monument, Ocala, Raymore, Woodbury, Wyoming) against the Barings facility
+#### Fund portfolio rows
+- A row flagged `is_fund` aggregates NOI across the properties in `fund_properties` (each with its budget code) against the facility. The 2022 Fund row covers 9 properties (Buckeye, Daytona, Fountain, Greeley, Monument, Ocala, Raymore, Woodbury, Wyoming); the reference loader builds the 2022 Fund earnout row the same way, and the 2023 Fund's 8 properties load when its tests start in 2028. Every fund row rolls up on upload
 - Expandable sub-rows showing per-property DSCR vs. the 1.05x covenant
 - **Variable Loan Balance** — 12-month forward balance schedule for rolling T-3 interest calculation
 - **NOI Adjustments** — monthly inputs for early-termination normalization, one-time expense exclusions, and replacement reserves
 
 #### Math transparency panel
 Expandable per-row panel showing the full calculation chain: inputs (loan amount / commitment, NOI, amortization), rate selection with all three prongs listed and the winner highlighted, the NOI build-up (income and expense months, averages, adjustments, annualized total), debt service (amortizing payment or T-3 rolling interest breakdown for variable loans), and the DSCR / DY result with paydown-to-cure.
+
+#### Covenant Test Reference
+The debt team's reference workbook ([`docs/2027_Covenant_Test_Reference.xlsx`](docs/2027_Covenant_Test_Reference.xlsx), described sheet by sheet in [`docs/2027_Covenant_Test_Reference_Structure.md`](docs/2027_Covenant_Test_Reference_Structure.md)) lists every test on the 28 lines of the 2027 Forecast Deal List as read from the loan documents — 106 tests, one row of loan and guaranty terms per line, one row of calculation rules per line (how the lender builds debt service and NOI), and the 2027 forecast lines with budget codes. `scripts/import-covenant-reference.mjs` copies it into [`src/data/covenantReference.json`](src/data/covenantReference.json), which ships with the app; re-run it whenever the workbook changes:
+
+```bash
+node scripts/import-covenant-reference.mjs docs/2027_Covenant_Test_Reference.xlsx
+```
+
+`src/covenantReference.js` rebuilds the workbook's derived views by the analyst's rules and is pinned to the workbook's own output by `covenantReference.test.js` (15 calendar tests, 5 maturities, 26 obligations, the monthly counts). In the Covenant Tracker:
+
+- **Requirements card** on every test's detail pane: all of that loan's tests (threshold, timing, first date, in-2027 flag, document section), the calculation rule, and the guaranty terms. Rows loaded from the reference link to it by `covenant_id`; older hand-entered rows resolve by name ("St Augustine" → "St. Augustine").
+- **2027 Calendar** and **Obligations** views (chips under the status filters): the dated first-time tests and initial maturities with each one's current tracker result, and the ongoing / event-driven obligations that have no date.
+- **Load 2027 Tests** (Actions menu, PIN-gated): previews one tracker row per 2027 test the engine can score — DSCR, debt yield and occupancy; 20 rows covering 19 of the 49 in-2027 tests, the rest being LTV, cash sweeps, reserves and loan-to-cost limits that stay reference only — with rates from the Test Calculations sheet, loan amount and maturity from Loan Terms, the trailing windows from the NOI Period rule, the per-unit replacement reserve, and the line's full-year 2027 budget as placeholder NOI until a forecast is uploaded. Rows already loaded (same test, metric and date) are skipped; hand-entered rows on the same loans are listed with a tick to hide them (2026 tests ticked by default) and a note where the workbook reads the requirement differently. Needs [`db/covenant_reference_setup.sql`](db/covenant_reference_setup.sql).
+
+How the eight calculation types map onto the engine: three-prong loans are the engine's three prongs; "actual debt service" and "note rate" loans are SOFR + margin (index floor where stated, all-in floor as the sizing prong) on the balance, interest only unless amortizing; the Nationwide "105% of interest at the Base Rate" tests are 1.05x DSCR on interest only at the base rate; "greater of actual or three-prong" loans are scored on the three-prong figure (the larger during interest-only construction); the PNC "highest of actual, Treasury or constant" loans carry the mortgage constant. Not modelled: occupancy caps on revenue, minimum management fees, rate caps and swaps (floors that switch off under a hedge are applied regardless).
 
 #### Connections
 Each test carries the deal's registry id (`properties.deal_uid`), so the detail pane shows the same loan as the Debt Dashboard sees it, its loan abstract, and how it is leasing — with a click through to any of them. See [Connections](#connections) for the full picture and the tie-out warnings. The 2022 Fund row tests a facility across nine properties rather than one deal, so it links to nothing itself; instead each fund sub-row carries that property's occupancy and its own deal id.
@@ -304,8 +323,9 @@ npm install       # once
 npm run dev       # Vite dev server
 npm run build     # production build (dist/)
 npm run preview   # serve the production build locally
-npm test          # vitest run — calc, curve/schedule/bank-package parsers, overrides, map merge
+npm test          # vitest run — calc, curve/schedule/bank-package/forecast parsers, covenant reference, overrides, map merge
 npm run lint      # eslint src/
+node scripts/import-covenant-reference.mjs docs/2027_Covenant_Test_Reference.xlsx   # refresh src/data/covenantReference.json
 ```
 
 ---
@@ -320,7 +340,9 @@ npm run lint      # eslint src/
 │   ├── main.jsx                  # Mounts <AuthGate><DealLinksProvider><App/></DealLinksProvider></AuthGate>
 │   ├── App.jsx                   # App shell: tabs, theme, PIN, curve upload + the Covenant Tracker tab
 │   ├── calc.js                   # Pure covenant math engine (unit-tested; ported to SQL for Power BI)
-│   ├── parseForecasts.js         # Monthly Budget Analysis xlsx → per-property NOI series
+│   ├── parseForecasts.js         # Monthly Budget Analysis xlsx → per-property NOI / occupancy series + budget code
+│   ├── covenantReference.js      # Covenant Test Reference workbook: calendar, obligations, tracker rows (unit-tested)
+│   ├── data/covenantReference.json  # The workbook, imported by scripts/import-covenant-reference.mjs
 │   ├── curveParse.js             # Chatham forward-curve workbook / CSV parsing
 │   ├── fedwatch.js               # FedWatch-style FOMC rate-move probabilities (futures or forward curve in)
 │   ├── parseDebtSchedules.js     # At Risk (.xlsb) / Stabilized (.xlsx) schedule parsing
@@ -344,8 +366,10 @@ npm run lint      # eslint src/
 │       ├── DealLinksContext.jsx  # Loads the cross-tab join once; shared by every screen
 │       ├── ConnectionsPanel.jsx  # "This deal on every other tab" card + deal picker
 │       ├── DocView.jsx           # Executive Covenant Dashboard replica + styled Excel export
+│       ├── CovenantReference.jsx # Requirements card, 2027 Calendar / Obligations views, Load Tests preview
 │       └── MathLine.jsx
-├── db/                           # One-time Supabase SQL: loans, debt dashboard, map, deal registry, security, Power BI
+├── db/                           # One-time Supabase SQL: loans, debt dashboard, map, deal registry, covenant reference, security, Power BI
+├── docs/                         # Covenant Test Reference workbook + its structure doc
 ├── scripts/                      # Rate pulls, backfills, Power BI validation, theme codemod
 ├── ingest/                       # Loan-abstract import guide + JSON sidecar example
 └── .github/workflows/            # daily-curves, backfill-rate-history, keep-supabase-alive
@@ -357,7 +381,7 @@ npm run lint      # eslint src/
 
 | Table | Purpose | Created by |
 |---|---|---|
-| `properties` | All tracked loans and covenant parameters (incl. `deal_uid`, the Deal Registry link) | Created manually (see [Setup](#setup)) |
+| `properties` | All tracked loans and covenant parameters (incl. `deal_uid`, the Deal Registry link, and the reference columns from `db/covenant_reference_setup.sql`) | Created manually (see [Setup](#setup)) |
 | `property_events` | Per-property history: test snapshots, comments, prior-test baselines | Created manually |
 | `settings` | Key/value app config: `lastUpdated`, `forecastMonth`, `visibleCols`, `visibleTabs`, `sofrUpdated`, `landThreshold`, `leasingLinks` | Created manually |
 | `sofr_curve` / `ten_year_curve` | Chatham 1-Mo Term SOFR / 10-Year Treasury forward curves | Created manually |
@@ -394,7 +418,13 @@ npm run lint      # eslint src/
 | `replacement_reserves` | numeric | Monthly replacement reserve deduction |
 | `noi_detail` | jsonb | Full income/expense build-up from last forecast upload |
 | `is_fund` | boolean | Marks the row as a portfolio fund |
-| `fund_properties` | jsonb | Per-property NOI and allocated loan data |
+| `fund_properties` | jsonb | Per-property NOI, budget code (`sheetCode`) and allocated loan data |
+| `covenant_id` | text | The reference workbook test this row scores (`CT001` … `CT106`) — `db/covenant_reference_setup.sql` |
+| `test_label` | text | What the row is called when a property has several tests ("Extension: DSCR") |
+| `budget_code` | text | Accounting's budget code; forecast sheets match on it first |
+| `index_floor` | numeric | Percent; SOFR is floored here before the spread is added |
+| `mortgage_constant` | numeric | Percent; debt service is never less than this × the balance |
+| `occupancy` | numeric | Percent at the test date, written by the upload for `covenant_type = 'occupancy'` rows |
 
 ---
 
@@ -417,7 +447,7 @@ The Supabase project URL and publishable key are hardcoded in [`src/supabase.js`
 ### Supabase SQL
 
 1. Run the feature scripts you need in the Supabase SQL editor (each is idempotent):
-   [`db/loans_setup.sql`](db/loans_setup.sql), [`db/debt_dashboard_setup.sql`](db/debt_dashboard_setup.sql), [`db/map_setup.sql`](db/map_setup.sql), [`db/deal_registry_setup.sql`](db/deal_registry_setup.sql), and optionally [`db/powerbi_views.sql`](db/powerbi_views.sql).
+   [`db/loans_setup.sql`](db/loans_setup.sql), [`db/debt_dashboard_setup.sql`](db/debt_dashboard_setup.sql), [`db/map_setup.sql`](db/map_setup.sql), [`db/deal_registry_setup.sql`](db/deal_registry_setup.sql), [`db/covenant_reference_setup.sql`](db/covenant_reference_setup.sql), and optionally [`db/powerbi_views.sql`](db/powerbi_views.sql).
 2. Ensure the covenant tables exist (see the schema coverage note above), then add the columns the app expects:
 
 ```sql
@@ -470,7 +500,10 @@ The PIN is the `EDIT_PIN` constant at the top of [`src/components/PinModal.jsx`]
 On the Covenant Tracker tab, unlock editing (footer lock + PIN), click **Add Property**, and fill in the loan details. 10yr Spread, Sizing Rate, and Note are optional; the rest should be filled in.
 
 ### Uploading a forecast
-Click **Upload Forecast File** and select the monthly Budget Analysis xlsx from accounting. The app matches sheets to properties by fuzzy name scoring, shows a review screen, and then updates NOI figures — or saves the upload as a Prior Test baseline only.
+Click **Upload Forecast File** and select the monthly Budget Analysis xlsx from accounting (or the forecast-format workbook with one tab per property). The app matches sheets to properties by budget code, falling back to fuzzy name scoring, shows a review screen (match method, NOI change, occupancy for occupancy tests, tie-out warnings), and then updates the figures — or saves the upload as a Prior Test baseline only.
+
+### Loading a year's tests from the covenant reference
+Unlock editing, open **⋯ Actions → Load 2027 Tests**, review the preview (new rows, rows already loaded, earlier hand-entered rows to hide, and the tests that stay reference only), then click **Add**. Run [`db/covenant_reference_setup.sql`](db/covenant_reference_setup.sql) first; the loader says so if the columns are missing. Then upload the 2027 forecast workbook to replace the placeholder NOI with each test's trailing window.
 
 ### Weekly upload reminder
 The two recurring uploads — the Chatham forward curves and the weekly leasing summary — come due every Monday. Whenever either hasn't been refreshed since Monday 00:00, an amber banner appears under the header (`src/components/WeeklyUploadBanner.jsx`) showing what's outstanding and when it was last updated, with a one-click path to each upload: the curve item embeds the same PIN-gated file picker as the header button, and the leasing item jumps to the Leasing tab (revealing it for the session if it's hidden from the shared tab config — the permanent setting is untouched). The ✕ hides the banner for the rest of the browser session; it returns on the next visit and re-arms each new week until both uploads land. Items also clear automatically when the data arrives by other means (e.g. the [warehouse leasing sync](#weekly-leasing-sync-data-warehouse)), since the banner reads the same freshness stamps (`settings.sofrUpdated`, `leasing_snapshot.uploaded_at`).

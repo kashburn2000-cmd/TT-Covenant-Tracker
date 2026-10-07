@@ -5,6 +5,7 @@ import {
   nextReportingDue,
   buildLoanTasks,
   buildCovenantTasks,
+  buildReferenceMaturityTasks,
   buildConversionTasks,
   buildHedgeTasks,
   buildReportingTasks,
@@ -273,5 +274,34 @@ describe('digestHtml', () => {
     expect(html).toContain('Lender reporting deliverables coming due');
     expect(html).toContain('Produced from the loan abstracts.');
     expect(html).not.toContain('Covenant Dashboard reminders');
+  });
+});
+
+describe('buildCovenantTasks — occupancy and labels', () => {
+  it('words an occupancy test and uses the row label when set', () => {
+    const [t] = buildCovenantTasks([{ id: 9, property: 'Stockbridge', lender: 'UMB', test_type: 'Covenant', test_label: 'Occupancy, step one', covenant_type: 'occupancy', covenant_req: 50, covenant_date: '2026-08-15' }], TODAY);
+    expect(t.title).toBe('Stockbridge — Occupancy, step one (50% occupancy)');
+  });
+});
+
+describe('buildReferenceMaturityTasks', () => {
+  const terms = [
+    { property: 'Venice', lender: 'UMB', loanAmount: 52250000, initialMaturity: '2026-09-12', extendedMaturity: '2027-09-12', extendedMaturityText: null },
+    { property: 'Newnan', lender: 'Comerica', loanAmount: 38496000, initialMaturity: null, initialMaturityText: 'June 2029', extendedMaturity: null, extendedMaturityText: 'June 2031' },
+    { property: 'Sarasota', lender: 'Stifel', loanAmount: 59900000, initialMaturity: '2026-12-29', extendedMaturity: null, extendedMaturityText: 'None' },
+  ];
+  it('makes a loan_maturity task per dated initial maturity in window', () => {
+    const tasks = buildReferenceMaturityTasks(terms, TODAY);
+    expect(tasks.map(t => [t.deal_name, t.due_date, t.kind])).toEqual([['Venice', '2026-09-12', 'loan_maturity'], ['Sarasota', '2026-12-29', 'loan_maturity']]);
+    expect(tasks[0].dedupe_key).toBe(dedupeKey('loan_maturity', 'covenant_reference', 'Venice', '2026-09-12'));
+    expect(tasks[0].detail).toMatch(/Extended maturity 2027-09-12/);
+    expect(tasks[1].detail).toMatch(/No extension/);
+  });
+  it('skips a line the loan abstracts already remind about on the same date', () => {
+    const fromLoans = [{ kind: 'loan_maturity', deal_name: 'Watermark at Venice Pinebrook', due_date: '2026-09-12' }];
+    expect(buildReferenceMaturityTasks(terms, TODAY, fromLoans).map(t => t.deal_name)).toEqual(['Sarasota']);
+    // Same name, different date: still its own reminder.
+    const other = [{ kind: 'loan_maturity', deal_name: 'Venice', due_date: '2027-09-12' }];
+    expect(buildReferenceMaturityTasks(terms, TODAY, other).map(t => t.deal_name)).toEqual(['Venice', 'Sarasota']);
   });
 });

@@ -178,11 +178,14 @@ export function buildCovenantTasks(properties, todayISO) {
     const req =
       p.covenant_type === 'dy'
         ? `${parseFloat(p.covenant_req).toFixed(2)}% debt yield`
+        : p.covenant_type === 'occupancy'
+        ? `${parseFloat(p.covenant_req)}% occupancy`
         : `${parseFloat(p.covenant_req).toFixed(2)}x DSCR`;
+    const label = p.test_label ? ` ${p.test_label}` : ` ${(p.test_type || 'Covenant').toLowerCase()} test`;
     out.push({
       dedupe_key: dedupeKey('covenant_test', 'properties', p.id, p.covenant_date),
       kind: 'covenant_test',
-      title: `${p.property} — ${(p.test_type || 'Covenant').toLowerCase()} test (${req})`,
+      title: `${p.property} —${label} (${req})`,
       detail: `${p.lender || 'Lender n/a'} · confirm NOI is current in the tracker and review pass/fail ahead of the test date.`,
       due_date: p.covenant_date,
       lead_days: DEFAULT_LEAD_DAYS.covenant_test,
@@ -191,6 +194,38 @@ export function buildCovenantTasks(properties, todayISO) {
       source: 'auto',
       source_table: 'properties',
       source_id: String(p.id),
+    });
+  }
+  return out;
+}
+
+// ── Covenant reference Loan Terms → initial maturity tasks ───────────────────
+// The reference workbook (src/data/covenantReference.json) carries an initial
+// maturity for every tracked line. A line whose loan abstract already yields a
+// loan_maturity task on the same date is skipped, so the two sources never
+// produce two reminders for one maturity.
+export function buildReferenceMaturityTasks(loanTerms, todayISO, loanTasks = []) {
+  const out = [];
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  const covered = (loanTasks || []).filter(t => t.kind === 'loan_maturity');
+  for (const l of loanTerms || []) {
+    if (!l.initialMaturity || !inWindow(l.initialMaturity, todayISO)) continue;
+    const words = norm(l.property);
+    const dup = covered.some(t => t.due_date === l.initialMaturity && words.every(w => norm(t.deal_name).includes(w)));
+    if (dup) continue;
+    const ext = l.extendedMaturity ? ` Extended maturity ${l.extendedMaturity}.` : l.extendedMaturityText && l.extendedMaturityText !== 'None' ? ` Extended maturity ${l.extendedMaturityText}.` : ' No extension on the reference.';
+    out.push({
+      dedupe_key: dedupeKey('loan_maturity', 'covenant_reference', l.property, l.initialMaturity),
+      kind: 'loan_maturity',
+      title: `${l.property} — initial maturity`,
+      detail: `${l.lender || 'Lender n/a'}${l.loanAmount ? ` · $${Math.round(l.loanAmount / 1e6)}M` : ''} · from the covenant reference workbook.${ext}`,
+      due_date: l.initialMaturity,
+      lead_days: DEFAULT_LEAD_DAYS.loan_maturity,
+      deal_name: l.property,
+      lender: l.lender || null,
+      source: 'auto',
+      source_table: 'covenant_reference',
+      source_id: l.property,
     });
   }
   return out;

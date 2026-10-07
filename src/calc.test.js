@@ -367,3 +367,48 @@ describe('seeded 2022 Fund row on the shipped Chatham curves', () => {
     expect(r.currentVal).toBeLessThan(1.7);
   });
 });
+
+// ─── Reference-workbook additions: index floor, mortgage constant, occupancy ──
+
+describe('calcCovenantRow index floor, mortgage constant and occupancy', () => {
+  beforeAll(() => { setActiveSofrCurve(FLAT_SOFR); setActive10YCurve(FLAT_10Y); });
+  afterAll(() => { setActiveSofrCurve(DEFAULT_SOFR); setActive10YCurve(DEFAULT_10Y); });
+
+  it('floors the index before the margin, and says so', () => {
+    // SOFR 3% with a 3.50% index floor → 3.50% + 2% = 5.50%
+    const r = calcCovenantRow({ ...BASE, indexFloor: 3.5 });
+    expect(r.rate).toBeCloseTo(0.055, 12);
+    expect(r.indexFloorApplied).toBe(true);
+    expect(r.rateCandidates[0].detail).toMatch(/floor, market 3.000%/);
+    // A floor below the market does nothing.
+    const n = calcCovenantRow({ ...BASE, indexFloor: 1.0 });
+    expect(n.rate).toBeCloseTo(0.05, 12);
+    expect(n.indexFloorApplied).toBe(false);
+    expect(n.rateCandidates[0].detail).not.toMatch(/floor/);
+  });
+
+  it('never lets debt service fall below the mortgage constant', () => {
+    // 30-yr at 5% on 10M ≈ 644k; an 8.19% constant forces 819k.
+    const r = calcCovenantRow({ ...BASE, amort: 30, mortgageConstant: 8.19 });
+    expect(r.constantFloor).toBeCloseTo(819_000, 6);
+    expect(r.ads).toBeCloseTo(819_000, 6);
+    expect(r.currentVal).toBeCloseTo(600_000 / 819_000, 10);
+    // A constant below the amortizing payment is inert.
+    const n = calcCovenantRow({ ...BASE, amort: 30, mortgageConstant: 5 });
+    expect(n.ads).toBeCloseTo(calcADS(10_000_000, 0.05, 30), 8);
+  });
+
+  it('scores occupancy against the stored percent and never asks for a paydown', () => {
+    const pass = calcCovenantRow({ ...BASE, covenantType: 'occupancy', covenantReq: 87.5, occupancy: 92.4 });
+    expect(pass.currentVal).toBe(92.4);
+    expect(pass.satisfied).toBe(true);
+    expect(pass.occupancyKnown).toBe(true);
+    expect(pass.paydown).toBe(0);
+    const fail = calcCovenantRow({ ...BASE, covenantType: 'occupancy', covenantReq: 87.5, occupancy: 80 });
+    expect(fail.satisfied).toBe(false);
+    // No occupancy yet (nothing uploaded): fails, and flagged as unknown.
+    const none = calcCovenantRow({ ...BASE, covenantType: 'occupancy', covenantReq: 50 });
+    expect(none.satisfied).toBe(false);
+    expect(none.occupancyKnown).toBe(false);
+  });
+});

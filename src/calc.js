@@ -457,11 +457,16 @@ export function calcCovenantRow(p, scenario = null) {
   const spreadShiftPct = scenario?.spreadShiftBps ? scenario.spreadShiftBps / 100 : 0;
   const noiScale       = scenario?.noiPct ? 1 + scenario.noiPct / 100 : 1;
 
-  const sofr    = getSofr(p.covenantDate) + rateShift;
+  const sofrMarket = getSofr(p.covenantDate) + rateShift;
   const ten_y   = get10Y(p.covenantDate) + rateShift;
   const spread  = parseFloat(p.spread) + spreadShiftPct;
   const spread10y = p.spread10y != null ? parseFloat(p.spread10y) + spreadShiftPct : null;
   const sizingRate = p.sizingRate != null ? parseFloat(p.sizingRate) : null;
+  // An index floor applies to SOFR before the margin is added ("3.00% index
+  // floor"); an all-in floor on index + margin is the sizing-rate prong.
+  const indexFloor = p.indexFloor != null && p.indexFloor !== '' ? parseFloat(p.indexFloor) / 100 : null;
+  const sofr = indexFloor != null ? Math.max(sofrMarket, indexFloor) : sofrMarket;
+  const floored = indexFloor != null && sofrMarket < indexFloor;
 
   const sofrRate    = sofr + spread / 100;
   const tenYRate    = spread10y != null ? ten_y + spread10y / 100 : null;
@@ -469,7 +474,7 @@ export function calcCovenantRow(p, scenario = null) {
 
   // Pick the highest of whichever prongs are defined
   const candidates = [
-    { rate: sofrRate,    label: 'SOFR',        detail: `${(sofr*100).toFixed(3)}% + ${spread}%` },
+    { rate: sofrRate,    label: 'SOFR',        detail: `${(sofr*100).toFixed(3)}%${floored ? ` (floor, market ${(sofrMarket*100).toFixed(3)}%)` : ''} + ${spread}%` },
     ...(tenYRate   != null ? [{ rate: tenYRate,    label: '10 Year',    detail: `${(ten_y*100).toFixed(3)}% + ${spread10y}%` }] : []),
     ...(sizingFloor != null ? [{ rate: sizingFloor, label: 'Sizing Rate', detail: `${sizingRate}% floor` }] : []),
   ];
@@ -534,10 +539,33 @@ export function calcCovenantRow(p, scenario = null) {
     ads = calcADS(loan, rate, amort);
   }
 
+  // Mortgage-constant floor (the PNC loans): debt service is never less than
+  // the constant times the balance, whatever the rate prongs produce.
+  const mortgageConstant = p.mortgageConstant != null && p.mortgageConstant !== '' ? parseFloat(p.mortgageConstant) / 100 : null;
+  let constantFloor = null;
+  if (mortgageConstant != null && !variableLoanDetail) {
+    constantFloor = (p.variableLoan ? (p.loanCommitment || loan) : loan) * mortgageConstant;
+    if (constantFloor > ads) ads = constantFloor;
+  }
+
   // For paydown calcs and display, use the effective loan balance
   const effectiveLoan = (p.variableLoan && p.loanSchedule && parsedSchedule.length > 0)
     ? parsedSchedule[0].balance
     : loan;
+
+  // Occupancy tests compare the forecast's ending occupancy at the test date
+  // (stored on the row as a percent) against the required percent. NOI and
+  // debt service still compute so the row carries them, but they don't score.
+  if (p.covenantType === 'occupancy') {
+    const occ = p.occupancy != null && p.occupancy !== '' ? parseFloat(p.occupancy) : null;
+    const currentVal = occ != null ? occ : 0;
+    return {
+      ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, noi, ads, effectiveLoan, variableLoanDetail,
+      constantFloor, indexFloorApplied: floored,
+      currentVal, satisfied: occ != null && currentVal >= req, occupancyKnown: occ != null,
+      requiredNOI: 0, noiVariance: 0, paydown: 0,
+    };
+  }
 
   const currentVal = p.covenantType === 'dscr' ? noi / ads : (noi / effectiveLoan) * 100;
   const satisfied = currentVal >= req;
@@ -571,5 +599,22 @@ export function calcCovenantRow(p, scenario = null) {
   }
   // noi is returned explicitly so scenario shocks surface in the row (in the
   // base case this equals parseFloat(p.noi) — a no-op for numeric inputs).
-  return { ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, noi, ads, effectiveLoan, variableLoanDetail, currentVal, satisfied, requiredNOI, noiVariance, paydown };
+  return { ...p, sofr, ten_y, rate, rateWinner: winner, rateCandidates: candidates, noi, ads, effectiveLoan, variableLoanDetail, constantFloor, indexFloorApplied: floored, currentVal, satisfied, requiredNOI, noiVariance, paydown };
+}
+
+// Ending occupancy (0–1) for the latest forecast month strictly before the
+// test month — the same window computeNOI's T1 uses — or null when the sheet
+// has no month before the test or no occupancy row.
+export function occupancyAtDate(sheetData, covenantDate) {
+  const { monthData, occVals } = sheetData || {};
+  if (!monthData || !occVals) return null;
+  const testDate = new Date(covenantDate + 'T00:00:00');
+  const cutoff = testDate.getFullYear() * 12 + testDate.getMonth();
+  let best = null;
+  monthData.forEach((m, i) => {
+    if (!m || occVals[i] == null) return;
+    const k = m.year * 12 + m.month;
+    if (k < cutoff && (best === null || k > best.k)) best = { k, i };
+  });
+  return best ? occVals[best.i] : null;
 }

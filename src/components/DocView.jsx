@@ -105,6 +105,8 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
 
   const reqText = r => r.covenantType === 'dscr'
     ? `${r.covenantReq.toFixed(2)} Debt Service Coverage`
+    : r.covenantType === 'occupancy'
+    ? `${r.covenantReq % 1 === 0 ? r.covenantReq : r.covenantReq.toFixed(1)}% Occupancy`
     : `${r.covenantReq % 1 === 0 ? r.covenantReq : r.covenantReq.toFixed(2)}% Debt Yield`;
 
   // Standard report header block — same four labeled lines on screen and in the export.

@@ -21,6 +21,21 @@ export async function parseForecasts(file) {
     const firstText = titleRow.find(c => typeof c === 'string' && c.trim().length > 0);
     const propertyTitle = baTitle || firstText || sheetName;
 
+    // Accounting's budget code ("wdove") is the one stable key for a property.
+    // Internal exports name the tab by it; the forecast-format workbook names
+    // tabs by location and cites it in a source line ("Source: Budget Analysis
+    // - TTRES ... (wdove) - Draft 1 ..."). Take it from either, so the upload
+    // can match on the code before falling back to name scoring.
+    let budgetCode = null;
+    const tabCode = sheetName.match(/^(w[a-z0-9]{4})\b/i);
+    if (tabCode) budgetCode = tabCode[1].toLowerCase();
+    for (let i = 0; i < Math.min(data.length, 8) && !budgetCode; i++) {
+      for (const c of data[i] || []) {
+        const m = typeof c === 'string' && c.match(/\((w[a-z0-9]{4})\)/i);
+        if (m) { budgetCode = m[1].toLowerCase(); break; }
+      }
+    }
+
     // Find the month-header row and the exact column index of each month.
     // Exports vary: labels may read "Jan 2026" or "Jan-26", the month columns
     // are not always contiguous (spacer/summary columns can sit between them),
@@ -95,7 +110,7 @@ export async function parseForecasts(file) {
       }
     }
 
-    results.push({ sheetName, propertyTitle, monthData, incomeVals, totalExp, noiVals, occVals, noiStabilized, noiStabilizedMonth, parseWarnings });
+    results.push({ sheetName, propertyTitle, budgetCode, monthData, incomeVals, totalExp, noiVals, occVals, noiStabilized, noiStabilizedMonth, parseWarnings });
   }
   return results;
 }
