@@ -35,6 +35,7 @@ The core of the app (implemented inline in `src/App.jsx`; the pure math lives in
 - Tracks DSCR, Debt Yield and occupancy covenant / maturity tests across all active loans, stored in the `properties` table (seeded with ~11 rows on first run against an empty table)
 - Ships the debt team's **Covenant Test Reference** workbook — every test read from the loan documents, with the rate inputs to score them — and can load a year's tests as tracker rows in one click. See [Covenant Test Reference](#covenant-test-reference)
 - Color-coded pass/fail/waived status per property, with summary cards (total / passing / failing and a click-to-reveal Potential Maximum Paydown across failing tests)
+- A loan that tests several things on one date (Port St Lucie's debt yield and DSCR cash trap, Venice's DSCR and occupancy) is one entry on the board and one line in the Doc View, with every test on it: the entry is only as good as its worst test, counts are per entry, and the paydown shown is the one that cures the loan (the largest), not one per test. The detail pane lists the day's tests and switches between them (`src/covenantGroups.js`)
 - Sortable by test date, property name, or status; column picker (11 columns, persisted); hide/unhide rows (hidden tests stay in the DB but drop out of the dashboard, counts, and exports)
 - Paydown-to-cure calculation for failing covenants, plus a debt-fund refi sizing overlay (spread / DSCR / DY / amortization inputs)
 - What-if NOI overrides per row for quick scenario testing

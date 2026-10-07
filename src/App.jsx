@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiveSofrCurve, setActive10YCurve, fuzzyMatch, parseMonthLabel, parseCellNumber, computeNOI, calcCovenantRow, occupancyAtDate, sheetCoversTestDate } from './calc.js';
 import { REFERENCE, REFERENCE_YEAR, testById, resolveReferenceProperty, forecastLineForProperty, plannedTrackerRows, unscoredTests } from './covenantReference.js';
 import { CovenantReferenceCard, ReferenceCalendarView, ReferenceObligationsView, LoadReferencePreview } from './components/CovenantReference.jsx';
+import { groupRows, groupOf } from './covenantGroups.js';
 import { SB_URL, SB_HEADERS } from './supabase.js';
 import { supabase, signOut } from './auth.js';
 import { ScenarioBar, isScenarioActive } from './components/ScenarioBar.jsx';
@@ -601,11 +602,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   // Base-case summary shown alongside the shocked numbers while a scenario is on.
   const baseSummary = useMemo(() => {
     if (!scenarioOn) return null;
-    const act = properties.map(p => calcRow(p)).filter(r => !r.hidden);
+    const act = groupRows(properties.map(p => calcRow(p)).filter(r => !r.hidden), covenantStatus);
     return {
-      passing: act.filter(r => r.satisfied).length,
-      failing: act.filter(r => !r.satisfied).length,
-      totalPaydown: act.reduce((s, r) => s + r.paydown, 0),
+      passing: act.filter(g => g.satisfied).length,
+      failing: act.filter(g => !g.satisfied).length,
+      totalPaydown: act.reduce((s, g) => s + g.paydown, 0),
     };
   }, [properties, scenarioOn]);
 
@@ -616,28 +617,35 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const hiddenCount = rows.length - activeRows.length;
   const visibleRows = showHidden ? rows : activeRows;
 
+  // Same-day tests on one loan are one entry on the board: the entry is only
+  // as good as its worst test, and one paydown cures the loan, not each test
+  // (src/covenantGroups.js). Counts and the summary are per entry.
+  const activeGroups = useMemo(() => groupRows(activeRows, covenantStatus), [activeRows]);
   const summary = useMemo(() => ({
-    total: activeRows.length,
-    passing: activeRows.filter(r => r.satisfied).length,
-    failing: activeRows.filter(r => !r.satisfied).length,
-    totalPaydown: activeRows.reduce((s, r) => s + r.paydown, 0),
-  }), [activeRows]);
+    total: activeGroups.length,
+    passing: activeGroups.filter(g => g.satisfied).length,
+    failing: activeGroups.filter(g => !g.satisfied).length,
+    totalPaydown: activeGroups.reduce((s, g) => s + g.paydown, 0),
+  }), [activeGroups]);
 
   // FAIL-status count (hidden tests excluded) reported up to App for the
   // sidebar status dot + badge.
-  const failingCount = useMemo(() => activeRows.filter(r => covenantStatus(r) === 'FAIL').length, [activeRows]);
+  const failingCount = useMemo(() => activeGroups.filter(g => g.status === 'FAIL').length, [activeGroups]);
   useEffect(() => {
     if (typeof onFailingCount === 'function') onFailingCount(failingCount);
   }, [failingCount, onFailingCount]);
 
   // List rows after the status chips filter; selection falls back to the first
   // visible row when the selected one is filtered/hidden away.
-  const listRows = useMemo(() => {
-    if (statusFilter === 'fail') return visibleRows.filter(r => { const s = covenantStatus(r); return s === 'FAIL' || s === 'WAIVED'; });
-    if (statusFilter === 'thin') return visibleRows.filter(r => covenantStatus(r) === 'THIN');
-    return visibleRows;
-  }, [visibleRows, statusFilter]);
+  const visibleGroups = useMemo(() => groupRows(visibleRows, covenantStatus), [visibleRows]);
+  const listGroups = useMemo(() => {
+    if (statusFilter === 'fail') return visibleGroups.filter(g => g.status === 'FAIL' || g.status === 'WAIVED');
+    if (statusFilter === 'thin') return visibleGroups.filter(g => g.status === 'THIN');
+    return visibleGroups;
+  }, [visibleGroups, statusFilter]);
+  const listRows = useMemo(() => listGroups.flatMap(g => g.members), [listGroups]);
   const sel = listRows.find(r => r.id === selectedId) || listRows[0] || visibleRows[0] || null;
+  const selGroup = sel ? groupOf(visibleGroups, sel.id) : null;
 
   // ── Cross-tab links ────────────────────────────────────────────────────────
   // Each covenant test belongs to a registry deal, so the detail pane can show
@@ -1663,10 +1671,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
   // subtitle reading "8 failing". Count the two apart and let the label show
   // the split, so the chip and the header agree on what a failure is.
   const chipCounts = {
-    all: visibleRows.length,
-    fail: visibleRows.filter(r => covenantStatus(r) === 'FAIL').length,
-    waived: visibleRows.filter(r => covenantStatus(r) === 'WAIVED').length,
-    thin: visibleRows.filter(r => covenantStatus(r) === 'THIN').length,
+    all: visibleGroups.length,
+    fail: visibleGroups.filter(g => g.status === 'FAIL').length,
+    waived: visibleGroups.filter(g => g.status === 'WAIVED').length,
+    thin: visibleGroups.filter(g => g.status === 'THIN').length,
   };
   const failChipLabel = chipCounts.waived
     ? `Failing ${chipCounts.fail} · ${chipCounts.waived} waived`
@@ -1858,44 +1866,62 @@ Req: ${formatCurrency(r.requiredNOI)}`,
 
             {/* List rows */}
             <div style={{ overflow: 'auto', flex: 1, minHeight: 0 }}>
-              {listRows.map(r => {
-                const st = covenantStatus(r);
-                const m = STATUS_META[st];
-                const isSel = sel && r.id === sel.id;
+              {listGroups.map(g => {
+                const multi = g.members.length > 1;
+                const r = g.primary;
+                const m = STATUS_META[g.status];
+                const isSel = sel && g.members.some(x => x.id === sel.id);
                 const fillPct = Math.min(100, Math.round((r.currentVal / (r.covenantReq * 1.6)) * 100));
                 return (
                   <div
-                    key={r.id}
-                    onClick={() => { setSelectedId(r.id); setListView('tests'); if (isMobile) setMobileDetail(true); }}
+                    key={g.key}
+                    onClick={() => { setSelectedId(isSel ? sel.id : r.id); setListView('tests'); if (isMobile) setMobileDetail(true); }}
                     style={{
                       padding: '13px 22px 13px 19px', borderBottom: '1px solid var(--border)', cursor: 'pointer',
                       background: isSel ? 'var(--panel2)' : 'transparent',
                       borderLeft: `3px solid ${isSel ? 'var(--text)' : 'transparent'}`,
-                      opacity: r.hidden ? 0.42 : 1,
+                      opacity: g.hidden ? 0.42 : 1,
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {r.property}
-                        {r.testLabel && <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 10, color: 'var(--muted)', marginLeft: 7 }}>{r.testLabel}</span>}
+                        {g.property}
+                        {!multi && r.testLabel && <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 10, color: 'var(--muted)', marginLeft: 7 }}>{r.testLabel}</span>}
+                        {multi && <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 10, color: 'var(--muted)', marginLeft: 7 }}>{g.members.length} tests</span>}
                       </span>
                       <span className={`pill ${m.cls}`}>{m.label}</span>
                       {pinUnlocked && (
                         <span
-                          onClick={e => { e.stopPropagation(); toggleHidden(r.id, r.hidden); }}
-                          title={r.hidden ? 'Restore (unhide) test' : 'Hide test (past or no longer applicable)'}
-                          style={{ cursor: 'pointer', fontSize: 12, color: r.hidden ? 'var(--pass)' : 'var(--faint)', userSelect: 'none' }}
-                        >{r.hidden ? '↩' : '⊘'}</span>
+                          onClick={e => { e.stopPropagation(); const target = !g.hidden; g.members.filter(x => !!x.hidden !== target).forEach(x => toggleHidden(x.id, x.hidden)); }}
+                          title={g.hidden ? 'Restore (unhide) test' : `Hide ${multi ? 'these tests' : 'test'} (past or no longer applicable)`}
+                          style={{ cursor: 'pointer', fontSize: 12, color: g.hidden ? 'var(--pass)' : 'var(--faint)', userSelect: 'none' }}
+                        >{g.hidden ? '↩' : '⊘'}</span>
                       )}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 9 }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14, color: m.color, minWidth: 46, fontVariantNumeric: 'tabular-nums' }}>{fmtVal(r)}</span>
-                      <div style={{ position: 'relative', flex: 1, height: 5, background: 'var(--border)', borderRadius: 3 }}>
-                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${fillPct}%`, background: m.fill, borderRadius: 3 }} />
-                        <div style={{ position: 'absolute', left: '62.5%', top: -1.5, bottom: -1.5, width: 1.5, background: 'var(--text)' }} />
+                    {multi ? (
+                      <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {g.members.map(x => {
+                          const xm = STATUS_META[covenantStatus(x)];
+                          return (
+                            <div key={x.id} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 12.5, color: xm.color, minWidth: 46, fontVariantNumeric: 'tabular-nums' }}>{fmtVal(x)}</span>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', whiteSpace: 'nowrap' }}>/ {fmtReq(x)} {metricLabel(x)}</span>
+                              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{x.testLabel || ''}</span>
+                            </div>
+                          );
+                        })}
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>{g.lender} · {fmtDate(g.covenantDate)}</div>
                       </div>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.lender}</span>
-                    </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 9 }}>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 14, color: m.color, minWidth: 46, fontVariantNumeric: 'tabular-nums' }}>{fmtVal(r)}</span>
+                        <div style={{ position: 'relative', flex: 1, height: 5, background: 'var(--border)', borderRadius: 3 }}>
+                          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${fillPct}%`, background: m.fill, borderRadius: 3 }} />
+                          <div style={{ position: 'absolute', left: '62.5%', top: -1.5, bottom: -1.5, width: 1.5, background: 'var(--text)' }} />
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.lender} · {fmtDate(r.covenantDate)}</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -2115,6 +2141,24 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       <span className={`pill ${selMeta.cls}`} style={{ fontSize: 10.5, padding: '6px 11px', borderRadius: 5, letterSpacing: '.08em' }}>{selMeta.label}</span>
                     </div>
                   </div>
+
+                  {/* Same-day tests on this loan: switch which one the pane details */}
+                  {selGroup && selGroup.members.length > 1 && (
+                    <div style={{ padding: '12px 26px 0', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--faint)', letterSpacing: '.08em', textTransform: 'uppercase' }}>{selGroup.members.length} tests on {fmtDate(sel.covenantDate)}</span>
+                      {selGroup.members.map(x => {
+                        const xm = STATUS_META[covenantStatus(x)];
+                        const active = x.id === sel.id;
+                        return (
+                          <button key={x.id} className={`chip ${active ? 'chip-active' : ''}`} onClick={() => setSelectedId(x.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }} title="Show this test's detail">
+                            <span>{x.testLabel || metricLabel(x)}</span>
+                            <span style={{ fontFamily: 'var(--font-mono)', color: xm.color, fontWeight: 600 }}>{fmtVal(x)} / {fmtReq(x)}</span>
+                            <span className={`pill ${xm.cls}`} style={{ fontSize: 9 }}>{xm.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Scenario Analysis (what-if shocks over the whole portfolio) */}
                   <div style={{ padding: '14px 26px 0' }}>

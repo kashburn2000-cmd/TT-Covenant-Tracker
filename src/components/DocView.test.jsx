@@ -152,3 +152,42 @@ describe('DocView Excel export', () => {
     expect(btn.disabled).toBe(true);
   });
 });
+
+// ── Same-day tests on one loan ──────────────────────────────────────────────
+describe('DocView same-day grouping', () => {
+  const psl = (over = {}) => row({ property: 'Port St Lucie', lender: 'Blackstone / FGL', loanAmount: 44500000, covenantDate: '2027-03-31', ...over });
+  it('shows a loan once per date with every test on it, TRUE only when all pass', () => {
+    const el = render([
+      psl({ id: 1, covenantType: 'dy', covenantReq: 8, currentVal: 6.3, satisfied: false, paydown: 9437200 }),
+      psl({ id: 2, covenantType: 'dscr', covenantReq: 1.25, currentVal: 0.99, satisfied: false, paydown: 9384252 }),
+      row({ id: 3, property: 'Venice', covenantDate: '2027-06-30', covenantType: 'dscr', covenantReq: 1.1, currentVal: 1.2 }),
+      row({ id: 4, property: 'Venice', covenantDate: '2027-06-30', covenantType: 'occupancy', covenantReq: 87.5, currentVal: 94 }),
+    ], { 1: [snap('2026-08-24T16:00:00Z', '6.51')], 2: [], 3: [], 4: [] });
+    const trs = [...el.querySelectorAll('tbody tr')];
+    expect(trs).toHaveLength(2);
+    const [pslRow, veniceRow] = trs;
+    expect(pslRow.textContent).toContain('8% Debt Yield');
+    expect(pslRow.textContent).toContain('1.25 Debt Service Coverage');
+    expect(pslRow.textContent).toContain('6.30%');
+    expect(pslRow.textContent).toContain('0.99');
+    expect(pslRow.textContent).toContain('FALSE');
+    // One paydown cures the loan: the larger of the two.
+    expect(pslRow.textContent).toContain('$9,437,200');
+    expect(pslRow.textContent).not.toContain('$9,384,252');
+    expect(veniceRow.textContent).toContain('87.5% Occupancy');
+    expect(veniceRow.textContent).toContain('94.00%');
+    expect(veniceRow.textContent).toContain('TRUE');
+  });
+  it('exports a grouped line as multi-line text cells', async () => {
+    const { at } = await exportAndRead([
+      psl({ id: 1, covenantType: 'dy', covenantReq: 8, currentVal: 6.3, satisfied: false, paydown: 9437200 }),
+      psl({ id: 2, covenantType: 'dscr', covenantReq: 1.25, currentVal: 0.99, satisfied: false, paydown: 9384252 }),
+    ], { 1: [snap('2026-10-07T16:00:00Z', '6.30'), snap('2026-08-24T16:00:00Z', '6.51')], 2: [] });
+    // Header block is rows 1–4, the date row 6, the column headers 7: data starts at 8.
+    expect(at(8, 7).value).toBe('8% Debt Yield\n1.25 Debt Service Coverage');
+    expect(at(8, 8).value).toBe('6.51%\n—');
+    expect(at(8, 10).value).toBe('6.30%\n0.99');
+    expect(at(8, 11).value).toBe('FALSE');
+    expect(at(8, 12).value).toBe(9437200);
+  });
+});
