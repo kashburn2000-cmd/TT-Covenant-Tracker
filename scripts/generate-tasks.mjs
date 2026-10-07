@@ -35,10 +35,14 @@
 //                     only delivers to the Resend account owner — set a real
 //                     verified domain sender for team-wide delivery)
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import {
   parseRecipients,
   buildLoanTasks,
   buildCovenantTasks,
+  buildReferenceMaturityTasks,
   buildConversionTasks,
   buildHedgeTasks,
   buildReportingTasks,
@@ -88,7 +92,13 @@ async function main() {
   } catch {
     loans = await sbGet('loans?select=id,property_name,borrower_entity,lead_lender,loan_amount,loan_type,maturity_date,extension_count,extension_term_months,extension_fee_pct,extension_maturity_date,financial_reporting_borrower,financial_reporting_guarantor');
   }
-  const properties = await sbGet('properties?select=id,property,lender,test_type,covenant_type,covenant_req,covenant_date,hidden,waived');
+  let properties;
+  try {
+    properties = await sbGet('properties?select=id,property,lender,test_type,test_label,covenant_type,covenant_req,covenant_date,hidden,waived');
+  } catch {
+    // test_label arrives with db/covenant_reference_setup.sql; older projects lack it.
+    properties = await sbGet('properties?select=id,property,lender,test_type,covenant_type,covenant_req,covenant_date,hidden,waived');
+  }
 
   let hedgeTasks = [];
   try {
@@ -131,8 +141,18 @@ async function main() {
   const loanTasks = buildLoanTasks(loans, TODAY);
   const covenantTasks = buildCovenantTasks(properties, TODAY);
   const conversionTasks = buildConversionTasks(loans, TODAY);
-  const generated = [...loanTasks, ...covenantTasks, ...conversionTasks, ...hedgeTasks, ...reporting];
-  console.log(`Generated ${generated.length} task(s): ${loanTasks.length} loan, ${covenantTasks.length} covenant, ${conversionTasks.length} conversion, ${hedgeTasks.length} hedge, ${reporting.length} reporting.`);
+  // Initial maturities from the covenant reference workbook (src/data/
+  // covenantReference.json), for lines whose abstract isn't in the loans table.
+  let referenceTasks = [];
+  try {
+    const refPath = resolve(dirname(fileURLToPath(import.meta.url)), '../src/data/covenantReference.json');
+    const reference = JSON.parse(readFileSync(refPath, 'utf8'));
+    referenceTasks = buildReferenceMaturityTasks(reference.loanTerms, TODAY, loanTasks);
+  } catch (err) {
+    console.log(`covenant reference not readable (${err.message}) — skipping reference maturities.`);
+  }
+  const generated = [...loanTasks, ...referenceTasks, ...covenantTasks, ...conversionTasks, ...hedgeTasks, ...reporting];
+  console.log(`Generated ${generated.length} task(s): ${loanTasks.length} loan, ${referenceTasks.length} reference maturity, ${covenantTasks.length} covenant, ${conversionTasks.length} conversion, ${hedgeTasks.length} hedge, ${reporting.length} reporting.`);
 
   if (generated.length) await upsertTasks(generated);
   console.log('Tasks synced.');

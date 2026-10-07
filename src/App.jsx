@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiveSofrCurve, setActive10YCurve, fuzzyMatch, parseMonthLabel, parseCellNumber, computeNOI, calcCovenantRow } from './calc.js';
+import { monthLabelToISO, getSofr, get10Y, calcADS, getActiveSofrCurve, setActiveSofrCurve, setActive10YCurve, fuzzyMatch, parseMonthLabel, parseCellNumber, computeNOI, calcCovenantRow, occupancyAtDate } from './calc.js';
+import { REFERENCE, REFERENCE_YEAR, testById, resolveReferenceProperty, forecastLineForProperty, plannedTrackerRows, unscoredTests } from './covenantReference.js';
+import { CovenantReferenceCard, ReferenceCalendarView, ReferenceObligationsView, LoadReferencePreview } from './components/CovenantReference.jsx';
 import { SB_URL, SB_HEADERS } from './supabase.js';
 import { supabase, signOut } from './auth.js';
 import { ScenarioBar, isScenarioActive } from './components/ScenarioBar.jsx';
@@ -285,6 +287,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     incomeMonths: '3', expenseMonths: '3', note: '', waived: false,
     variableLoan: false, loanCommitment: '', loanSchedule: EMPTY_LOAN_SCHEDULE,
     actualEarlyTermMonths: [], oneTimeExpenseMonths: [], stdEarlyTerm: '', replacementReserves: '',
+    indexFloor: '', mortgageConstant: '', budgetCode: '', testLabel: '', occupancy: '', covenantId: null,
   };
 
   // Map camelCase ↔ snake_case for Supabase
@@ -310,7 +313,26 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       std_early_term: p.stdEarlyTerm != null && p.stdEarlyTerm !== '' ? parseFloat(p.stdEarlyTerm) : null,
       one_time_expenses: p.oneTimeExpenseMonths ? JSON.stringify(p.oneTimeExpenseMonths) : null,
       replacement_reserves: p.replacementReserves != null && p.replacementReserves !== '' ? parseFloat(p.replacementReserves) : null,
+      // Reference-workbook columns (db/covenant_reference_setup.sql). Sent
+      // only when set, so a database that hasn't run that script still saves
+      // the rows that don't use them — PostgREST rejects unknown columns even
+      // when the value is null.
+      ...referenceColumns(p),
     };
+  }
+  // All six reference columns, sent together once a row uses any of them so
+  // that clearing one later persists as null. A row that uses none sends none.
+  function referenceColumns(p) {
+    const num = v => (v != null && v !== '' && !isNaN(parseFloat(v)) ? parseFloat(v) : null);
+    const cols = {
+      covenant_id: p.covenantId || null,
+      test_label: p.testLabel || null,
+      budget_code: p.budgetCode || null,
+      index_floor: num(p.indexFloor),
+      mortgage_constant: num(p.mortgageConstant),
+      occupancy: num(p.occupancy),
+    };
+    return Object.values(cols).some(v => v != null) ? cols : {};
   }
   function fromDb(r) {
     return {
@@ -341,7 +363,29 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       replacementReserves: r.replacement_reserves != null ? parseFloat(r.replacement_reserves) : null,
       paydownDisplay: r.paydown_display ?? null,
       updatedAt: r.updated_at,
+      covenantId: r.covenant_id ?? null,
+      testLabel: r.test_label ?? null,
+      budgetCode: r.budget_code ?? null,
+      indexFloor: r.index_floor != null ? parseFloat(r.index_floor) : null,
+      mortgageConstant: r.mortgage_constant != null ? parseFloat(r.mortgage_constant) : null,
+      occupancy: r.occupancy != null ? parseFloat(r.occupancy) : null,
     };
+  }
+
+  // The reference line a tracker row describes: by its covenant id when it was
+  // loaded from the workbook, else by name ("St Augustine" → "St. Augustine").
+  function referencePropertyFor(p) {
+    if (!p) return null;
+    if (p.covenantId) { const t = testById(p.covenantId); if (t) return t.property; }
+    return resolveReferenceProperty(p.property);
+  }
+  // Budget code to match a forecast sheet on: the row's own, else the
+  // reference line's.
+  function budgetCodeFor(p) {
+    if (p.budgetCode) return String(p.budgetCode).toLowerCase();
+    const ref = referencePropertyFor(p);
+    const line = ref ? forecastLineForProperty(ref) : null;
+    return line?.budgetCode ? line.budgetCode.toLowerCase() : null;
   }
 
   const SEED_PROPERTIES = [
@@ -391,6 +435,11 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   const [actionsOpen, setActionsOpen] = useState(false);
   const [refiOpen, setRefiOpen] = useState(false);
   const [uploadPanelOpen, setUploadPanelOpen] = useState(false);
+  // Reference-workbook views and the loader that writes its tests as rows.
+  const [listView, setListView] = useState('tests'); // 'tests' | 'calendar' | 'obligations'
+  const [loaderOpen, setLoaderOpen] = useState(false);
+  const [loaderBusy, setLoaderBusy] = useState(false);
+  const [loaderError, setLoaderError] = useState(null);
   const [propertyEvents, setPropertyEvents] = useState({});           // { propertyId: [events] }
   const [whatIfNOI, setWhatIfNOI] = useState({});                     // { rowId: overrideNOI string }
   const [newComment, setNewComment] = useState({});                    // { propertyId: text }
@@ -647,9 +696,40 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const sheets = await parseForecasts(file);
       const results = [];
 
-      // ── Process 2022 Fund separately ──────────────────────────────────────
-      const fundRow = properties.find(p => p.isFund || p.property === '2022 Fund');
-      if (fundRow) {
+      // Sheets keyed by accounting's budget code — the exact match. Name
+      // scoring is only the fallback for rows that carry no code.
+      const byCode = new Map();
+      for (const s of sheets) if (s.budgetCode && !byCode.has(s.budgetCode)) byCode.set(s.budgetCode, s);
+      const bestByName = (name, floor = 0.3) => {
+        let bestSheet = null, bestScore = 0, runnerUp = null, runnerUpScore = 0;
+        for (const sheet of sheets) {
+          const score = Math.max(fuzzyMatch(sheet.propertyTitle, name), fuzzyMatch(sheet.sheetName, name));
+          if (score > bestScore) { runnerUp = bestSheet; runnerUpScore = bestScore; bestSheet = sheet; bestScore = score; }
+          else if (score > runnerUpScore) { runnerUp = sheet; runnerUpScore = score; }
+        }
+        if (!bestSheet || bestScore < floor) return { sheet: null, score: bestScore, warning: null };
+        const warning = (runnerUp && runnerUpScore >= Math.max(0.3, bestScore - 0.15))
+          ? `Ambiguous match: "${runnerUp.sheetName}" also scored ${Math.round(runnerUpScore * 100)}% — verify the right sheet won.`
+          : null;
+        return { sheet: bestSheet, score: bestScore, warning };
+      };
+      // A 2027 sheet should sum to the reference workbook's full-year budget
+      // for that line. If it doesn't, the wrong tab was matched or the
+      // budget moved — either way, say so before the figures are applied.
+      const tieOut = (sheet, code) => {
+        if (!sheet || !code) return null;
+        const line = REFERENCE.forecastLines.find(l => l.budgetCode === code);
+        if (!line || line.noi2027 == null) return null;
+        const yrs = new Set(sheet.monthData.filter(Boolean).map(m => m.year));
+        if (yrs.size !== 1 || !yrs.has(REFERENCE_YEAR) || sheet.monthData.length !== 12) return null;
+        const total = sheet.noiVals.reduce((a, b) => a + (b || 0), 0);
+        if (Math.abs(total - line.noi2027) <= 1) return null;
+        return `Sheet's 12-month ${REFERENCE_YEAR} NOI ${formatCurrency(total)} differs from the reference budget ${formatCurrency(line.noi2027)} for ${line.property}.`;
+      };
+
+      // ── Fund rows: roll NOI up from each member's sheet ───────────────────
+      const isFundRow = p => p.isFund || p.property === '2022 Fund';
+      for (const fundRow of properties.filter(isFundRow)) {
         // If fundProperties is empty (manually added row), build from FUND_SHEETS constant
         const FUND_ALLOC = { wbuck: 52117000, wdwfl: 57114000, wfoun: 70832000, wgrco: 78226000, wmoco: 67415000, wocfl: 57420000, wraym: 56451000, wwood: 33759000, wwymi: 75166000 };
         const baseFundProps = (fundRow.fundProperties && fundRow.fundProperties.length > 0)
@@ -658,65 +738,59 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
 
         const fundWarnings = [];
         const updatedFundProps = baseFundProps.map(fp => {
-          // Prefer the internal code-named tab; otherwise fall back to matching
-          // the fund property name against the sheet title / tab name, since
-          // some exports name tabs by location rather than property code.
-          let match = sheets.find(s => s.sheetName.toLowerCase().startsWith(fp.sheetCode));
+          // Budget code first (from the sheet's source line or a code-named
+          // tab), then the fund property name against the title / tab name,
+          // since some exports name tabs by location rather than code.
+          const code = fp.sheetCode ? String(fp.sheetCode).toLowerCase() : null;
+          let match = code ? (byCode.get(code) || sheets.find(s => s.sheetName.toLowerCase().startsWith(code))) : null;
           if (!match) {
-            let bestScore = 0.5;
-            for (const s of sheets) {
-              const sc = Math.max(fuzzyMatch(s.propertyTitle, fp.name), fuzzyMatch(s.sheetName, fp.name));
-              if (sc > bestScore) { bestScore = sc; match = s; }
-            }
+            const r = bestByName(fp.name, 0.5);
+            match = r.sheet;
+            if (r.warning) fundWarnings.push(`${fp.name}: ${r.warning}`);
           }
-          if (!match) return fp;
+          if (!match) { fundWarnings.push(`${fp.name}: no sheet matched`); return fp; }
           if (match.parseWarnings && match.parseWarnings.length > 0) {
             fundWarnings.push(`${fp.name}: ${match.parseWarnings.slice(0, 2).join('; ')}${match.parseWarnings.length > 2 ? ` (+${match.parseWarnings.length - 2} more)` : ''}`);
           }
+          const tie = tieOut(match, code);
+          if (tie) fundWarnings.push(`${fp.name}: ${tie}`);
           const { noi, detail } = computeNOI(match, fundRow.incomeMonths, fundRow.expenseMonths, fundRow.covenantDate, { actualEarlyTermMonths: fundRow.actualEarlyTermMonths, stdEarlyTerm: fundRow.stdEarlyTerm, oneTimeExpenseMonths: fundRow.oneTimeExpenseMonths, replacementReserves: fundRow.replacementReserves });
-          return { ...fp, noi: noi !== null ? Math.round(noi) : fp.noi, noiDetail: detail };
+          return { ...fp, noi: noi !== null ? Math.round(noi) : fp.noi, noiDetail: detail, matchedSheet: match.propertyTitle };
         });
         const totalNOI = updatedFundProps.reduce((s, fp) => s + (fp.noi || 0), 0);
+        const matchedCount = updatedFundProps.filter(fp => fp.matchedSheet).length;
         results.push({
-          id: fundRow.id, property: fundRow.property, status: 'matched',
-          matchedSheet: '9-property portfolio roll-up', score: 1,
+          id: fundRow.id, property: fundRow.property, testLabel: fundRow.testLabel, status: matchedCount > 0 ? 'matched' : 'no_match',
+          matchedSheet: `${matchedCount} of ${updatedFundProps.length} fund properties`, score: matchedCount / Math.max(updatedFundProps.length, 1),
           oldNOI: fundRow.noi, newNOI: totalNOI, newNOIT1: null,
           incomeMonths: fundRow.incomeMonths, expenseMonths: fundRow.expenseMonths,
-          isFund: true, fundProperties: updatedFundProps,
+          isFund: true, fundProperties: updatedFundProps.map(({ matchedSheet, ...fp }) => fp),
           parseWarnings: fundWarnings,
         });
       }
 
-      // ── Process individual properties ─────────────────────────────────────
+      // ── Individual properties ─────────────────────────────────────────────
       for (const prop of properties) {
-        if (prop.isFund || prop.property === '2022 Fund') continue; // already handled above
-        // Find best matching sheet — check both the in-sheet title and the tab
-        // name (same as the fund path), and track the runner-up so ambiguous
-        // matches get flagged for review instead of the first sheet silently
-        // winning a tie.
-        let bestSheet = null, bestScore = 0, runnerUp = null, runnerUpScore = 0;
-        for (const sheet of sheets) {
-          const score = Math.max(fuzzyMatch(sheet.propertyTitle, prop.property), fuzzyMatch(sheet.sheetName, prop.property));
-          if (score > bestScore) {
-            runnerUp = bestSheet; runnerUpScore = bestScore;
-            bestSheet = sheet; bestScore = score;
-          } else if (score > runnerUpScore) {
-            runnerUp = sheet; runnerUpScore = score;
-          }
+        if (isFundRow(prop)) continue; // already handled above
+        const code = budgetCodeFor(prop);
+        let bestSheet = code ? byCode.get(code) || null : null;
+        let bestScore = bestSheet ? 1 : 0;
+        let matchWarning = null;
+        if (!bestSheet) {
+          const r = bestByName(prop.property);
+          bestSheet = r.sheet; bestScore = r.score; matchWarning = r.warning;
         }
 
-        if (!bestSheet || bestScore < 0.3) {
-          results.push({ id: prop.id, property: prop.property, status: 'no_match', score: bestScore });
+        if (!bestSheet) {
+          results.push({ id: prop.id, property: prop.property, testLabel: prop.testLabel, status: 'no_match', score: bestScore });
           continue;
         }
-
-        const matchWarning = (runnerUp && runnerUpScore >= Math.max(0.3, bestScore - 0.15))
-          ? `Ambiguous match: "${runnerUp.sheetName}" also scored ${Math.round(runnerUpScore * 100)}% — verify the right sheet won.`
-          : null;
+        const tie = tieOut(bestSheet, code || bestSheet.budgetCode);
+        if (tie) matchWarning = matchWarning ? `${matchWarning} ${tie}` : tie;
 
         const { noi: computedNOI, detail: computedDetail } = computeNOI(bestSheet, prop.incomeMonths, prop.expenseMonths, prop.covenantDate, { actualEarlyTermMonths: prop.actualEarlyTermMonths, stdEarlyTerm: prop.stdEarlyTerm, oneTimeExpenseMonths: prop.oneTimeExpenseMonths, replacementReserves: prop.replacementReserves });
         if (computedNOI === null) {
-          results.push({ id: prop.id, property: prop.property, status: 'insufficient_data', matchedSheet: bestSheet.propertyTitle, score: bestScore });
+          results.push({ id: prop.id, property: prop.property, testLabel: prop.testLabel, status: 'insufficient_data', matchedSheet: bestSheet.propertyTitle, score: bestScore });
           continue;
         }
 
@@ -727,10 +801,17 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         // Stabilized NOI = first month >92% ending occupancy, annualized
         const computedStabilized    = bestSheet.noiStabilized    ?? null;
         const computedStabilizedMon = bestSheet.noiStabilizedMonth ?? null;
+        // Occupancy tests read the ending occupancy of the month before the
+        // test date (stored as a percent).
+        const occ = prop.covenantType === 'occupancy' ? occupancyAtDate(bestSheet, prop.covenantDate) : null;
+        const newOccupancy = occ != null ? Math.round(occ * 10000) / 100 : null;
+        if (prop.covenantType === 'occupancy' && newOccupancy == null) {
+          matchWarning = `${matchWarning ? matchWarning + ' ' : ''}No forecast month before the ${prop.covenantDate} test date, so occupancy stays as is.`;
+        }
 
         results.push({
-          id: prop.id, property: prop.property, status: 'matched',
-          matchedSheet: bestSheet.propertyTitle, score: bestScore,
+          id: prop.id, property: prop.property, testLabel: prop.testLabel, status: 'matched',
+          matchedSheet: bestSheet.propertyTitle, score: bestScore, matchedByCode: !!(code && byCode.get(code)),
           oldNOI: prop.noi, newNOI: computedNOI,
           newNOIT1: computedT1,
           newNOIT1Current: computedT1Current,
@@ -740,6 +821,9 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
           incomeMonths: prop.incomeMonths, expenseMonths: prop.expenseMonths,
           parseWarnings: bestSheet.parseWarnings || [],
           matchWarning,
+          covenantType: prop.covenantType,
+          oldOccupancy: prop.occupancy ?? null,
+          newOccupancy,
         });
       }
 
@@ -775,6 +859,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       if (!prop) return;
       const patch = { noi: m.newNOI, noi_t1: m.newNOIT1 ?? null, noi_t1_current: m.newNOIT1Current ?? null, noi_stabilized: m.newNOIStabilized ?? null, noi_stabilized_month: m.newNOIStabilizedMonth ?? null, updated_at: new Date().toISOString() };
       if (m.isFund && m.fundProperties) { patch.fund_properties = JSON.stringify(m.fundProperties); patch.is_fund = true; }
+      if (m.newOccupancy != null) patch.occupancy = m.newOccupancy;
       if (m.noiDetail) patch.noi_detail = JSON.stringify(m.noiDetail);
       await fetch(`${SB_URL}/rest/v1/properties?id=eq.${m.id}`, {
         method: 'PATCH',
@@ -785,7 +870,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       const next = properties.map(p => {
         const match = matched.find(r => r.id === p.id);
         if (!match) return p;
-        return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiT1Current: match.newNOIT1Current ?? null, noiStabilized: match.newNOIStabilized ?? null, noiStabilizedMonth: match.newNOIStabilizedMonth ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}) };
+        return { ...p, noi: match.newNOI, noiT1: match.newNOIT1 ?? null, noiT1Current: match.newNOIT1Current ?? null, noiStabilized: match.newNOIStabilized ?? null, noiStabilizedMonth: match.newNOIStabilizedMonth ?? null, noiDetail: match.noiDetail ?? p.noiDetail, ...(match.isFund ? { fundProperties: match.fundProperties } : {}), ...(match.newOccupancy != null ? { occupancy: match.newOccupancy } : {}) };
       });
       setProperties(next);
       // Snapshots are written outside the state updater: React invokes updaters
@@ -824,7 +909,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
         if (!prop) return;
         // Clear any existing baseline so there is exactly one per property.
         await fetch(`${SB_URL}/rest/v1/property_events?property_id=eq.${m.id}&type=eq.snapshot&comment=eq.${PRIOR_TAG}`, { method: 'DELETE', headers: SB_HEADERS });
-        const temp = { ...prop, noi: m.newNOI, ...(m.isFund && m.fundProperties ? { fundProperties: m.fundProperties } : {}) };
+        const temp = { ...prop, noi: m.newNOI, ...(m.isFund && m.fundProperties ? { fundProperties: m.fundProperties } : {}), ...(m.newOccupancy != null ? { occupancy: m.newOccupancy } : {}) };
         await saveSnapshot(m.id, calcRow(temp), true, createdAt, PRIOR_TAG);
       }));
       await Promise.all(matched.map(m => fetchEvents(m.id)));
@@ -855,6 +940,12 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
       stdEarlyTerm: form.stdEarlyTerm !== '' ? parseFloat(form.stdEarlyTerm) : null,
       oneTimeExpenseMonths: (Array.isArray(form.oneTimeExpenseMonths) ? form.oneTimeExpenseMonths : []).map(v => v !== '' && v != null ? parseFloat(v) || 0 : 0),
       replacementReserves: form.replacementReserves !== '' ? parseFloat(form.replacementReserves) : null,
+      indexFloor: form.indexFloor !== '' && form.indexFloor != null ? parseFloat(form.indexFloor) : null,
+      mortgageConstant: form.mortgageConstant !== '' && form.mortgageConstant != null ? parseFloat(form.mortgageConstant) : null,
+      occupancy: form.occupancy !== '' && form.occupancy != null ? parseFloat(form.occupancy) : null,
+      budgetCode: (form.budgetCode || '').trim().toLowerCase() || null,
+      testLabel: (form.testLabel || '').trim() || null,
+      covenantId: form.covenantId || null,
     };
     if (!p.property || isNaN(p.loanAmount) || isNaN(p.noi)) return;
 
@@ -976,7 +1067,7 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
   function startEdit(p) {
     const emptySchedule = Array.from({ length: 12 }, () => ({ month: '', balance: '' }));
     const existingSchedule = p.loanSchedule && p.loanSchedule.length > 0 ? [...p.loanSchedule, ...emptySchedule].slice(0, 12) : emptySchedule;
-    setForm({ ...p, spread: String(p.spread), spread10y: p.spread10y != null ? String(p.spread10y) : '', sizingRate: p.sizingRate != null ? String(p.sizingRate) : '', covenantReq: String(p.covenantReq), loanAmount: String(p.loanAmount), noi: String(p.noi), incomeMonths: String(p.incomeMonths), expenseMonths: String(p.expenseMonths), variableLoan: p.variableLoan || false, loanCommitment: p.loanCommitment != null ? String(p.loanCommitment) : '', loanSchedule: existingSchedule, actualEarlyTermMonths: (p.actualEarlyTermMonths || []).map(v => v != null ? String(v) : ''), stdEarlyTerm: p.stdEarlyTerm != null ? String(p.stdEarlyTerm) : '', oneTimeExpenseMonths: (p.oneTimeExpenseMonths || []).map(v => v != null ? String(v) : ''), replacementReserves: p.replacementReserves != null ? String(p.replacementReserves) : '' });
+    setForm({ ...p, spread: String(p.spread), spread10y: p.spread10y != null ? String(p.spread10y) : '', sizingRate: p.sizingRate != null ? String(p.sizingRate) : '', covenantReq: String(p.covenantReq), loanAmount: String(p.loanAmount), noi: String(p.noi), incomeMonths: String(p.incomeMonths), expenseMonths: String(p.expenseMonths), variableLoan: p.variableLoan || false, loanCommitment: p.loanCommitment != null ? String(p.loanCommitment) : '', loanSchedule: existingSchedule, actualEarlyTermMonths: (p.actualEarlyTermMonths || []).map(v => v != null ? String(v) : ''), stdEarlyTerm: p.stdEarlyTerm != null ? String(p.stdEarlyTerm) : '', oneTimeExpenseMonths: (p.oneTimeExpenseMonths || []).map(v => v != null ? String(v) : ''), replacementReserves: p.replacementReserves != null ? String(p.replacementReserves) : '', indexFloor: p.indexFloor != null ? String(p.indexFloor) : '', mortgageConstant: p.mortgageConstant != null ? String(p.mortgageConstant) : '', occupancy: p.occupancy != null ? String(p.occupancy) : '', budgetCode: p.budgetCode || '', testLabel: p.testLabel || '', covenantId: p.covenantId || null });
     setEditId(p.id);
     setShowForm(true);
   }
@@ -1024,6 +1115,92 @@ function CovenantTab({ thresholds, pinUnlocked = true, requirePin = (fn) => fn()
     } catch (err) {
       setProperties(ps => ps.map(p => p.id === id ? { ...p, hidden: current } : p));
       alert('Could not update — make sure the "hidden" column exists in Supabase.\n' + err.message);
+    }
+  }
+
+  // ── Reference loader: the workbook's tests as tracker rows ───────────────
+  // What the loader would do right now: which planned rows are new, which
+  // are already loaded (same test, metric and date), and which hand-entered
+  // rows sit on a loan the reference now covers.
+  const loaderPlan = useMemo(() => {
+    const planned = plannedTrackerRows();
+    const key = r => `${r.covenantId}|${r.covenantType}|${r.covenantDate}`;
+    const existingByKey = new Map(properties.filter(p => p.covenantId).map(p => [key(p), p]));
+    const items = planned.map(r => ({ row: r, existing: existingByKey.get(key(r)) || null }));
+    const plannedProps = new Set(planned.map(r => r.property));
+    const legacy = properties
+      .filter(p => !p.covenantId && !p.hidden)
+      .map(p => ({ row: p, ref: referencePropertyFor(p) }))
+      .filter(x => x.ref && plannedProps.has(x.ref))
+      .map(x => {
+        // Flag a hand-entered requirement the workbook reads differently.
+        const same = planned.filter(r => r.property === x.ref && r.covenantType === x.row.covenantType);
+        const sameReq = same.filter(r => Number(r.covenantReq) === Number(x.row.covenantReq));
+        const conflict = !same.length ? null
+          : !sameReq.length
+            ? `reference reads ${same.map(r => r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x` : `${r.covenantReq}%`).filter((v, i, a) => a.indexOf(v) === i).join(' / ')}`
+            : !sameReq.some(r => r.covenantDate === x.row.covenantDate)
+              ? `reference dates it ${sameReq.map(r => r.covenantDate).join(' / ')}`
+              : null;
+        return { ...x, conflict };
+      });
+    return { items, legacy, unscored: unscoredTests() };
+  }, [properties]);
+
+  // Tracker rows by covenant id, with their computed status, for the
+  // calendar view and the Requirements card.
+  const trackerByCovenantId = useMemo(() => {
+    const m = new Map();
+    for (const r of rows) if (r.covenantId) m.set(r.covenantId, [...(m.get(r.covenantId) || []), r]);
+    return m;
+  }, [rows]);
+  const loadedCovenantIds = useMemo(() => new Set(trackerByCovenantId.keys()), [trackerByCovenantId]);
+
+  function plannedToProperty(r) {
+    return {
+      testType: r.testType, property: r.property, lender: r.lender,
+      loanAmount: r.loanAmount, noi: r.noi, spread: r.spread, spread10y: r.spread10y, sizingRate: r.sizingRate, amort: r.amort,
+      covenantType: r.covenantType, covenantReq: r.covenantReq, covenantDate: r.covenantDate, maturityDate: r.maturityDate,
+      incomeMonths: r.incomeMonths, expenseMonths: r.expenseMonths, note: r.note, waived: false, hidden: false,
+      isFund: r.isFund, fundProperties: r.fundProperties, variableLoan: false, replacementReserves: r.replacementReserves,
+      covenantId: r.covenantId, testLabel: r.testLabel, budgetCode: r.budgetCode, indexFloor: r.indexFloor, mortgageConstant: r.mortgageConstant,
+    };
+  }
+
+  async function applyLoader({ hideIds }) {
+    setLoaderBusy(true);
+    setLoaderError(null);
+    try {
+      const toInsert = loaderPlan.items.filter(i => !i.existing).map(i => toDb(plannedToProperty(i.row)));
+      let inserted = [];
+      if (toInsert.length > 0) {
+        const res = await fetch(`${SB_URL}/rest/v1/properties`, { method: 'POST', headers: SB_HEADERS, body: JSON.stringify(toInsert) });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const msg = err.message || err.hint || `HTTP ${res.status}`;
+          const missingCol = /column|schema cache/i.test(msg);
+          throw new Error(missingCol
+            ? `${msg}. The properties table is missing the reference columns — run db/covenant_reference_setup.sql in the Supabase SQL editor, then try again.`
+            : msg);
+        }
+        const data = await res.json();
+        inserted = Array.isArray(data) ? data.map(fromDb) : [];
+      }
+      const hidden = [];
+      for (const id of hideIds) {
+        const res = await fetch(`${SB_URL}/rest/v1/properties?id=eq.${id}`, { method: 'PATCH', headers: SB_HEADERS, body: JSON.stringify({ hidden: true }) });
+        if (res.ok) hidden.push(id);
+      }
+      setProperties(ps => [...ps.map(p => hidden.includes(p.id) ? { ...p, hidden: true } : p), ...inserted]);
+      await Promise.all(inserted.map(p => saveSnapshot(p.id, calcRow(p))));
+      dealLinks.refresh();
+      setLoaderOpen(false);
+      setUploadStatus(`✓ Loaded ${inserted.length} ${REFERENCE_YEAR} test${inserted.length === 1 ? '' : 's'} from the reference${hidden.length ? `, hid ${hidden.length} earlier row${hidden.length === 1 ? '' : 's'}` : ''}.`);
+      setTimeout(() => setUploadStatus(''), 6000);
+    } catch (err) {
+      setLoaderError(err.message);
+    } finally {
+      setLoaderBusy(false);
     }
   }
 
@@ -1490,6 +1667,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
   const selStatus = sel ? covenantStatus(sel) : null;
   const selMeta = selStatus ? STATUS_META[selStatus] : null;
   const selIsFund = sel ? (sel.isFund || sel.property === '2022 Fund') : false;
+  const selRefProperty = sel ? referencePropertyFor(sel) : null;
   const selFundProps = (sel && sel.fundProperties) || [];
   const selDays = sel ? daysUntil(sel.covenantDate) : null;
   const selDF = sel ? computeDebtFundSizing(sel) : null;
@@ -1509,8 +1687,12 @@ Req: ${formatCurrency(r.requiredNOI)}`,
   const selEvents = sel ? (propertyEvents[sel.id] || null) : null;
   const selPrior = findPriorTest(selEvents);
 
-  const fmtVal = (r, digits = 2) => r.covenantType === 'dscr' ? `${r.currentVal.toFixed(digits)}x` : `${r.currentVal.toFixed(digits)}%`;
-  const fmtReq = (r) => r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x` : `${r.covenantReq.toFixed(2)}%`;
+  const fmtVal = (r, digits = 2) => r.covenantType === 'dscr' ? `${r.currentVal.toFixed(digits)}x`
+    : r.covenantType === 'occupancy' ? (r.occupancyKnown === false ? '—' : `${r.currentVal.toFixed(1)}%`)
+    : `${r.currentVal.toFixed(digits)}%`;
+  const fmtReq = (r) => r.covenantType === 'dscr' ? `${r.covenantReq.toFixed(2)}x` : r.covenantType === 'occupancy' ? `${r.covenantReq}%` : `${r.covenantReq.toFixed(2)}%`;
+  const metricLabel = (r) => r.covenantType === 'dscr' ? 'DSCR' : r.covenantType === 'occupancy' ? 'Occupancy' : 'Debt Yield';
+  const isOcc = (r) => r && r.covenantType === 'occupancy';
   const prongLabel = (c) =>
     c.label === 'SOFR' ? `1-Mo SOFR + ${sel.spread}%`
       : c.label === '10 Year' ? `10-Yr UST + ${sel.spread10y}%`
@@ -1653,6 +1835,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   </button>
                 )}
               </div>
+              {!isMobile && (
+                <div style={{ display: 'flex', gap: 7, marginTop: 9, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--faint)', letterSpacing: '.08em', textTransform: 'uppercase' }}>Reference</span>
+                  {[['calendar', `${REFERENCE_YEAR} Calendar`], ['obligations', 'Obligations']].map(([key, label]) => (
+                    <button key={key} className={`chip ${listView === key ? 'chip-active' : ''}`} title="From the covenant reference workbook" onClick={() => setListView(v => v === key ? 'tests' : key)}>{label}</button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* List rows */}
@@ -1665,7 +1855,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 return (
                   <div
                     key={r.id}
-                    onClick={() => { setSelectedId(r.id); if (isMobile) setMobileDetail(true); }}
+                    onClick={() => { setSelectedId(r.id); setListView('tests'); if (isMobile) setMobileDetail(true); }}
                     style={{
                       padding: '13px 22px 13px 19px', borderBottom: '1px solid var(--border)', cursor: 'pointer',
                       background: isSel ? 'var(--panel2)' : 'transparent',
@@ -1674,7 +1864,10 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.property}</span>
+                      <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 13.5, color: 'var(--text)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {r.property}
+                        {r.testLabel && <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 10, color: 'var(--muted)', marginLeft: 7 }}>{r.testLabel}</span>}
+                      </span>
                       <span className={`pill ${m.cls}`}>{m.label}</span>
                       {pinUnlocked && (
                         <span
@@ -1746,13 +1939,23 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 </div>
               )}
 
-              {!sel && (
+              {listView === 'calendar' && (
+                <ReferenceCalendarView
+                  trackerByCovenantId={trackerByCovenantId}
+                  statusMeta={STATUS_META}
+                  statusOf={covenantStatus}
+                  onOpenRow={id => { setSelectedId(id); setListView('tests'); }}
+                />
+              )}
+              {listView === 'obligations' && <ReferenceObligationsView />}
+
+              {listView === 'tests' && !sel && (
                 <div style={{ padding: '4rem 2rem', textAlign: 'center', color: 'var(--faint)', fontSize: '0.85rem' }}>
                   Select a covenant test from the list to see its detail.
                 </div>
               )}
 
-              {sel && (
+              {listView === 'tests' && sel && (
                 <>
                   {/* Header */}
                   <div style={{ padding: '20px 26px 15px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
@@ -1760,6 +1963,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                         <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 21, color: 'var(--text)' }}>{sel.property}</div>
                         {col('testType') && <span className={`pill ${sel.testType === 'Maturity' ? 'yellow' : 'blue'}`}>{sel.testType || 'Covenant'}</span>}
+                        {sel.testLabel && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>{sel.testLabel}</span>}
                         {sel.hidden && <span className="pill" style={{ background: 'color-mix(in srgb, var(--muted) 15%, transparent)', color: 'var(--muted)' }}>HIDDEN</span>}
                       </div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>
@@ -1863,6 +2067,15 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                                 <span style={{ opacity: 0.6 }}>↑</span> Update Curve <LockIcon size={10} />
                               </div>
                             ))}
+                            {!isMobile && (
+                              <div
+                                className="menu-item"
+                                title={`Add the ${REFERENCE_YEAR} tests from the covenant reference workbook as tracker rows (preview first)`}
+                                onClick={() => { setActionsOpen(false); setLoaderError(null); if (pinUnlocked) { setLoaderOpen(true); } else { requirePin(() => setLoaderOpen(true)); } }}
+                              >
+                                <span style={{ opacity: 0.6 }}>⇪</span> Load {REFERENCE_YEAR} Tests {!pinUnlocked && <LockIcon size={10} />}
+                              </div>
+                            )}
                             <div className="menu-item" onClick={() => { setActionsOpen(false); toggleSelHistory(); }}>
                               <span style={{ opacity: 0.7, display: 'inline-flex' }}><ClockIcon size={12} /></span> History &amp; Prior Test
                               {expandedHistory.has(sel.id) && <span style={{ marginLeft: 'auto', color: 'var(--pass)' }}>✓</span>}
@@ -1900,7 +2113,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   {/* Result cards */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, padding: '14px 26px 0' }}>
                     <div style={{ ...paneCard, padding: 14 }}>
-                      <div className="label" style={{ marginBottom: 0, fontWeight: 500 }}>{sel.covenantType === 'dscr' ? 'DSCR' : 'Debt Yield'}</div>
+                      <div className="label" style={{ marginBottom: 0, fontWeight: 500 }}>{metricLabel(sel)}{isOcc(sel) ? ' at test date' : ''}</div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 7 }}>
                         <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 26, color: selMeta.color, fontVariantNumeric: 'tabular-nums' }}>{fmtVal(sel)}</span>
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>/ {fmtReq(sel)}</span>
@@ -1910,14 +2123,14 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                         const trend = sel.currentVal - pv;
                         return (
                           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, marginTop: 6, color: 'var(--muted)' }}>
-                            prior {sel.covenantType === 'dscr' ? `${pv.toFixed(3)}x` : `${pv.toFixed(2)}%`}{' '}
+                            prior {sel.covenantType === 'dscr' ? `${pv.toFixed(3)}x` : isOcc(sel) ? `${pv.toFixed(1)}%` : `${pv.toFixed(2)}%`}{' '}
                             <span style={{ color: trend >= 0 ? 'var(--pass)' : 'var(--fail)' }}>{trend >= 0 ? '▲' : '▼'}{Math.abs(trend).toFixed(3)}</span>
                             {' · '}{new Date(selPrior.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
                           </div>
                         );
                       })()}
                     </div>
-                    {col('result') && (
+                    {col('result') && !isOcc(sel) && (
                       <div style={{ ...paneCard, padding: 14 }}>
                         <div className="label" style={{ marginBottom: 0, fontWeight: 500 }}>{sel.covenantType === 'dscr' ? 'Debt Yield' : 'DSCR'}</div>
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 7 }}>
@@ -1957,6 +2170,19 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                   </div>
 
                   {/* ── Connections — the same loan on every other tab ── */}
+                  {selRefProperty && (
+                    <div style={{ padding: '18px 26px 0' }}>
+                      <Eyebrow style={{ margin: '0 0 10px' }}>What the loan documents require · {selRefProperty}</Eyebrow>
+                      <CovenantReferenceCard
+                        property={selRefProperty}
+                        covenantId={sel.covenantId}
+                        loadedIds={loadedCovenantIds}
+                        onOpenTest={id => { const hit = (trackerByCovenantId.get(id) || [])[0]; if (hit) setSelectedId(hit.id); }}
+                        defaultOpen={!!sel.covenantId}
+                      />
+                    </div>
+                  )}
+
                   {(dealLinks.ready || selIsFund) && (
                     <div style={{ padding: '18px 26px 0' }}>
                       <Eyebrow style={{ margin: '0 0 10px' }}>
@@ -1996,7 +2222,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                         <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 12, color: 'var(--text)' }}>
                           {expandedFund ? '▾' : '▸'} {selFundProps.length} fund properties · DSCR vs {sel.covenantReq.toFixed(2)}x covenant
                         </span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--muted)' }}>Variable balance · T-3 rolling</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--muted)' }}>{sel.variableLoan ? 'Variable balance · T-3 rolling' : sel.amort === 0 ? 'I/O on the facility' : `${sel.amort}-yr amort`}</span>
                       </div>
                       {expandedFund && selFundProps.map((fp, fi) => {
                         const fpLoan = fp.allocatedLoan;
@@ -2204,19 +2430,28 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                               <LedgerRow label="Annualized debt service (× 12)" value={formatCurrency(sel.variableLoanDetail.annualizedADS)} eq="avg monthly interest × 12" />
                             </>
                           ) : (
-                            <LedgerRow
-                              label={sel.amort === 0 ? 'Annual debt service (I/O)' : 'Annual debt service'}
-                              value={formatCurrency(sel.ads)}
-                              eq={sel.amort === 0
-                                ? `${formatCurrency(sel.effectiveLoan || sel.loanAmount)} × ${(sel.rate * 100).toFixed(4)}%`
-                                : 'monthly amortizing payment × 12'}
-                            />
+                            <>
+                              <LedgerRow
+                                label={sel.amort === 0 ? 'Annual debt service (I/O)' : 'Annual debt service'}
+                                value={formatCurrency(sel.ads)}
+                                eq={sel.constantFloor != null && sel.constantFloor >= sel.ads - 0.5
+                                  ? `${sel.mortgageConstant}% mortgage constant × ${formatCurrency(sel.effectiveLoan || sel.loanAmount)} (floor applied)`
+                                  : sel.amort === 0
+                                  ? `${formatCurrency(sel.effectiveLoan || sel.loanAmount)} × ${(sel.rate * 100).toFixed(4)}%`
+                                  : 'monthly amortizing payment × 12'}
+                              />
+                              {sel.constantFloor != null && sel.constantFloor < sel.ads - 0.5 && (
+                                <LedgerRow indent label="Mortgage constant floor (not binding)" value={formatCurrency(sel.constantFloor)} eq={`${sel.mortgageConstant}% × ${formatCurrency(sel.effectiveLoan || sel.loanAmount)}`} />
+                              )}
+                            </>
                           )}
                           <LedgerRow
                             strong
-                            label={sel.covenantType === 'dscr' ? 'DSCR' : 'Debt yield'}
+                            label={isOcc(sel) ? 'Occupancy at test date' : sel.covenantType === 'dscr' ? 'DSCR' : 'Debt yield'}
                             value={fmtVal(sel, 4)}
-                            eq={sel.covenantType === 'dscr'
+                            eq={isOcc(sel)
+                              ? (sel.occupancyKnown === false ? 'no forecast month before the test date yet' : 'ending occupancy, month before the test')
+                              : sel.covenantType === 'dscr'
                               ? `${formatCurrency(sel.noi)} ÷ ${formatCurrency(sel.ads)}`
                               : `${formatCurrency(sel.noi)} ÷ ${formatCurrency(sel.effectiveLoan || sel.loanAmount)}`}
                             color={selMeta.color}
@@ -2224,19 +2459,19 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                           <LedgerRow label="Requirement" value={fmtReq(sel)} />
                           <LedgerRow
                             label="Variance"
-                            value={`${sel.currentVal >= sel.covenantReq ? '+' : ''}${(sel.currentVal - sel.covenantReq).toFixed(4)}${sel.covenantType === 'dscr' ? 'x' : '%'}`}
+                            value={`${sel.currentVal >= sel.covenantReq ? '+' : ''}${(sel.currentVal - sel.covenantReq).toFixed(isOcc(sel) ? 1 : 4)}${sel.covenantType === 'dscr' ? 'x' : '%'}`}
                             color={sel.satisfied ? 'var(--pass)' : 'var(--fail)'}
                           />
-                          <LedgerRow label="Required NOI" value={formatCurrency(sel.requiredNOI)} eq={sel.covenantType === 'dscr' ? `${sel.covenantReq}x × ${formatCurrency(sel.ads)}` : `${sel.covenantReq}% × ${formatCurrency(sel.effectiveLoan || sel.loanAmount)}`} />
-                          <LedgerRow
+                          {!isOcc(sel) && <LedgerRow label="Required NOI" value={formatCurrency(sel.requiredNOI)} eq={sel.covenantType === 'dscr' ? `${sel.covenantReq}x × ${formatCurrency(sel.ads)}` : `${sel.covenantReq}% × ${formatCurrency(sel.effectiveLoan || sel.loanAmount)}`} />}
+                          {!isOcc(sel) && <LedgerRow
                             label="NOI variance"
                             value={`${sel.noiVariance >= 0 ? '+' : ''}${formatCurrency(sel.noiVariance)}`}
                             color={sel.noiVariance >= 0 ? 'var(--pass)' : 'var(--fail)'}
-                          />
+                          />}
                         </div>
 
                         {/* Paydown to clear (failing tests) */}
-                        {!sel.satisfied && (() => {
+                        {!sel.satisfied && !isOcc(sel) && (() => {
                           const payBase = sel.effectiveLoan || sel.loanAmount;
                           const isTBD = sel.paydown >= payBase * 0.999;
                           const newAds = sel.variableLoanDetail
@@ -2515,10 +2750,18 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     <tbody>
                       {uploadResults.map(r => (
                         <tr key={r.id}>
-                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text)', fontSize: '0.82rem' }}>{r.property}</td>
+                          <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: 'var(--text)', fontSize: '0.82rem' }}>
+                            {r.property}
+                            {r.testLabel && <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: '0.62rem', color: 'var(--muted)' }}>{r.testLabel}</div>}
+                            {r.covenantType === 'occupancy' && (
+                              <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: '0.62rem', color: r.newOccupancy != null ? 'var(--pass)' : 'var(--muted)' }}>
+                                occupancy {r.oldOccupancy != null ? `${r.oldOccupancy}%` : '—'} → {r.newOccupancy != null ? `${r.newOccupancy}%` : 'unchanged'}
+                              </div>
+                            )}
+                          </td>
                           <td style={{ padding: '0.5rem 0.75rem' }}>
                             <span className={`pill ${r.status === 'matched' ? 'green' : 'red'}`}>
-                              {r.status === 'matched' ? `✓ Matched (${Math.round(r.score * 100)}%)` : r.status === 'no_match' ? '✗ No match' : '⚠ Insufficient data'}
+                              {r.status === 'matched' ? (r.matchedByCode ? '✓ Matched by budget code' : `✓ Matched (${Math.round(r.score * 100)}%)`) : r.status === 'no_match' ? '✗ No match' : '⚠ Insufficient data'}
                             </span>
                             {(r.matchWarning || (r.parseWarnings && r.parseWarnings.length > 0)) && (
                               <div style={{ marginTop: '0.3rem', fontSize: '0.62rem', color: 'var(--warn-text)', maxWidth: 260, lineHeight: 1.45 }}>
@@ -2552,6 +2795,11 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ══ Load reference tests — preview overlay ══ */}
+          {loaderOpen && (
+            <LoadReferencePreview plan={loaderPlan} onApply={applyLoader} onClose={() => setLoaderOpen(false)} busy={loaderBusy} error={loaderError} />
           )}
 
           {/* ══ Add / Edit Form — overlay ══ */}
@@ -2611,17 +2859,41 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     <select value={form.covenantType} onChange={e => setF('covenantType', e.target.value)} style={inputStyle}>
                       <option value="dscr">DSCR</option>
                       <option value="dy">Debt Yield</option>
+                      <option value="occupancy">Occupancy</option>
                     </select>
                   </div>
                   <div>
-                    <label style={labelStyle}>{form.covenantType === 'dscr' ? 'Required DSCR (x)' : 'Required DY (%)'}</label>
+                    <label style={labelStyle}>{form.covenantType === 'dscr' ? 'Required DSCR (x)' : form.covenantType === 'occupancy' ? 'Required Occupancy (%)' : 'Required DY (%)'}</label>
                     <input type="number" value={form.covenantReq} step={form.covenantType === 'dscr' ? '0.05' : '0.25'} min="0" onChange={e => setF('covenantReq', e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Index Floor (%)</label>
+                    <input type="number" value={form.indexFloor ?? ''} step="0.05" min="0" max="10" placeholder="optional" title="SOFR is floored here before the spread is added" onChange={e => setF('indexFloor', e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Mortgage Constant (%)</label>
+                    <input type="number" value={form.mortgageConstant ?? ''} step="0.01" min="0" max="20" placeholder="optional" title="Debt service is never less than this constant × the balance" onChange={e => setF('mortgageConstant', e.target.value)} style={inputStyle} />
+                  </div>
+                  {form.covenantType === 'occupancy' && (
+                    <div>
+                      <label style={labelStyle}>Occupancy at test (%)</label>
+                      <input type="number" value={form.occupancy ?? ''} step="0.1" min="0" max="100" placeholder="set by upload" onChange={e => setF('occupancy', e.target.value)} style={inputStyle} />
+                    </div>
+                  )}
+                  <div>
+                    <label style={labelStyle}>Budget Code</label>
+                    <input type="text" value={form.budgetCode ?? ''} placeholder="e.g. wdove" title="Accounting's budget code — forecast sheets match on it before name scoring" onChange={e => setF('budgetCode', e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Test Label</label>
+                    <input type="text" value={form.testLabel ?? ''} placeholder="e.g. Extension: DSCR" onChange={e => setF('testLabel', e.target.value)} style={inputStyle} />
                   </div>
                   <div>
                     <label style={labelStyle}>Income Months (T#)</label>
                     <select value={form.incomeMonths} onChange={e => setF('incomeMonths', e.target.value)} style={inputStyle}>
                       <option value="1">T1</option>
                       <option value="3">T3</option>
+                      <option value="6">T6</option>
                       <option value="12">T12</option>
                     </select>
                   </div>
@@ -2630,6 +2902,7 @@ Req: ${formatCurrency(r.requiredNOI)}`,
                     <select value={form.expenseMonths} onChange={e => setF('expenseMonths', e.target.value)} style={inputStyle}>
                       <option value="1">T1</option>
                       <option value="3">T3</option>
+                      <option value="6">T6</option>
                       <option value="12">T12</option>
                     </select>
                   </div>
