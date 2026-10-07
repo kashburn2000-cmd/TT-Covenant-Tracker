@@ -3,7 +3,7 @@ import {
   monthLabelToISO, parseMonthLabel, parseCellNumber, fuzzyMatch,
   interpCurve, getSofr, get10Y,
   getActiveSofrCurve, getActive10YCurve, setActiveSofrCurve, setActive10YCurve,
-  calcADS, computeNOI, calcCovenantRow,
+  calcADS, computeNOI, calcCovenantRow, sheetCoversTestDate,
 } from './calc.js';
 
 // Capture the shipped Chatham curves so tests that swap in synthetic curves
@@ -410,5 +410,15 @@ describe('calcCovenantRow index floor, mortgage constant and occupancy', () => {
     const none = calcCovenantRow({ ...BASE, covenantType: 'occupancy', covenantReq: 50 });
     expect(none.satisfied).toBe(false);
     expect(none.occupancyKnown).toBe(false);
+  });
+});
+
+describe('sheetCoversTestDate', () => {
+  const sheet = { monthData: [{ month: 0, year: 2027 }, { month: 1, year: 2027 }, { month: 11, year: 2027 }] };
+  it('is true only when a month precedes the test month', () => {
+    expect(sheetCoversTestDate(sheet, '2027-02-14')).toBe(true);
+    expect(sheetCoversTestDate(sheet, '2027-01-31')).toBe(false); // nothing before January
+    expect(sheetCoversTestDate(sheet, '2026-12-22')).toBe(false); // file starts after the test
+    expect(sheetCoversTestDate({ monthData: [] }, '2027-06-30')).toBe(false);
   });
 });

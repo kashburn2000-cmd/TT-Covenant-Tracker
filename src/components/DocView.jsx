@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { findPriorTest } from '../priorTest.js';
+import { groupRows } from '../covenantGroups.js';
 
 // ExcelJS (styling-capable, unlike the community SheetJS build) loaded on demand
 // from CDN so the Doc View can be written out as a pixel-faithful .xlsx.
@@ -51,19 +52,25 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
 
   // Potential Paydown is a number *or* one of three words — waived tests and
   // unsizable paydowns must not export as a figure a lender could read as real.
-  // Screen and .xlsx both go through this so they can't drift apart.
-  const paydownOf = r => {
-    if (r.waived === true) return { text: 'Waived', italic: true };
-    if (r.paydownDisplay === 'TBD') return { text: 'TBD' };
-    if (r.paydownDisplay === 'dash') return { text: '\u2014' };
-    // Curing would take the whole loan or more \u2014 which is what a non-positive
-    // NOI implies, since no balance reduction lifts coverage above zero. "TBD"
-    // read as an unfinished cell in a report going to a lender; say what it is.
-    if (r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999) return { text: 'Not curable' };
-    return { value: r.paydown > 0 ? r.paydown : 0 };
+  // Screen and .xlsx both go through paydownOfEntry so they can't drift apart.
+  // "Not curable": curing would take the whole loan or more, which is what a
+  // non-positive NOI implies, since no balance reduction lifts coverage above
+  // zero. "TBD" read as an unfinished cell in a report going to a lender.
+  // One line per loan per test date: a loan that tests DSCR and debt yield (or
+  // DSCR and occupancy) on the same day shows both requirements and results on
+  // one row, is TRUE only when every test passes, and lists the one paydown
+  // that cures the loan (the largest), not one per test.
+  const entries = groupRows(rows);
+  const paydownOfEntry = g => {
+    const live = g.members.filter(m => !m.waived && !m.satisfied);
+    if (g.members.some(m => m.paydownDisplay === 'TBD')) return { text: 'TBD' };
+    if (g.members.length && g.members.every(m => m.paydownDisplay === 'dash')) return { text: '\u2014' };
+    if (g.ok && g.anyWaived) return { text: 'Waived', italic: true };
+    if (g.ok) return { value: 0 };
+    if (live.some(m => m.paydown >= (m.effectiveLoan || m.loanAmount) * 0.999)) return { text: 'Not curable' };
+    return { value: Math.max(0, ...live.map(m => m.paydown || 0)) };
   };
-  const anyUncurable = rows.some(r => r.waived !== true && r.paydownDisplay !== 'TBD'
-    && r.paydownDisplay !== 'dash' && r.paydown >= (r.effectiveLoan || r.loanAmount) * 0.999);
+  const anyUncurable = entries.some(g => paydownOfEntry(g).text === 'Not curable');
   const paydownNote = anyUncurable
     ? '\u201cNot curable\u201d means no paydown restores compliance \u2014 the shortfall exceeds the loan balance, as it does wherever net operating income is not positive.'
     : null;
@@ -82,12 +89,21 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
     return Math.max(1, Math.floor(months / 12) + 1);
   };
   const groups = [];
-  rows.forEach(r => {
-    const y = yearOf(r);
+  entries.forEach(g => {
+    const y = yearOf(g.primary);
     const last = groups[groups.length - 1];
-    if (last && last.year === y) last.rows.push(r);
-    else groups.push({ year: y, rows: [r] });
+    if (last && last.year === y) last.rows.push(g);
+    else groups.push({ year: y, rows: [g] });
   });
+  // Per-member display pieces, shared by the table and the export.
+  const arrowOf = r => {
+    const prior = priorOf(r);
+    if (!prior) return { arrow: '', color: '#888888' };
+    const delta = r.currentVal - prior.val;
+    if (Math.abs(delta) < 1e-9) return { arrow: '▶', color: '#2e7d32' };
+    return delta > 0 ? { arrow: '▲', color: '#2e7d32' } : { arrow: '▼', color: '#c0392b' };
+  };
+  const statusOfEntry = g => ({ ok: g.ok, waived: g.anyWaived, text: g.ok ? (g.anyWaived ? 'WAIVED' : 'TRUE') : 'FALSE' });
 
   const C = {
     navy: '#1f4e79', band: '#d9e1f2', bandTxt: '#1f3864',
@@ -179,27 +195,18 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       const bodyFont = { name: 'Calibri', size: 9, color: { argb: argb(C.txt) } };
       groups.forEach(g => {
         const groupStart = rIdx;
-        g.rows.forEach(r => {
-          const prior = priorOf(r);
-          const cur = r.currentVal;
-          let arrow = '', arrowColor = '#888888';
-          if (prior) {
-            const delta = cur - prior.val;
-            if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = '#2e7d32'; }
-            else if (delta > 0) { arrow = '▲'; arrowColor = '#2e7d32'; }
-            else { arrow = '▼'; arrowColor = '#c0392b'; }
-          }
-          const waived = r.waived === true;
-          const ok = waived || r.satisfied;
-          const statusText = waived ? 'WAIVED' : (r.satisfied ? 'TRUE' : 'FALSE');
-          const isCov = (r.testType || 'Covenant') === 'Covenant';
+        g.rows.forEach(entry => {
+          const r = entry.primary;
+          const multi = entry.members.length > 1;
+          const { ok, waived, text: statusText } = statusOfEntry(entry);
+          const isCov = entry.testTypes.includes('Covenant');
           const d = parseDate(r.covenantDate);
 
           const set = (col, value, opts = {}) => {
             const c = ws.getCell(rIdx, col);
             c.value = value;
             c.font = opts.font || bodyFont;
-            c.alignment = { horizontal: opts.align || 'left', vertical: 'middle' };
+            c.alignment = { horizontal: opts.align || 'left', vertical: 'middle', wrapText: !!opts.wrap };
             if (opts.fill) c.fill = opts.fill;
             if (opts.numFmt) c.numFmt = opts.numFmt;
             c.border = box(lineBorder);
@@ -207,7 +214,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
           };
 
           set(2, d || '', { align: 'center', numFmt: d ? 'm/d/yyyy' : undefined });
-          set(3, r.testType || 'Covenant', {
+          set(3, entry.testTypes.join(' / '), {
             align: 'center',
             fill: isCov ? fill(C.covBg) : undefined,
             font: isCov ? { name: 'Calibri', size: 9, bold: true, color: { argb: argb(C.covTxt) } } : bodyFont,
@@ -215,17 +222,29 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
           set(4, r.property, {});
           set(5, r.lender, {});
           set(6, r.loanAmount, { align: 'right', numFmt: '$#,##0.00' });
-          set(7, reqText(r), { align: 'center' });
-          const resFmt = r.covenantType === 'dscr' ? '0.00#' : '0.00"%"';
-          set(8, prior ? prior.val : '—', { align: 'center', numFmt: prior ? resFmt : undefined });
-          set(9, arrow, { align: 'center', font: { name: 'Calibri', size: 9, bold: true, color: { argb: argb(arrowColor) } } });
-          set(10, cur, { align: 'center', numFmt: resFmt });
+          if (multi) {
+            // Several tests on one line: text cells, one line per test.
+            set(7, entry.members.map(reqText).join('\n'), { align: 'center', wrap: true });
+            set(8, entry.members.map(m => { const p = priorOf(m); return p ? fmtResult(p.val, m.covenantType) : '—'; }).join('\n'), { align: 'center', wrap: true });
+            const arrows = entry.members.map(arrowOf);
+            set(9, arrows.map(a => a.arrow).join('\n'), { align: 'center', wrap: true, font: { name: 'Calibri', size: 9, bold: true, color: { argb: argb(arrows.every(a => a.color === arrows[0].color) ? arrows[0].color : '#555555') } } });
+            set(10, entry.members.map(m => fmtResult(m.currentVal, m.covenantType)).join('\n'), { align: 'center', wrap: true });
+            ws.getRow(rIdx).height = 13 * entry.members.length;
+          } else {
+            const prior = priorOf(r);
+            const { arrow, color: arrowColor } = arrowOf(r);
+            set(7, reqText(r), { align: 'center' });
+            const resFmt = r.covenantType === 'dscr' ? '0.00#' : '0.00"%"';
+            set(8, prior ? prior.val : '—', { align: 'center', numFmt: prior ? resFmt : undefined });
+            set(9, arrow, { align: 'center', font: { name: 'Calibri', size: 9, bold: true, color: { argb: argb(arrowColor) } } });
+            set(10, r.currentVal, { align: 'center', numFmt: resFmt });
+          }
           set(11, statusText, {
             align: 'center',
             fill: fill(ok ? C.okBg : C.failBg),
             font: { name: 'Calibri', size: 9, bold: true, italic: waived, color: { argb: argb(ok ? C.okTxt : C.failTxt) } },
           });
-          const pd = paydownOf(r);
+          const pd = paydownOfEntry(entry);
           set(12, pd.text !== undefined ? pd.text : pd.value, {
             align: 'right',
             numFmt: pd.text !== undefined ? undefined : '$#,##0',
@@ -325,40 +344,31 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
             </tr>
           </thead>
           <tbody>
-            {groups.map(g => g.rows.map((r, ri) => {
-              const prior = priorOf(r);
-              const cur = r.currentVal;
-              let arrow = '', arrowColor = '#888';
-              if (prior) {
-                const delta = cur - prior.val;
-                if (Math.abs(delta) < 1e-9) { arrow = '▶'; arrowColor = '#2e7d32'; }
-                else if (delta > 0) { arrow = '▲'; arrowColor = '#2e7d32'; }
-                else { arrow = '▼'; arrowColor = '#c0392b'; }
-              }
-              const waived = r.waived === true;
-              const ok = waived || r.satisfied;
-              const statusText = waived ? 'WAIVED' : (r.satisfied ? 'TRUE' : 'FALSE');
-              const isCov = (r.testType || 'Covenant') === 'Covenant';
+            {groups.map(g => g.rows.map((entry, ri) => {
+              const r = entry.primary;
+              const { ok, waived, text: statusText } = statusOfEntry(entry);
+              const isCov = entry.testTypes.includes('Covenant');
               const d = parseDate(r.covenantDate);
+              const lines = fn => entry.members.map(m => <div key={m.id}>{fn(m)}</div>);
               return (
-                <tr key={r.id}>
+                <tr key={entry.key}>
                   {ri === 0 && (
                     <td rowSpan={g.rows.length} style={{ ...td, background: C.band, color: C.bandTxt, fontWeight: 700, textAlign: 'center', padding: 0 }}>
                       <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: '0.72rem' }}>Year {g.year}</div>
                     </td>
                   )}
                   <td style={{ ...td, textAlign: 'center' }}>{d ? fmtMDY(d) : ''}</td>
-                  <td style={{ ...td, textAlign: 'center', ...(isCov ? { background: C.covBg, color: C.covTxt, fontWeight: 600 } : {}) }}>{r.testType || 'Covenant'}</td>
+                  <td style={{ ...td, textAlign: 'center', ...(isCov ? { background: C.covBg, color: C.covTxt, fontWeight: 600 } : {}) }}>{entry.testTypes.join(' / ')}</td>
                   <td style={td}>{r.property}</td>
                   <td style={td}>{r.lender}</td>
                   <td style={{ ...td, textAlign: 'right' }}>${num2(r.loanAmount)}</td>
-                  <td style={{ ...td, textAlign: 'center' }}>{reqText(r)}</td>
-                  <td style={{ ...td, textAlign: 'center' }} title={prior && prior.date ? `Prior test recorded ${fmtMDY(prior.date)}` : undefined}>{prior ? fmtResult(prior.val, r.covenantType) : '—'}</td>
-                  <td style={{ ...td, textAlign: 'center', color: arrowColor, fontWeight: 700 }}>{arrow}</td>
-                  <td style={{ ...td, textAlign: 'center' }}>{fmtResult(cur, r.covenantType)}</td>
+                  <td style={{ ...td, textAlign: 'center' }}>{lines(reqText)}</td>
+                  <td style={{ ...td, textAlign: 'center' }}>{lines(m => { const p = priorOf(m); return <span title={p && p.date ? `Prior test recorded ${fmtMDY(p.date)}` : undefined}>{p ? fmtResult(p.val, m.covenantType) : '—'}</span>; })}</td>
+                  <td style={{ ...td, textAlign: 'center', fontWeight: 700 }}>{lines(m => { const a = arrowOf(m); return <span style={{ color: a.color }}>{a.arrow || '\u00a0'}</span>; })}</td>
+                  <td style={{ ...td, textAlign: 'center' }}>{lines(m => fmtResult(m.currentVal, m.covenantType))}</td>
                   <td style={{ ...td, textAlign: 'center', background: ok ? C.okBg : C.failBg, color: ok ? C.okTxt : C.failTxt, fontWeight: 700, fontStyle: waived ? 'italic' : 'normal' }}>{statusText}</td>
                   <td style={{ ...td, textAlign: 'right', ...(waived ? { fontStyle: 'italic' } : {}) }}>{(() => {
-                    const pd = paydownOf(r);
+                    const pd = paydownOfEntry(entry);
                     return pd.text !== undefined ? pd.text : usd0(pd.value);
                   })()}</td>
                 </tr>
