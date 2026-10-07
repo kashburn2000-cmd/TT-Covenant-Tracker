@@ -55,7 +55,7 @@ describe('DocView previous test result', () => {
       1: [snap('2026-08-24T16:00:00Z', '1.31'), snap('2026-07-21T14:00:00Z', '1.18')],
       2: [snap('2026-08-24T16:00:00Z', '1.09'), snap('2026-05-19T14:00:00Z', '1.02')],
     });
-    expect(prevCells(el)).toEqual(['1.18', '1.02']);
+    expect(prevCells(el).sort()).toEqual(['1.02', '1.18']);
     expect(el.textContent).toContain('dates vary');
   });
 
@@ -189,5 +189,17 @@ describe('DocView same-day grouping', () => {
     expect(at(8, 9).value).toBe('6.30%\n0.99');
     expect(at(8, 10).value).toBe('FALSE');
     expect(at(8, 11).value).toBe(9437200);
+  });
+});
+
+describe('DocView ordering', () => {
+  it('runs by test date whatever order the board is sorted in', () => {
+    const el = render([
+      row({ id: 1, property: 'Longmont Hover', covenantDate: '2027-12-31', satisfied: false }),
+      row({ id: 2, property: 'Venice', covenantDate: '2027-04-30', satisfied: false }),
+      row({ id: 3, property: 'Stockbridge', covenantDate: '2027-06-27', covenantType: 'occupancy', covenantReq: 50, currentVal: 95.28 }),
+    ], { 1: [], 2: [], 3: [] });
+    const dates = [...el.querySelectorAll('tbody tr')].map(tr => tr.children[0].textContent);
+    expect(dates).toEqual(['4/30/2027', '6/27/2027', '12/31/2027']);
   });
 });

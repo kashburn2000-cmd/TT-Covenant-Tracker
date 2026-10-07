@@ -60,7 +60,8 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
   // DSCR and occupancy) on the same day shows both requirements and results on
   // one row, is TRUE only when every test passes, and lists the one paydown
   // that cures the loan (the largest), not one per test.
-  const entries = groupRows(rows);
+  // The report runs by test date whatever order the board is sorted in.
+  const entries = groupRows([...rows].sort((a, b) => String(a.covenantDate || '').localeCompare(String(b.covenantDate || '')) || String(a.property).localeCompare(String(b.property))));
   const paydownOfEntry = g => {
     const live = g.members.filter(m => !m.waived && !m.satisfied);
     if (g.members.some(m => m.paydownDisplay === 'TBD')) return { text: 'TBD' };
