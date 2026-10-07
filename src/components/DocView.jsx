@@ -80,21 +80,6 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
   // download waits for the same data the table is showing.
   const historyLoaded = rows.every(r => propertyEvents[r.id] !== undefined);
 
-  // Year bucketing: 12-month windows measured forward from the report date, so the
-  // current cohort (recent + next 12 months of tests) all lands in Year 1.
-  const yearOf = r => {
-    const d = parseDate(r.covenantDate);
-    if (!d) return 1;
-    const months = (d.getFullYear() - asOf.getFullYear()) * 12 + (d.getMonth() - asOf.getMonth());
-    return Math.max(1, Math.floor(months / 12) + 1);
-  };
-  const groups = [];
-  entries.forEach(g => {
-    const y = yearOf(g.primary);
-    const last = groups[groups.length - 1];
-    if (last && last.year === y) last.rows.push(g);
-    else groups.push({ year: y, rows: [g] });
-  });
   // Per-member display pieces, shared by the table and the export.
   const arrowOf = r => {
     const prior = priorOf(r);
@@ -106,7 +91,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
   const statusOfEntry = g => ({ ok: g.ok, waived: g.anyWaived, text: g.ok ? (g.anyWaived ? 'WAIVED' : 'TRUE') : 'FALSE' });
 
   const C = {
-    navy: '#1f4e79', band: '#d9e1f2', bandTxt: '#1f3864',
+    navy: '#1f4e79',
     covBg: '#fff2cc', covTxt: '#9c6500',
     okBg: '#c6efce', okTxt: '#006100', failBg: '#ffc7ce', failTxt: '#9c0006',
     line: '#bfbfbf', txt: '#1a1a1a',
@@ -148,8 +133,8 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
 
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('Covenant Dashboard', { views: [{ showGridLines: false }] });
-      const COLS = 12;
-      const widths = [4.5, 11, 12, 16, 20, 16, 27, 13, 4, 13, 16, 15];
+      const COLS = 11;
+      const widths = [11, 12, 16, 20, 16, 27, 13, 4, 13, 16, 15];
       widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
       // Report header block — one labeled line per row.
@@ -172,14 +157,14 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       const dateFont = { name: 'Calibri', italic: true, size: 8, color: { argb: 'FF555555' } };
       const dateAlign = { horizontal: 'center', vertical: 'middle' };
       if (prevHeaderDate) {
-        const c = ws.getCell(dateRow, 8); c.value = fmtMDY(prevHeaderDate); c.font = dateFont; c.alignment = dateAlign;
+        const c = ws.getCell(dateRow, 7); c.value = fmtMDY(prevHeaderDate); c.font = dateFont; c.alignment = dateAlign;
       }
-      const cd = ws.getCell(dateRow, 10); cd.value = fmtMDY(asOf); cd.font = dateFont; cd.alignment = dateAlign;
+      const cd = ws.getCell(dateRow, 9); cd.value = fmtMDY(asOf); cd.font = dateFont; cd.alignment = dateAlign;
 
       // Column header row.
       const headRow = dateRow + 1;
-      const headers = ['', 'DATE', 'TYPE', 'PROPERTY', 'LENDER', 'Loan Amount', 'COVENANT REQUIREMENT', 'PREVIOUS TEST RESULT', '', 'CURRENT TEST RESULT', 'SATISFIED (TRUE/FALSE)', 'Potential Paydown'];
-      const rightCols = new Set([6, 12]);
+      const headers = ['DATE', 'TYPE', 'PROPERTY', 'LENDER', 'Loan Amount', 'COVENANT REQUIREMENT', 'PREVIOUS TEST RESULT', '', 'CURRENT TEST RESULT', 'SATISFIED (TRUE/FALSE)', 'Potential Paydown'];
+      const rightCols = new Set([5, 11]);
       headers.forEach((h, i) => {
         const c = ws.getCell(headRow, i + 1);
         c.value = h;
@@ -190,12 +175,11 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
       });
       ws.getRow(headRow).height = 28;
 
-      // Data rows, grouped by year exactly as the table renders them.
+      // Data rows, in the order the table renders them.
       let rIdx = headRow + 1;
       const bodyFont = { name: 'Calibri', size: 9, color: { argb: argb(C.txt) } };
-      groups.forEach(g => {
-        const groupStart = rIdx;
-        g.rows.forEach(entry => {
+      {
+        entries.forEach(entry => {
           const r = entry.primary;
           const multi = entry.members.length > 1;
           const { ok, waived, text: statusText } = statusOfEntry(entry);
@@ -213,39 +197,39 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
             return c;
           };
 
-          set(2, d || '', { align: 'center', numFmt: d ? 'm/d/yyyy' : undefined });
-          set(3, entry.testTypes.join(' / '), {
+          set(1, d || '', { align: 'center', numFmt: d ? 'm/d/yyyy' : undefined });
+          set(2, entry.testTypes.join(' / '), {
             align: 'center',
             fill: isCov ? fill(C.covBg) : undefined,
             font: isCov ? { name: 'Calibri', size: 9, bold: true, color: { argb: argb(C.covTxt) } } : bodyFont,
           });
-          set(4, r.property, {});
-          set(5, r.lender, {});
-          set(6, r.loanAmount, { align: 'right', numFmt: '$#,##0.00' });
+          set(3, r.property, {});
+          set(4, r.lender, {});
+          set(5, r.loanAmount, { align: 'right', numFmt: '$#,##0.00' });
           if (multi) {
             // Several tests on one line: text cells, one line per test.
-            set(7, entry.members.map(reqText).join('\n'), { align: 'center', wrap: true });
-            set(8, entry.members.map(m => { const p = priorOf(m); return p ? fmtResult(p.val, m.covenantType) : '—'; }).join('\n'), { align: 'center', wrap: true });
+            set(6, entry.members.map(reqText).join('\n'), { align: 'center', wrap: true });
+            set(7, entry.members.map(m => { const p = priorOf(m); return p ? fmtResult(p.val, m.covenantType) : '—'; }).join('\n'), { align: 'center', wrap: true });
             const arrows = entry.members.map(arrowOf);
-            set(9, arrows.map(a => a.arrow).join('\n'), { align: 'center', wrap: true, font: { name: 'Calibri', size: 9, bold: true, color: { argb: argb(arrows.every(a => a.color === arrows[0].color) ? arrows[0].color : '#555555') } } });
-            set(10, entry.members.map(m => fmtResult(m.currentVal, m.covenantType)).join('\n'), { align: 'center', wrap: true });
+            set(8, arrows.map(a => a.arrow).join('\n'), { align: 'center', wrap: true, font: { name: 'Calibri', size: 9, bold: true, color: { argb: argb(arrows.every(a => a.color === arrows[0].color) ? arrows[0].color : '#555555') } } });
+            set(9, entry.members.map(m => fmtResult(m.currentVal, m.covenantType)).join('\n'), { align: 'center', wrap: true });
             ws.getRow(rIdx).height = 13 * entry.members.length;
           } else {
             const prior = priorOf(r);
             const { arrow, color: arrowColor } = arrowOf(r);
-            set(7, reqText(r), { align: 'center' });
+            set(6, reqText(r), { align: 'center' });
             const resFmt = r.covenantType === 'dscr' ? '0.00#' : '0.00"%"';
-            set(8, prior ? prior.val : '—', { align: 'center', numFmt: prior ? resFmt : undefined });
-            set(9, arrow, { align: 'center', font: { name: 'Calibri', size: 9, bold: true, color: { argb: argb(arrowColor) } } });
-            set(10, r.currentVal, { align: 'center', numFmt: resFmt });
+            set(7, prior ? prior.val : '—', { align: 'center', numFmt: prior ? resFmt : undefined });
+            set(8, arrow, { align: 'center', font: { name: 'Calibri', size: 9, bold: true, color: { argb: argb(arrowColor) } } });
+            set(9, r.currentVal, { align: 'center', numFmt: resFmt });
           }
-          set(11, statusText, {
+          set(10, statusText, {
             align: 'center',
             fill: fill(ok ? C.okBg : C.failBg),
             font: { name: 'Calibri', size: 9, bold: true, italic: waived, color: { argb: argb(ok ? C.okTxt : C.failTxt) } },
           });
           const pd = paydownOfEntry(entry);
-          set(12, pd.text !== undefined ? pd.text : pd.value, {
+          set(11, pd.text !== undefined ? pd.text : pd.value, {
             align: 'right',
             numFmt: pd.text !== undefined ? undefined : '$#,##0',
             font: pd.italic ? { name: 'Calibri', size: 9, italic: true, color: { argb: argb(C.txt) } } : bodyFont,
@@ -253,19 +237,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
           rIdx++;
         });
 
-        // Year label band: merged down the group, rotated text — mirrors the rowSpan cell.
-        const groupEnd = rIdx - 1;
-        if (groupEnd > groupStart) ws.mergeCells(groupStart, 1, groupEnd, 1);
-        for (let rr = groupStart; rr <= groupEnd; rr++) {
-          const c = ws.getCell(rr, 1);
-          c.fill = fill(C.band);
-          c.border = box(lineBorder);
-        }
-        const yc = ws.getCell(groupStart, 1);
-        yc.value = `Year ${g.year}`;
-        yc.font = { name: 'Calibri', size: 9, bold: true, color: { argb: argb(C.bandTxt) } };
-        yc.alignment = { horizontal: 'center', vertical: 'middle', textRotation: 90 };
-      });
+      }
 
       // Footer note.
       const footRow = rIdx + 1;
@@ -322,14 +294,13 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
         <table style={{ borderCollapse: 'collapse', background: '#fff' }}>
           <thead>
             <tr>
-              <th colSpan={7} style={spacerTh}></th>
+              <th colSpan={6} style={spacerTh}></th>
               <th style={dateTh}>{prevHeaderDate ? fmtMDY(prevHeaderDate) : ''}</th>
               <th style={spacerTh}></th>
               <th style={dateTh}>{fmtMDY(asOf)}</th>
               <th colSpan={2} style={spacerTh}></th>
             </tr>
             <tr>
-              <th style={{ ...th, width: 22 }}></th>
               <th style={th}>DATE</th>
               <th style={th}>TYPE</th>
               <th style={th}>PROPERTY</th>
@@ -344,7 +315,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
             </tr>
           </thead>
           <tbody>
-            {groups.map(g => g.rows.map((entry, ri) => {
+            {entries.map(entry => {
               const r = entry.primary;
               const { ok, waived, text: statusText } = statusOfEntry(entry);
               const isCov = entry.testTypes.includes('Covenant');
@@ -352,11 +323,6 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
               const lines = fn => entry.members.map(m => <div key={m.id}>{fn(m)}</div>);
               return (
                 <tr key={entry.key}>
-                  {ri === 0 && (
-                    <td rowSpan={g.rows.length} style={{ ...td, background: C.band, color: C.bandTxt, fontWeight: 700, textAlign: 'center', padding: 0 }}>
-                      <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', margin: '0 auto', fontSize: '0.72rem' }}>Year {g.year}</div>
-                    </td>
-                  )}
                   <td style={{ ...td, textAlign: 'center' }}>{d ? fmtMDY(d) : ''}</td>
                   <td style={{ ...td, textAlign: 'center', ...(isCov ? { background: C.covBg, color: C.covTxt, fontWeight: 600 } : {}) }}>{entry.testTypes.join(' / ')}</td>
                   <td style={td}>{r.property}</td>
@@ -373,7 +339,7 @@ export function DocView({ rows, propertyEvents, lastUpdated, onClose }) {
                   })()}</td>
                 </tr>
               );
-            }))}
+            })}
           </tbody>
         </table>
 

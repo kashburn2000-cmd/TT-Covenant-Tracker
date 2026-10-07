@@ -30,7 +30,7 @@ function render(rows, propertyEvents) {
   return host;
 }
 
-// Column 8 of the body rows is PREVIOUS TEST RESULT.
+// Fifth from the right in the body rows is PREVIOUS TEST RESULT.
 const prevCells = el => [...el.querySelectorAll('tbody tr')].map(tr => tr.children[tr.children.length - 5].textContent);
 const headerDates = el => [...el.querySelectorAll('thead tr')][0].textContent;
 
@@ -104,32 +104,32 @@ describe('DocView Excel export', () => {
 
   it('writes the Previous column and its header date, not a dash', async () => {
     const { at } = await exportAndRead([row()], events);
-    expect(at(6, 8).value).toBe('6/30/2026'); // date row over PREVIOUS TEST RESULT
-    expect(at(6, 10).value).toBe('8/24/2026');
-    expect(at(8, 8).value).toBe(0.733);
-    expect(at(8, 10).value).toBe(1.31);
+    expect(at(6, 7).value).toBe('6/30/2026'); // date row over PREVIOUS TEST RESULT
+    expect(at(6, 9).value).toBe('8/24/2026');
+    expect(at(8, 7).value).toBe(0.733);
+    expect(at(8, 9).value).toBe(1.31);
   });
 
   it('writes results as numbers so Excel can sort and chart them', async () => {
     const { at } = await exportAndRead([row()], events);
-    expect(typeof at(8, 8).value).toBe('number');
-    expect(at(8, 8).numFmt).toBe('0.00#');
+    expect(typeof at(8, 7).value).toBe('number');
+    expect(at(8, 7).numFmt).toBe('0.00#');
     const dy = await exportAndRead([row({ covenantType: 'dy', currentVal: 8.4, covenantReq: 9 })], events);
-    expect(dy.at(8, 10).numFmt).toBe('0.00"%"');
+    expect(dy.at(8, 9).numFmt).toBe('0.00"%"');
   });
 
   it('exports Waived and uncurable tests as words, never as a paydown figure', async () => {
     const waived = await exportAndRead([row({ waived: true, paydown: 27090928 })], events);
-    expect(waived.at(8, 12).value).toBe('Waived');
+    expect(waived.at(8, 11).value).toBe('Waived');
 
     // Paydown at or above the whole balance can't cure the test, so the cell
     // says so rather than showing a figure or an unexplained "TBD".
     const tbd = await exportAndRead([row({ satisfied: false, paydown: 49200000, loanAmount: 49200000 })], events);
-    expect(tbd.at(8, 12).value).toBe('Not curable');
+    expect(tbd.at(8, 11).value).toBe('Not curable');
 
     const real = await exportAndRead([row({ satisfied: false, paydown: 1000000, loanAmount: 49200000 })], events);
-    expect(real.at(8, 12).value).toBe(1000000);
-    expect(real.at(8, 12).numFmt).toBe('$#,##0');
+    expect(real.at(8, 11).value).toBe(1000000);
+    expect(real.at(8, 11).numFmt).toBe('$#,##0');
   });
 
   it('only ever writes valid ARGB colors', async () => {
@@ -183,11 +183,11 @@ describe('DocView same-day grouping', () => {
       psl({ id: 1, covenantType: 'dy', covenantReq: 8, currentVal: 6.3, satisfied: false, paydown: 9437200 }),
       psl({ id: 2, covenantType: 'dscr', covenantReq: 1.25, currentVal: 0.99, satisfied: false, paydown: 9384252 }),
     ], { 1: [snap('2026-10-07T16:00:00Z', '6.30'), snap('2026-08-24T16:00:00Z', '6.51')], 2: [] });
-    // Header block is rows 1–4, the date row 6, the column headers 7: data starts at 8.
-    expect(at(8, 7).value).toBe('8% Debt Yield\n1.25 Debt Service Coverage');
-    expect(at(8, 8).value).toBe('6.51%\n—');
-    expect(at(8, 10).value).toBe('6.30%\n0.99');
-    expect(at(8, 11).value).toBe('FALSE');
-    expect(at(8, 12).value).toBe(9437200);
+    // Header block is rows 1–4, the date row 6, the column headers 7: data starts at 8. No band column.
+    expect(at(8, 6).value).toBe('8% Debt Yield\n1.25 Debt Service Coverage');
+    expect(at(8, 7).value).toBe('6.51%\n—');
+    expect(at(8, 9).value).toBe('6.30%\n0.99');
+    expect(at(8, 10).value).toBe('FALSE');
+    expect(at(8, 11).value).toBe(9437200);
   });
 });
